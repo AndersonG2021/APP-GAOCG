@@ -171,6 +171,12 @@ function atualizarRecibo(session, id, dados) {
     atualizado.visualizado_apos_alerta = false;
   }
 
+  if (dados.hasOwnProperty('oss_snapshot') || dados.hasOwnProperty('cnpj_snapshot')) {
+    var unidade = findById_(getSheet_(SHEETS.UNIDADES), atualizado.unidade_id);
+    atualizado.divergente_da_unidade = !!unidade &&
+      (String(atualizado.oss_snapshot || '') !== String(unidade.oss || '') || String(atualizado.cnpj_snapshot || '') !== String(unidade.cnpj || ''));
+  }
+
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);

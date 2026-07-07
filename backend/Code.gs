@@ -73,6 +73,7 @@ function handleRequest_(params) {
 
       // Notas de Empenho (Funcionalidade 5)
       case 'listarNotasEmpenhoPorSof': return jsonOut_(listarNotasEmpenhoPorSof(session, params.sofId));
+      case 'listarNotasEmpenho': return jsonOut_(listarNotasEmpenho(session, params));
       case 'criarNotaEmpenho': return jsonOut_(criarNotaEmpenho(session, params.data));
 
       // Recibos (Funcionalidade 4)

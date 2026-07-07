@@ -56,6 +56,36 @@ function criarNotaEmpenho(session, dados) {
   return ok_(nova);
 }
 
+/**
+ * Listagem própria de Notas de Empenho (Funcionalidade 5, item 4 - Should),
+ * com o SOF de origem já resolvido (SEI, Nº SOF, frente, unidade), filtrável
+ * por unidade e período.
+ */
+function listarNotasEmpenho(session, params) {
+  params = params || {};
+  var sofs = sheetToObjects_(getSheet_(SHEETS.SOF));
+  var sofsPorId = {};
+  sofs.forEach(function (s) { sofsPorId[s.id] = s; });
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).map(function (n) {
+    delete n._row;
+    var sof = sofsPorId[n.sof_id];
+    return Object.assign({}, n, {
+      sof_sei: sof ? sof.sei : '',
+      sof_numero: sof ? sof.sof_numero : '',
+      sof_frente: sof ? sof.frente : '',
+      sof_unidade_id: sof ? sof.unidade_id : ''
+    });
+  });
+
+  if (params.unidade_id) rows = rows.filter(function (n) { return String(n.sof_unidade_id) === String(params.unidade_id); });
+  if (params.periodo) rows = rows.filter(function (n) { return n.periodo === params.periodo; });
+  if (session.perfil !== 'gerente') rows = rows.filter(function (n) { return n.sof_frente === session.frente; });
+
+  rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
+  return ok_(rows);
+}
+
 function totalEmpenhadoSof_(sofId) {
   var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).filter(function (n) {
     return String(n.sof_id) === String(sofId);

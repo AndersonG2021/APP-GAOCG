@@ -9,7 +9,7 @@ const Dashboard = (function () {
       <h2 class="titulo-tela">Dashboard</h2>
       <div class="painel">
         <div class="barra-filtros">
-          <div class="campo"><label>Competência dos Recibos</label><input id="dashCompetencia" placeholder="mar.26" /></div>
+          <div class="campo"><label>Competência dos Recibos</label><select id="dashCompetencia">${UI.opcoesCompetenciaHtml('')}</select></div>
           <button class="botao" id="btnAtualizarDash">Atualizar</button>
         </div>
         <div id="dashConteudo"></div>
@@ -19,7 +19,7 @@ const Dashboard = (function () {
   }
 
   async function carregar() {
-    const competencia = document.getElementById('dashCompetencia').value.trim() || undefined;
+    const competencia = document.getElementById('dashCompetencia').value || undefined;
     const dados = await Api.chamar('obterDashboard', { competencia });
     if (!document.getElementById('dashCompetencia').value) {
       document.getElementById('dashCompetencia').value = dados.recibos.competencia;

@@ -24,6 +24,9 @@ function configurarPlanilha() {
       sheet.getRange(1, 1, 1, HEADERS[nomeAba].length).setValues([HEADERS[nomeAba]]);
       sheet.setFrozenRows(1);
     }
+    // Idempotente e seguro rodar de novo em planilhas já existentes: corrige a
+    // causa raiz de campos como G.D. virando datas (ver Utils.gs).
+    aplicarFormatoTexto_(nomeAba);
   });
 
   var abaPadrao = ss.getSheetByName('Sheet1') || ss.getSheetByName('Página1');

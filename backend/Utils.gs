@@ -37,6 +37,19 @@ var HEADERS = {
 
 var FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital', 'Recibo-UPA', 'Recibo-UPAE', 'Recibo-Hospital'];
 
+/**
+ * Colunas que devem permanecer com tipo numérico nativo do Sheets (usadas em
+ * soma/cálculo). Todas as demais colunas de cada aba são forçadas para
+ * formato de texto simples ("@") em aplicarFormatoTexto_ - ver o comentário
+ * daquela função para o motivo.
+ */
+var COLUNAS_NUMERICAS = {
+  SOF: ['parcela_mensal', 'total_solicitado'],
+  NotasEmpenho: ['valor'],
+  Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_rateio'],
+  Contadores: ['proximo']
+};
+
 // ===================== PLANILHA =====================
 
 function getSS_() {
@@ -54,6 +67,30 @@ function getHeaders_(sheet) {
   var last = sheet.getLastColumn();
   if (last === 0) return [];
   return sheet.getRange(1, 1, 1, last).getValues()[0];
+}
+
+/**
+ * O Google Sheets detecta automaticamente o tipo de qualquer valor escrito
+ * numa célula (mesmo via Apps Script) e o converte para Data/Número sempre
+ * que o texto "parece" um desses tipos no locale da planilha - por exemplo,
+ * um G.D. digitado como "3.3.50" pode virar a data 03/03/1950. Isso corrompe
+ * o dado de forma irreversível (o valor original de texto se perde). A
+ * correção definitiva é impedir a conversão na origem: toda coluna que não
+ * está em COLUNAS_NUMERICAS tem o formato forçado para texto simples ("@")
+ * antes de qualquer gravação, então o Sheets nunca reinterpreta o conteúdo.
+ * Chamada em configurarPlanilha() (Seed.gs) para todas as abas.
+ */
+function aplicarFormatoTexto_(nomeAba) {
+  var sheet = getSheet_(nomeAba);
+  var headers = HEADERS[nomeAba];
+  if (!headers) return;
+  var numericas = COLUNAS_NUMERICAS[nomeAba] || [];
+  var maxLinhas = Math.max(sheet.getMaxRows() - 1, 1);
+
+  headers.forEach(function (coluna, indice) {
+    if (numericas.indexOf(coluna) !== -1) return;
+    sheet.getRange(2, indice + 1, maxLinhas, 1).setNumberFormat('@');
+  });
 }
 
 /** Converte uma aba inteira em array de objetos, com _row (índice 1-based na planilha). */

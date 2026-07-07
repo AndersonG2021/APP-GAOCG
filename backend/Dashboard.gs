@@ -60,9 +60,17 @@ function dashboardParados_(session) {
   return todos;
 }
 
+/** Mantido em português independente do locale da planilha, para casar com a lista gerada em app.js (js/app.js). */
+var MESES_ABREV_PT_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+function competenciaAtual_() {
+  var hoje = new Date();
+  return MESES_ABREV_PT_[hoje.getMonth()] + '.' + Utilities.formatDate(hoje, Session.getScriptTimeZone(), 'yy');
+}
+
 function obterDashboard(session, params) {
   params = params || {};
-  var competencia = params.competencia || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM.yy').toLowerCase();
+  var competencia = params.competencia || competenciaAtual_();
 
   var resposta = {
     recibos: dashboardRecibos_(session, competencia),
