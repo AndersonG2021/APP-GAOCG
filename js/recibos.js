@@ -22,7 +22,7 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Unidade</label>
             <select id="recFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
           </div>
-          <div class="campo"><label>Competência</label><input id="recFiltroCompetencia" placeholder="mar.26" /></div>
+          <div class="campo"><label>Competência</label><select id="recFiltroCompetencia">${UI.opcoesCompetenciaHtml('', true)}</select></div>
           <div class="campo"><label>Fonte</label>
             <select id="recFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
           </div>
@@ -120,7 +120,9 @@ const TelaRecibos = (function () {
 
   async function opcoesStatus(statusAtual) {
     const opcoes = await (async () => { try { return await TelaListas.obterOpcoes('STATUS_RECIBO'); } catch (e) { return []; } })();
-    return `<option value="">-</option>` + opcoes.map(o => `<option ${o.valor === statusAtual ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('');
+    const vistos = new Set();
+    const unicas = opcoes.filter(o => (vistos.has(o.valor) ? false : (vistos.add(o.valor), true)));
+    return `<option value="">-</option>` + unicas.map(o => `<option ${o.valor === statusAtual ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('');
   }
 
   // ===================== NOVO RECIBO (com ou sem rateio) =====================
@@ -134,13 +136,15 @@ const TelaRecibos = (function () {
       <form id="formRecibo">
         <div class="grade-2">
           <div class="campo"><label>Unidade *</label><select id="recUnidade" required>${opcoesUnidade(null)}</select></div>
+          <div class="campo"><label>OSS</label><input id="recOss" /></div>
+          <div class="campo"><label>CNPJ</label><input id="recCnpj" /></div>
           <div class="campo"><label>Tipo de Unidade</label><input id="recTipoUnidade" /></div>
           <div class="campo"><label>Objeto</label><input id="recObjeto" /></div>
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
           <div class="campo"><label>Fonte</label><select id="recFonte"><option value="">-</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recNotaEmpenho" /></div>
-          <div class="campo"><label>Competência</label><input id="recCompetencia" placeholder="mar.26" /></div>
+          <div class="campo"><label>Competência</label><select id="recCompetencia">${UI.opcoesCompetenciaHtml('')}</select></div>
           <div class="campo"><label>Ordem Bancária</label><input id="recOrdemBancaria" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recNumeroProcesso" /></div>
           <div class="campo"><label>Status</label><select id="recStatus">${statusOpcoes}</select></div>
@@ -163,6 +167,14 @@ const TelaRecibos = (function () {
 
     UI.abrirModal('Novo processo de Recibo', corpo,
       `<button class="botao" id="btnCancelarRec">Cancelar</button><button class="botao primario" id="btnSalvarRec">Salvar</button>`);
+
+    document.getElementById('recUnidade').addEventListener('change', function () {
+      const unidade = unidades.find(u => u.id === this.value);
+      document.getElementById('recOss').value = unidade ? unidade.oss || '' : '';
+      document.getElementById('recCnpj').value = unidade ? unidade.cnpj || '' : '';
+      document.getElementById('recTipoUnidade').value = unidade ? unidade.tipo || '' : '';
+      document.getElementById('recInstrumento').value = unidade ? unidade.contrato_gestao || '' : '';
+    });
 
     document.getElementById('recTemRateio').addEventListener('change', function () {
       document.getElementById('blocoSemRateio').classList.toggle('oculto', this.checked);
@@ -197,6 +209,8 @@ const TelaRecibos = (function () {
 
     const dadosBase = {
       unidade_id: unidadeId,
+      oss_snapshot: document.getElementById('recOss').value.trim(),
+      cnpj_snapshot: document.getElementById('recCnpj').value.trim(),
       tipo_unidade: document.getElementById('recTipoUnidade').value.trim(),
       objeto: document.getElementById('recObjeto').value.trim(),
       instrumento: document.getElementById('recInstrumento').value.trim(),
@@ -246,13 +260,15 @@ const TelaRecibos = (function () {
         ${recibo.alerta_divergencia_valores ? '<p class="aviso-divergencia">⚠ Divergência entre valor liquidado/pago (ou soma do rateio x parcela contratual).</p>' : ''}
         <div class="grade-2">
           <div class="campo"><label>Unidade</label><select disabled>${opcoesUnidade(recibo.unidade_id)}</select></div>
+          <div class="campo"><label>OSS</label><input id="recEdOss" value="${UI.escaparHtml(recibo.oss_snapshot)}" /></div>
+          <div class="campo"><label>CNPJ</label><input id="recEdCnpj" value="${UI.escaparHtml(recibo.cnpj_snapshot)}" /></div>
           <div class="campo"><label>Tipo de Unidade</label><input id="recEdTipoUnidade" value="${UI.escaparHtml(recibo.tipo_unidade)}" /></div>
           <div class="campo"><label>Objeto</label><input id="recEdObjeto" value="${UI.escaparHtml(recibo.objeto)}" /></div>
           <div class="campo"><label>Instrumento</label><input id="recEdInstrumento" value="${UI.escaparHtml(recibo.instrumento)}" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="number" step="0.01" value="${recibo.parcela_contratual}" /></div>
           <div class="campo"><label>Fonte</label><select id="recEdFonte">${['', 'TESOURO', 'SUS', 'Outra'].map(f => `<option ${recibo.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recEdNotaEmpenho" value="${UI.escaparHtml(recibo.nota_empenho)}" /></div>
-          <div class="campo"><label>Competência</label><input id="recEdCompetencia" value="${UI.escaparHtml(recibo.competencia)}" /></div>
+          <div class="campo"><label>Competência</label><select id="recEdCompetencia">${UI.opcoesCompetenciaHtml(recibo.competencia)}</select></div>
           <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
           <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="number" step="0.01" value="${recibo.valor_pago}" /></div>
           <div class="campo"><label>Ordem Bancária</label><input id="recEdOrdemBancaria" value="${UI.escaparHtml(recibo.ordem_bancaria)}" /></div>
@@ -278,6 +294,8 @@ const TelaRecibos = (function () {
     const erroEl = document.getElementById('recEdErro');
     erroEl.classList.add('oculto');
     const dados = {
+      oss_snapshot: document.getElementById('recEdOss').value.trim(),
+      cnpj_snapshot: document.getElementById('recEdCnpj').value.trim(),
       tipo_unidade: document.getElementById('recEdTipoUnidade').value.trim(),
       objeto: document.getElementById('recEdObjeto').value.trim(),
       instrumento: document.getElementById('recEdInstrumento').value.trim(),

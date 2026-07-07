@@ -137,7 +137,7 @@ const TelaSof = (function () {
     const usuario = Auth.usuario();
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
-    const opcoesAndamento = await Listas_obterOpcoesComFallback('ANDAMENTO_SOF');
+    const opcoesAndamento = dedupPorValor(await Listas_obterOpcoesComFallback('ANDAMENTO_SOF'));
 
     const corpo = `
       <form id="formSof">
@@ -152,7 +152,6 @@ const TelaSof = (function () {
           <div class="campo"><label>OSS</label><input id="sofOss" value="${UI.escaparHtml(snapshot.oss_snapshot)}" /></div>
           <div class="campo"><label>CNPJ</label><input id="sofCnpj" value="${UI.escaparHtml(snapshot.cnpj_snapshot)}" /></div>
           <div class="campo"><label>Contrato de Gestão</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
-          <div class="campo"><label>Classificação Orçamentária</label><input id="sofClassificacao" value="${UI.escaparHtml(snapshot.classificacao_orcamentaria_snapshot)}" /></div>
           <div class="campo"><label>Ação</label><input id="sofAcao" value="${UI.escaparHtml(snapshot.acao_snapshot)}" /></div>
           <div class="campo"><label>Subação</label><input id="sofSubacao" value="${UI.escaparHtml(snapshot.subacao_snapshot)}" /></div>
           <div class="campo"><label>G.D.</label><input id="sofGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
@@ -192,7 +191,6 @@ const TelaSof = (function () {
       document.getElementById('sofOss').value = preenchido.oss_snapshot;
       document.getElementById('sofCnpj').value = preenchido.cnpj_snapshot;
       document.getElementById('sofContrato').value = preenchido.contrato_snapshot;
-      document.getElementById('sofClassificacao').value = preenchido.classificacao_orcamentaria_snapshot;
       document.getElementById('sofAcao').value = preenchido.acao_snapshot;
       document.getElementById('sofSubacao').value = preenchido.subacao_snapshot;
       document.getElementById('sofGd').value = preenchido.gd_snapshot;
@@ -214,7 +212,6 @@ const TelaSof = (function () {
       oss_snapshot: document.getElementById('sofOss').value.trim(),
       cnpj_snapshot: document.getElementById('sofCnpj').value.trim(),
       contrato_snapshot: document.getElementById('sofContrato').value.trim(),
-      classificacao_orcamentaria_snapshot: document.getElementById('sofClassificacao').value.trim(),
       acao_snapshot: document.getElementById('sofAcao').value.trim(),
       subacao_snapshot: document.getElementById('sofSubacao').value.trim(),
       gd_snapshot: document.getElementById('sofGd').value.trim(),
@@ -255,9 +252,17 @@ const TelaSof = (function () {
       }
 
       UI.toast('SOF salvo com sucesso.', 'sucesso');
-      if (sofExistente) await EdicaoSimultanea.sairDaEdicao('SOF', sofExistente.id);
-      UI.fecharModal();
-      await carregar();
+      if (sofExistente) {
+        await EdicaoSimultanea.sairDaEdicao('SOF', sofExistente.id);
+        UI.fecharModal();
+        await carregar();
+      } else {
+        // Reabre imediatamente em modo edição: só a partir daqui o SOF tem
+        // id e a seção de Notas de Empenho (produto final do processo) pode
+        // ser usada, sem exigir que o usuário feche e reabra manualmente.
+        await carregar();
+        await abrirSofExistente(resposta.id);
+      }
     } catch (err) {
       erroEl.textContent = err.message;
       erroEl.classList.remove('oculto');
@@ -300,6 +305,12 @@ const TelaSof = (function () {
 
   async function Listas_obterOpcoesComFallback(tipoLista) {
     try { return await TelaListas.obterOpcoes(tipoLista); } catch (e) { return []; }
+  }
+
+  /** Gerente vê a união das opções de todas as frentes; se o texto se repetir entre frentes, mostra uma vez só no <select>. */
+  function dedupPorValor(opcoes) {
+    const vistos = new Set();
+    return opcoes.filter(o => (vistos.has(o.valor) ? false : (vistos.add(o.valor), true)));
   }
 
   return { render };

@@ -52,18 +52,47 @@ const UI = (function () {
     return d.toLocaleString('pt-BR');
   }
 
+  const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+  /** Gera a lista de competências (formato "mmm.aa", ex.: "mar.26") de 24 meses atrás a 6 meses à frente. */
+  function listaCompetencias() {
+    const hoje = new Date();
+    const lista = [];
+    for (let i = 6; i >= -24; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+      lista.push(MESES_ABREV[d.getMonth()] + '.' + String(d.getFullYear()).slice(-2));
+    }
+    return lista;
+  }
+
+  /**
+   * Monta as <option> de um <select> de competência. Se valorSelecionado não
+   * estiver na lista padrão (dado histórico fora do intervalo gerado), ele é
+   * incluído mesmo assim para não "perder" a seleção atual.
+   */
+  function opcoesCompetenciaHtml(valorSelecionado, incluirTodas) {
+    const lista = listaCompetencias();
+    if (valorSelecionado && lista.indexOf(valorSelecionado) === -1) lista.unshift(valorSelecionado);
+    const opcaoInicial = incluirTodas ? '<option value="">Todas</option>' : '<option value="">-</option>';
+    return opcaoInicial + lista.map(c => `<option ${c === valorSelecionado ? 'selected' : ''}>${c}</option>`).join('');
+  }
+
   document.getElementById('botaoFecharModal').addEventListener('click', fecharModal);
   document.getElementById('sobreposicaoModal').addEventListener('click', function (e) {
     if (e.target === this) fecharModal();
   });
 
-  return { escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, formatarMoeda, formatarData };
+  return {
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal,
+    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
+  };
 })();
 
 const App = (function () {
   const TELAS = {
     dashboard: () => Dashboard.render(),
     sof: () => TelaSof.render(),
+    notasEmpenho: () => TelaNotasEmpenho.render(),
     recibos: () => TelaRecibos.render(),
     unidades: () => TelaUnidades.render(),
     listas: () => TelaListas.render(),
