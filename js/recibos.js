@@ -11,6 +11,7 @@ const TelaRecibos = (function () {
   let totalRegistros = 0;
   const TAMANHO_PAGINA = 20;
   let contadorLinhasRateio = 0;
+  let historicoRecibosUnidade = [];
 
   async function render() {
     unidades = await Api.chamar('listarUnidades', { somenteAtivas: true });
@@ -139,7 +140,9 @@ const TelaRecibos = (function () {
           <div class="campo"><label>OSS</label><input id="recOss" /></div>
           <div class="campo"><label>CNPJ</label><input id="recCnpj" /></div>
           <div class="campo"><label>Tipo de Unidade</label><input id="recTipoUnidade" /></div>
-          <div class="campo"><label>Objeto</label><input id="recObjeto" /></div>
+          <div class="campo"><label>Objeto</label><input id="recObjeto" list="recObjetoLista" disabled /><datalist id="recObjetoLista"></datalist>
+            <p class="ajuda">Selecione a unidade primeiro. Escolhendo um objeto já usado antes para ela, os campos abaixo são preenchidos com o último lançamento.</p>
+          </div>
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
           <div class="campo"><label>Fonte</label><select id="recFonte"><option value="">-</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select></div>
@@ -168,12 +171,45 @@ const TelaRecibos = (function () {
     UI.abrirModal('Novo processo de Recibo', corpo,
       `<button class="botao" id="btnCancelarRec">Cancelar</button><button class="botao primario" id="btnSalvarRec">Salvar</button>`);
 
-    document.getElementById('recUnidade').addEventListener('change', function () {
+    document.getElementById('recUnidade').addEventListener('change', async function () {
       const unidade = unidades.find(u => u.id === this.value);
       document.getElementById('recOss').value = unidade ? unidade.oss || '' : '';
       document.getElementById('recCnpj').value = unidade ? unidade.cnpj || '' : '';
       document.getElementById('recTipoUnidade').value = unidade ? unidade.tipo || '' : '';
       document.getElementById('recInstrumento').value = unidade ? unidade.contrato_gestao || '' : '';
+      document.getElementById('recParcelaContratual').value = '';
+      document.getElementById('recFonte').value = '';
+      document.getElementById('recNotaEmpenho').value = '';
+      document.getElementById('recObjeto').value = '';
+
+      const objetoInput = document.getElementById('recObjeto');
+      const objetoLista = document.getElementById('recObjetoLista');
+      objetoInput.disabled = !unidade;
+      objetoLista.innerHTML = '';
+      historicoRecibosUnidade = [];
+      if (!unidade) return;
+
+      const resposta = await Api.chamar('listarRecibos', { unidade_id: unidade.id, pageSize: 1000 });
+      historicoRecibosUnidade = resposta.items.slice().sort((a, b) => b.data_criacao < a.data_criacao ? -1 : 1);
+
+      const vistos = new Set();
+      historicoRecibosUnidade.forEach(r => {
+        const objeto = (r.objeto || '').trim();
+        if (objeto && !vistos.has(objeto)) {
+          vistos.add(objeto);
+          objetoLista.insertAdjacentHTML('beforeend', `<option value="${UI.escaparHtml(objeto)}"></option>`);
+        }
+      });
+    });
+
+    document.getElementById('recObjeto').addEventListener('change', function () {
+      const objeto = this.value.trim();
+      const ultimoLancamento = historicoRecibosUnidade.find(r => (r.objeto || '').trim().toLowerCase() === objeto.toLowerCase());
+      if (!ultimoLancamento) return;
+      document.getElementById('recInstrumento').value = ultimoLancamento.instrumento || '';
+      document.getElementById('recParcelaContratual').value = ultimoLancamento.parcela_contratual || '';
+      document.getElementById('recFonte').value = ultimoLancamento.fonte || '';
+      document.getElementById('recNotaEmpenho').value = ultimoLancamento.nota_empenho || '';
     });
 
     document.getElementById('recTemRateio').addEventListener('change', function () {
