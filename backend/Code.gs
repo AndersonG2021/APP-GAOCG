@@ -404,11 +404,24 @@ function sheetToObjects_(sheet) {
   for (var i = 1; i < data.length; i++) {
     var obj = { _row: i + 1 };
     headers.forEach(function (h, idx) {
-      obj[h] = data[i][idx];
+      obj[h] = normalizeCellValue_(data[i][idx]);
     });
     rows.push(obj);
   }
   return rows;
+}
+
+/**
+ * O Google Sheets converte automaticamente células que "parecem" data para
+ * o tipo Date. Sem este tratamento, esse valor vaza para o app como uma
+ * string ISO (ex: "1950-03-03T02:00:00.000Z"), corrompendo campos que não
+ * deveriam ser data (ex: Grupo de Despesa). Formata para algo legível.
+ */
+function normalizeCellValue_(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+  }
+  return value;
 }
 
 function findObjectById_(sheet, id) {
