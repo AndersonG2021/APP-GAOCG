@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SGOF - GAOCG | Gestão Orçamentária e Financeira</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+  <!-- Overlay de Carregamento -->
+  <div id="spinnerOverlay" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg px-6 py-5 flex items-center gap-3 shadow-xl">
+      <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+      <span class="text-sm font-medium text-slate-700">Processando...</span>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80"></div>
+
+  <!-- TELA DE LOGIN -->
+  <section id="loginScreen" class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-bold text-blue-700">SGOF</h1>
+        <p class="text-sm text-slate-500">Gestão Orçamentária e Financeira - GAOCG</p>
+      </div>
+      <form id="loginForm" class="space-y-4" novalidate>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="loginInput">Usuário</label>
+          <input id="loginInput" type="text" autocomplete="username" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="senhaInput">Senha</label>
+          <input id="senhaInput" type="password" autocomplete="current-password" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <p id="loginError" class="hidden text-sm text-red-600"></p>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg py-2 transition">
+          Entrar
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboardScreen" class="hidden min-h-screen">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div>
+          <h1 class="text-lg font-bold text-blue-700">SGOF - GAOCG</h1>
+          <p class="text-xs text-slate-500">Solicitações de Orçamento (SOF)</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="text-right">
+            <p id="userNome" class="text-sm font-semibold"></p>
+            <span id="userPerfil" class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700"></span>
+          </div>
+          <button id="novoUsuarioBtn" class="hidden text-sm text-slate-500 hover:text-blue-600 border border-slate-300 rounded-lg px-3 py-1.5">
+            + Usuário
+          </button>
+          <button id="changePasswordBtn" class="text-sm text-slate-500 hover:text-blue-600 border border-slate-300 rounded-lg px-3 py-1.5">
+            Alterar Senha
+          </button>
+          <button id="logoutBtn" class="text-sm text-slate-500 hover:text-red-600 border border-slate-300 rounded-lg px-3 py-1.5">
+            Sair
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Painel de SOFs</h2>
+        <button id="novaSofBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2">
+          + Nova SOF
+        </button>
+      </div>
+
+      <div id="sofEmptyState" class="hidden text-center text-slate-400 py-16">
+        Nenhuma SOF cadastrada até o momento.
+      </div>
+
+      <div id="sofGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </main>
+  </section>
+
+  <!-- MODAL: NOVA SOF -->
+  <div id="sofModal" class="hidden fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <h3 id="sofModalTitle" class="text-lg font-semibold">Nova Solicitação de Orçamento (SOF)</h3>
+        <button id="closeSofModalBtn" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <form id="sofForm" class="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4" novalidate>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1" for="andamentoInput">Andamento do Processo</label>
+          <select id="andamentoInput" class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"></select>
+          <p class="text-xs text-slate-400 mt-1">Define o progresso da SOF (etapa inicial → NE Emitida).</p>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1" for="unidadeInput">Unidade *</label>
+          <select id="unidadeInput" required class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white">
+            <option value="">Selecione...</option>
+          </select>
+          <p class="text-xs text-slate-400 mt-1">Preenche automaticamente os campos paramétricos abaixo (todos continuam editáveis).</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="ossInput">OSS</label>
+          <input id="ossInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="tipoInput">Tipo</label>
+          <input id="tipoInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="cnpjInput">CNPJ</label>
+          <input id="cnpjInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="fonteInput">Fonte</label>
+          <input id="fonteInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="acaoInput">Ação</label>
+          <input id="acaoInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="subAcaoInput">Sub-ação</label>
+          <input id="subAcaoInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="grupoDespesaInput">Grupo de Despesa</label>
+          <input id="grupoDespesaInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="contratoInput">Instrumento/Contrato</label>
+          <input id="contratoInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="parcelaMensalInput">Parcela Contratual</label>
+          <input id="parcelaMensalInput" type="text" placeholder="Ex: Mensal"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="ceoInput">CEO</label>
+          <input id="ceoInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="taInput">T.A.</label>
+          <input id="taInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1" for="numProcessoInput">Nº Processo / SEI *</label>
+          <input id="numProcessoInput" type="text" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="numSofInput">Nº SOF</label>
+          <input id="numSofInput" type="text"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="periodoInput">Período</label>
+          <input id="periodoInput" type="text" placeholder="Ex: 2026"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="totalSolicitadoInput">Total Solicitado (R$)</label>
+          <input id="totalSolicitadoInput" type="number" step="0.01" min="0"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1" for="objetoInput">Objeto *</label>
+          <textarea id="objetoInput" rows="2" required
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1" for="obsInput">Observações</label>
+          <textarea id="obsInput" rows="2"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div class="md:col-span-2 flex items-center gap-6 flex-wrap">
+          <label class="flex items-center gap-2 text-sm">
+            <input id="ddoInput" type="checkbox" class="rounded border-slate-300" />
+            DDO aprovado
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input id="dpfInput" type="checkbox" class="rounded border-slate-300" />
+            DPF aprovado
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input id="deaInput" type="checkbox" class="rounded border-slate-300" />
+            É D.E.A.
+          </label>
+        </div>
+
+        <div class="md:col-span-2 flex justify-end gap-2 pt-3 border-t border-slate-200 mt-2">
+          <button type="button" id="cancelSofBtn" class="px-4 py-2 rounded-lg border border-slate-300 text-sm">
+            Cancelar
+          </button>
+          <button type="submit" id="sofSubmitBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">
+            Salvar SOF
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ALTERAR SENHA -->
+  <div id="changePasswordModal" class="hidden fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <h3 class="text-lg font-semibold">Alterar Senha</h3>
+        <button id="closeChangePasswordModalBtn" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <form id="changePasswordForm" class="px-6 py-4 space-y-4" novalidate>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="senhaAtualInput">Senha atual</label>
+          <input id="senhaAtualInput" type="password" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="novaSenhaInput">Nova senha</label>
+          <input id="novaSenhaInput" type="password" required minlength="6"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="confirmarSenhaInput">Confirmar nova senha</label>
+          <input id="confirmarSenhaInput" type="password" required minlength="6"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <p id="changePasswordError" class="hidden text-sm text-red-600"></p>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+          <button type="button" id="cancelChangePasswordBtn" class="px-4 py-2 rounded-lg border border-slate-300 text-sm">
+            Cancelar
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">
+            Salvar Nova Senha
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVO USUÁRIO (restrito a Gerente) -->
+  <div id="userModal" class="hidden fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <h3 class="text-lg font-semibold">Novo Usuário</h3>
+        <button id="closeUserModalBtn" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <form id="userForm" class="px-6 py-4 space-y-4" novalidate>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="novoNomeInput">Nome</label>
+          <input id="novoNomeInput" type="text" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="novoLoginInput">Login</label>
+          <input id="novoLoginInput" type="text" required
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="novaSenhaUsuarioInput">Senha inicial</label>
+          <input id="novaSenhaUsuarioInput" type="password" required minlength="6"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="novoPerfilInput">Perfil</label>
+          <select id="novoPerfilInput" required class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white">
+            <option value="Analista">Analista</option>
+            <option value="Gerente">Gerente</option>
+          </select>
+        </div>
+        <p id="userFormError" class="hidden text-sm text-red-600"></p>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+          <button type="button" id="cancelUserBtn" class="px-4 py-2 rounded-lg border border-slate-300 text-sm">
+            Cancelar
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">
+            Criar Usuário
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
