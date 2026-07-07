@@ -358,8 +358,71 @@ function openSofModal(sofData) {
     document.getElementById('andamentoInput').value = ANDAMENTO_STAGES[0];
   }
 
+  const notaEmpenhoSection = document.getElementById('notaEmpenhoSection');
+  document.getElementById('notaEmpenhoError').classList.add('hidden');
+  if (sofData) {
+    notaEmpenhoSection.classList.remove('hidden');
+    loadNotaEmpenho(sofData.ID);
+  } else {
+    notaEmpenhoSection.classList.add('hidden');
+  }
+
   document.getElementById('sofModal').classList.remove('hidden');
 }
+
+/** Busca a Nota de Empenho vinculada à SOF em edição e preenche a seção. */
+async function loadNotaEmpenho(sofId) {
+  document.getElementById('numeroNeInput').value = '';
+  document.getElementById('valorInicialNeInput').value = '';
+  document.getElementById('valorReforcoNeInput').value = '';
+  document.getElementById('saldoAtualNeDisplay').value = '';
+
+  try {
+    const res = await apiRequest('getNotaEmpenho', { sofId: sofId });
+    if (res.data) {
+      document.getElementById('numeroNeInput').value = res.data.Numero_NE || '';
+      document.getElementById('valorInicialNeInput').value = res.data.Valor_Inicial || '';
+      document.getElementById('valorReforcoNeInput').value = res.data.Valor_Reforco || '';
+      document.getElementById('saldoAtualNeDisplay').value = res.data.Saldo_Atual || 0;
+    }
+  } catch (err) {
+    // erro já exibido via toast em apiRequest
+  }
+}
+
+document.getElementById('saveNotaEmpenhoBtn').addEventListener('click', async function () {
+  const errorEl = document.getElementById('notaEmpenhoError');
+  errorEl.classList.add('hidden');
+
+  if (!state.editingSofId) {
+    errorEl.textContent = 'Salve a SOF antes de vincular uma Nota de Empenho.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const numeroNe = sanitizeInput(document.getElementById('numeroNeInput').value);
+  if (!numeroNe) {
+    errorEl.textContent = 'Informe o número da Nota de Empenho.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  const data = {
+    Numero_NE: numeroNe,
+    Valor_Inicial: document.getElementById('valorInicialNeInput').value || 0,
+    Valor_Reforco: document.getElementById('valorReforcoNeInput').value || 0
+  };
+
+  try {
+    const res = await apiRequest('saveNotaEmpenho', { sofId: state.editingSofId, data: data });
+    document.getElementById('saldoAtualNeDisplay').value = res.data.Saldo_Atual;
+    showToast('Nota de Empenho salva com sucesso!', 'success');
+    await loadSOFs();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
+});
 
 /** Chamada pelo onclick inline dos cards para abrir a SOF em modo edição. */
 function openSofEditModal(id) {

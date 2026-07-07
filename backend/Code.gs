@@ -97,6 +97,12 @@ function handleRequest_(e, method) {
       case 'getBaseReferencia':
         return jsonOut_(getBaseReferencia(session));
 
+      case 'getNotaEmpenho':
+        return jsonOut_(getNotaEmpenho(session, params.sofId));
+
+      case 'saveNotaEmpenho':
+        return jsonOut_(saveNotaEmpenho(session, params.sofId, params.data));
+
       case 'createUser':
         return jsonOut_(createUser(session, params.data));
 
@@ -377,6 +383,76 @@ function getBaseReferencia(session) {
     return r;
   });
   return { ok: true, data: rows };
+}
+
+// ===================== NOTA DE EMPENHO (produto final da SOF) =====================
+
+/**
+ * Busca a Nota de Empenho vinculada a uma SOF (relação 1:1 nesta fase).
+ * Retorna data: null se a SOF ainda não tiver NE emitida.
+ */
+function getNotaEmpenho(session, sofId) {
+  if (!sofId) return { ok: false, error: 'ID da SOF não informado.' };
+
+  var sheet = getSheet_(SHEET_NAMES.NOTA_EMPENHO);
+  var registro = sheetToObjects_(sheet).find(function (r) {
+    return String(r.SOF_ID) === String(sofId);
+  });
+  if (registro) delete registro._row;
+
+  return { ok: true, data: registro || null };
+}
+
+/**
+ * Cria ou atualiza (upsert) a Nota de Empenho vinculada a uma SOF.
+ * Saldo_Atual = Valor_Inicial + Valor_Reforco (dedução por Recibos entra na Fase 2).
+ * Também sincroniza o campo de referência rápida NOTA_EMPENHO na própria SOF.
+ */
+function saveNotaEmpenho(session, sofId, data) {
+  if (!sofId || !data) {
+    return { ok: false, error: 'Dados da Nota de Empenho incompletos.' };
+  }
+  if (!data.Numero_NE) {
+    return { ok: false, error: 'Informe o número da Nota de Empenho.' };
+  }
+
+  var sofSheet = getSheet_(SHEET_NAMES.SOF);
+  var sof = findObjectById_(sofSheet, sofId);
+  if (!sof) {
+    return { ok: false, error: 'SOF não encontrada.' };
+  }
+
+  var sheet = getSheet_(SHEET_NAMES.NOTA_EMPENHO);
+  var registros = sheetToObjects_(sheet);
+  var existente = registros.find(function (r) { return String(r.SOF_ID) === String(sofId); });
+
+  var valorInicial = Number(data.Valor_Inicial) || 0;
+  var valorReforco = Number(data.Valor_Reforco) || 0;
+
+  var registro = {
+    ID: existente ? existente.ID : generateId_('NE'),
+    SOF_ID: sofId,
+    Numero_NE: data.Numero_NE,
+    Valor_Inicial: valorInicial,
+    Valor_Reforco: valorReforco,
+    Saldo_Atual: valorInicial + valorReforco
+  };
+
+  if (existente) {
+    updateObjectRow_(sheet, existente._row, registro);
+    logAudit_(SHEET_NAMES.NOTA_EMPENHO, registro.ID, session.userId, 'Numero_NE', existente.Numero_NE, registro.Numero_NE);
+  } else {
+    appendObject_(sheet, registro);
+    logAudit_(SHEET_NAMES.NOTA_EMPENHO, registro.ID, session.userId, 'CRIAÇÃO', '', registro.Numero_NE);
+  }
+
+  var sofAtualizado = Object.assign({}, sof, { NOTA_EMPENHO: registro.Numero_NE });
+  var rowIndex = sofAtualizado._row;
+  delete sofAtualizado._row;
+  sofAtualizado.PROGRESSO_PCT = calcularProgressoSOF_(sofAtualizado);
+  updateObjectRow_(sofSheet, rowIndex, sofAtualizado);
+
+  return { ok: true, data: registro };
 }
 
 // ===================== UTILITÁRIOS DE PLANILHA =====================
