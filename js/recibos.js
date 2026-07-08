@@ -251,7 +251,7 @@ const TelaRecibos = (function () {
     const erroEl = document.getElementById('recErro');
     erroEl.classList.add('oculto');
     const unidadeId = document.getElementById('recUnidade').value;
-    if (!unidadeId) { erroEl.textContent = 'Selecione a unidade.'; erroEl.classList.remove('oculto'); return; }
+    if (!unidadeId) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
 
     const dadosBase = {
       unidade_id: unidadeId,
@@ -279,7 +279,7 @@ const TelaRecibos = (function () {
           valor_liquidado: div.querySelector('.rt-liquidado').value,
           valor_pago: div.querySelector('.rt-pago').value
         }));
-        if (parcelas.length < 2) { erroEl.textContent = 'Informe ao menos duas parcelas de rateio.'; erroEl.classList.remove('oculto'); return; }
+        if (parcelas.length < 2) { UI.mostrarErro(erroEl, 'Informe ao menos duas parcelas de rateio.'); return; }
         await Api.chamar('criarGrupoRateioRecibo', { dadosBase, parcelas });
       } else {
         dadosBase.valor_liquidado = document.getElementById('recValorLiquidado').value;
@@ -290,8 +290,7 @@ const TelaRecibos = (function () {
       UI.fecharModal();
       await carregar();
     } catch (err) {
-      erroEl.textContent = err.message;
-      erroEl.classList.remove('oculto');
+      UI.mostrarErro(erroEl, err.message);
     }
   }
 
@@ -371,8 +370,7 @@ const TelaRecibos = (function () {
       UI.fecharModal();
       await carregar();
     } catch (err) {
-      erroEl.textContent = err.message;
-      erroEl.classList.remove('oculto');
+      UI.mostrarErro(erroEl, err.message);
     }
   }
 

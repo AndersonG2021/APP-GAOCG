@@ -40,6 +40,24 @@ const UI = (function () {
     document.getElementById('sobreposicaoModal').classList.add('oculto');
   }
 
+  /**
+   * Mostra uma mensagem de erro num <p class="erro-campo">. Se a mesma mensagem
+   * já estava sendo exibida por esse elemento (tentativa repetida com o mesmo
+   * erro), aplica uma animação de "piscar" para reforçar que o erro persiste.
+   */
+  function mostrarErro(elementoOuId, mensagem) {
+    const el = typeof elementoOuId === 'string' ? document.getElementById(elementoOuId) : elementoOuId;
+    const repetiu = el.dataset.ultimaMensagem === mensagem;
+    el.textContent = mensagem;
+    el.dataset.ultimaMensagem = mensagem;
+    el.classList.remove('oculto');
+    if (repetiu) {
+      el.classList.remove('piscar-erro');
+      void el.offsetWidth; // força reflow para reiniciar a animação CSS
+      el.classList.add('piscar-erro');
+    }
+  }
+
   function formatarMoeda(valor) {
     const n = Number(valor) || 0;
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -83,7 +101,7 @@ const UI = (function () {
   });
 
   return {
-    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal,
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, mostrarErro,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
   };
 })();
@@ -116,6 +134,46 @@ const App = (function () {
     navegarPara('dashboard');
   }
 
+  function abrirModalPerfil() {
+    const usuario = Auth.usuario();
+    const corpo = `
+      <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
+      <div class="campo"><label>Frente</label><input value="${UI.escaparHtml(usuario.perfil === 'gerente' ? 'Gerente' : usuario.frente)}" disabled /></div>
+      <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
+      <h4 style="margin:0 0 8px">Alterar senha</h4>
+      <form id="formTrocarSenha">
+        <div class="campo"><label>Senha atual *</label><input id="senhaAtual" type="password" required /></div>
+        <div class="campo"><label>Nova senha *</label><input id="senhaNova" type="password" required /></div>
+        <div class="campo"><label>Confirmar nova senha *</label><input id="senhaNovaConfirmacao" type="password" required /></div>
+        <p id="perfilErro" class="erro-campo oculto"></p>
+      </form>`;
+
+    UI.abrirModal('Minha conta', corpo,
+      `<button class="botao" id="btnFecharPerfil">Fechar</button><button class="botao primario" id="btnSalvarSenha">Alterar senha</button>`,
+      { pequeno: true });
+
+    document.getElementById('btnFecharPerfil').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnSalvarSenha').addEventListener('click', async () => {
+      const erroEl = document.getElementById('perfilErro');
+      erroEl.classList.add('oculto');
+      const senhaAtual = document.getElementById('senhaAtual').value;
+      const senhaNova = document.getElementById('senhaNova').value;
+      const senhaNovaConfirmacao = document.getElementById('senhaNovaConfirmacao').value;
+
+      if (!senhaAtual || !senhaNova) { UI.mostrarErro(erroEl, 'Informe a senha atual e a nova senha.'); return; }
+      if (senhaNova.length < 6) { UI.mostrarErro(erroEl, 'A nova senha deve ter pelo menos 6 caracteres.'); return; }
+      if (senhaNova !== senhaNovaConfirmacao) { UI.mostrarErro(erroEl, 'A confirmação não confere com a nova senha.'); return; }
+
+      try {
+        await Api.chamar('alterarMinhaSenha', { senhaAtual, novaSenha: senhaNova });
+        UI.toast('Senha alterada com sucesso.', 'sucesso');
+        UI.fecharModal();
+      } catch (err) {
+        UI.mostrarErro(erroEl, err.message);
+      }
+    });
+  }
+
   function navegarPara(tela) {
     document.querySelectorAll('#barraLateral nav button').forEach(btn => {
       btn.classList.toggle('ativo', btn.dataset.tela === tela);
@@ -137,6 +195,8 @@ const App = (function () {
       mostrarTelaLogin();
     });
 
+    document.querySelector('#barraTopo .usuario-info').addEventListener('click', abrirModalPerfil);
+
     document.getElementById('formLogin').addEventListener('submit', async function (e) {
       e.preventDefault();
       const erroEl = document.getElementById('loginErro');
@@ -144,16 +204,14 @@ const App = (function () {
       const login = document.getElementById('loginUsuario').value.trim();
       const senha = document.getElementById('loginSenha').value;
       if (!login || !senha) {
-        erroEl.textContent = 'Preencha usuário e senha.';
-        erroEl.classList.remove('oculto');
+        UI.mostrarErro(erroEl, 'Preencha usuário e senha.');
         return;
       }
       try {
         await Auth.login(login, senha);
         mostrarApp();
       } catch (err) {
-        erroEl.textContent = err.message;
-        erroEl.classList.remove('oculto');
+        UI.mostrarErro(erroEl, err.message);
       }
     });
 
