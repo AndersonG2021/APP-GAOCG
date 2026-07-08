@@ -166,6 +166,27 @@ table.tabela tbody tr.linha-parada:hover { background: #fef3c7; }
 .aviso-divergencia { color: var(--amarelo); font-size: 12px; margin-top: 2px; }
 .estado-vazio { text-align: center; color: var(--cinza-500); padding: 40px 0; }
 
+/* ===== Stepper de Andamento (SOF) ===== */
+.stepper { display: flex; align-items: flex-start; overflow-x: auto; padding: 8px 4px 12px; }
+.stepper-no { display: flex; flex-direction: column; align-items: center; flex: 0 0 84px; position: relative; }
+.stepper-no:not(:first-child)::before {
+  content: ''; position: absolute; top: 15px; right: 50%; width: 100%; height: 3px;
+  background: var(--cinza-300); z-index: 0; transition: background-color .25s ease;
+}
+.stepper-no.concluido:not(:first-child)::before { background: var(--verde); }
+.stepper-marcador {
+  width: 30px; height: 30px; border-radius: 50%; border: none; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; background: var(--cinza-300); color: var(--cinza-700);
+  cursor: not-allowed; transition: transform .15s ease, background-color .2s ease, color .2s ease;
+}
+.stepper-no.concluido .stepper-marcador { background: var(--verde); color: var(--branco); }
+.stepper-no.proximo .stepper-marcador { background: var(--azul); color: var(--branco); cursor: pointer; }
+.stepper-no.proximo .stepper-marcador:hover { transform: scale(1.12); }
+.stepper-no.proximo .stepper-marcador:active { transform: scale(0.95); }
+.stepper-rotulo { font-size: 10px; text-align: center; color: var(--cinza-500); margin-top: 6px; line-height: 1.25; }
+.stepper-no.concluido .stepper-rotulo, .stepper-no.proximo .stepper-rotulo { color: var(--cinza-900); font-weight: 600; }
+
 /* ===== Modal ===== */
 .sobreposicao-modal {
   position: fixed; inset: 0; background: rgba(15,23,42,0.5);
