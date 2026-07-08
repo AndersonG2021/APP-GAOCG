@@ -107,7 +107,7 @@ const TelaListas = (function () {
       const erroEl = document.getElementById('opErro');
       erroEl.classList.add('oculto');
       const valor = document.getElementById('opValor').value.trim();
-      if (!valor) { erroEl.textContent = 'Informe o texto da opção.'; erroEl.classList.remove('oculto'); return; }
+      if (!valor) { UI.mostrarErro(erroEl, 'Informe o texto da opção.'); return; }
       try {
         await Api.chamar('criarOpcao', {
           data: {
@@ -122,8 +122,7 @@ const TelaListas = (function () {
         UI.fecharModal();
         await carregar();
       } catch (err) {
-        erroEl.textContent = err.message;
-        erroEl.classList.remove('oculto');
+        UI.mostrarErro(erroEl, err.message);
       }
     });
   }

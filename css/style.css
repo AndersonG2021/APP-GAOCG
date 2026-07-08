@@ -91,7 +91,7 @@ body {
   justify-content: space-between;
   align-items: center;
 }
-#barraTopo .usuario-info { text-align: right; font-size: 12.5px; color: var(--cinza-500); }
+#barraTopo .usuario-info { text-align: right; font-size: 12.5px; color: var(--cinza-500); cursor: pointer; }
 #barraTopo .usuario-info strong { color: var(--cinza-900); font-size: 14px; display: block; }
 
 #conteudo { padding: 24px; flex: 1; overflow-y: auto; }
@@ -109,8 +109,10 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
   cursor: pointer;
   background: var(--cinza-200);
   color: var(--cinza-900);
+  transition: transform .08s ease, filter .08s ease;
 }
 .botao:hover { filter: brightness(0.97); }
+.botao:active { transform: scale(0.96); filter: brightness(0.9); }
 .botao.primario { background: var(--azul); color: var(--branco); }
 .botao.perigo { background: var(--vermelho); color: var(--branco); }
 .botao.sucesso { background: var(--verde); color: var(--branco); }
@@ -128,6 +130,8 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 }
 .campo .ajuda { font-size: 11.5px; color: var(--cinza-500); margin-top: 3px; }
 .campo .erro-campo { font-size: 11.5px; color: var(--vermelho); margin-top: 3px; }
+@keyframes piscarErro { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.erro-campo.piscar-erro { animation: piscarErro 0.25s ease-in-out 2; }
 .grade-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .grade-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
 

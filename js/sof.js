@@ -248,7 +248,7 @@ const TelaSof = (function () {
     erroEl.classList.add('oculto');
     const dados = coletarDadosFormulario();
     if (confirmado) dados.confirmado = true;
-    if (!dados.unidade_id && !sofExistente) { erroEl.textContent = 'Selecione a unidade.'; erroEl.classList.remove('oculto'); return; }
+    if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
 
     try {
       let resposta;
@@ -274,8 +274,7 @@ const TelaSof = (function () {
         await abrirSofExistente(resposta.id);
       }
     } catch (err) {
-      erroEl.textContent = err.message;
-      erroEl.classList.remove('oculto');
+      UI.mostrarErro(erroEl, err.message);
     }
   }
 

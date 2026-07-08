@@ -114,8 +114,7 @@ const TelaUnidades = (function () {
         UI.fecharModal();
         await carregar();
       } catch (err) {
-        erroEl.textContent = err.message;
-        erroEl.classList.remove('oculto');
+        UI.mostrarErro(erroEl, err.message);
       }
     });
   }
