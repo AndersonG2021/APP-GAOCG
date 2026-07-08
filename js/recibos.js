@@ -12,9 +12,10 @@ const TelaRecibos = (function () {
   const TAMANHO_PAGINA = 20;
   let contadorLinhasRateio = 0;
   let historicoRecibosUnidade = [];
+  let abrindoLinha = false;
 
   async function render() {
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true });
+    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Recibos</h2>
       <div class="painel">
@@ -41,7 +42,10 @@ const TelaRecibos = (function () {
 
     document.getElementById('btnFiltrarRec').addEventListener('click', () => { paginaAtual = 1; carregar(); });
     document.getElementById('recBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
-    document.getElementById('btnNovoRecibo').addEventListener('click', () => abrirFormularioNovo());
+    document.getElementById('btnNovoRecibo').addEventListener('click', async function () {
+      this.disabled = true;
+      try { await abrirFormularioNovo(); } finally { this.disabled = false; }
+    });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
     await carregar();
   }
@@ -108,11 +112,17 @@ const TelaRecibos = (function () {
   }
 
   async function abrirReciboExistente(id) {
-    const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('Recibo', id);
-    if (!podeAbrir) return;
-    const recibo = itens.find(r => r.id === id);
-    await Api.chamar('marcarReciboVisualizado', { id });
-    abrirFormularioEdicao(recibo);
+    if (abrindoLinha) return;
+    abrindoLinha = true;
+    try {
+      const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('Recibo', id);
+      if (!podeAbrir) return;
+      const recibo = itens.find(r => r.id === id);
+      await Api.chamar('marcarReciboVisualizado', { id });
+      await abrirFormularioEdicao(recibo);
+    } finally {
+      abrindoLinha = false;
+    }
   }
 
   function opcoesUnidade(selecionadaId) {

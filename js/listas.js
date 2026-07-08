@@ -68,6 +68,7 @@ const TelaListas = (function () {
       btn.addEventListener('click', async () => {
         const opcao = opcoes.find(o => o.id === btn.dataset.togglePausa);
         await Api.chamar('atualizarOpcao', { id: opcao.id, data: { pausa_contagem_parado: !opcao.pausa_contagem_parado } });
+        Api.invalidarCache('listarOpcoes');
         await carregar();
       });
     });
@@ -75,6 +76,7 @@ const TelaListas = (function () {
       btn.addEventListener('click', async () => {
         const opcao = opcoes.find(o => o.id === btn.dataset.toggleAtivo);
         await Api.chamar('atualizarOpcao', { id: opcao.id, data: { ativo: !opcao.ativo } });
+        Api.invalidarCache('listarOpcoes');
         await carregar();
       });
     });
@@ -115,6 +117,7 @@ const TelaListas = (function () {
             pausa_contagem_parado: document.getElementById('opPausa').checked
           }
         });
+        Api.invalidarCache('listarOpcoes');
         UI.toast('Opção criada.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -127,7 +130,7 @@ const TelaListas = (function () {
 
   /** Usado por sof.js/recibos.js para popular os <select> de andamento/status. */
   async function obterOpcoes(tipoLista) {
-    return Api.chamar('listarOpcoes', { tipo_lista: tipoLista });
+    return Api.chamar('listarOpcoes', { tipo_lista: tipoLista }, { cache: true });
   }
 
   return { render, obterOpcoes };

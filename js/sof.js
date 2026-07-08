@@ -11,9 +11,10 @@ const TelaSof = (function () {
   let totalRegistros = 0;
   const TAMANHO_PAGINA = 20;
   let sofEmEdicaoId = null;
+  let abrindoLinha = false;
 
   async function render() {
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true });
+    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">SOF</h2>
       <div class="painel">
@@ -39,7 +40,10 @@ const TelaSof = (function () {
 
     document.getElementById('btnFiltrarSof').addEventListener('click', () => { paginaAtual = 1; carregar(); });
     document.getElementById('sofBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
-    document.getElementById('btnNovoSof').addEventListener('click', () => abrirFormulario());
+    document.getElementById('btnNovoSof').addEventListener('click', async function () {
+      this.disabled = true;
+      try { await abrirFormulario(); } finally { this.disabled = false; }
+    });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
     await carregar();
   }
@@ -111,11 +115,17 @@ const TelaSof = (function () {
   }
 
   async function abrirSofExistente(id) {
-    const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('SOF', id);
-    if (!podeAbrir) return;
-    const sof = await Api.chamar('obterSof', { id });
-    await Api.chamar('marcarSofVisualizado', { id });
-    await abrirFormulario(sof);
+    if (abrindoLinha) return;
+    abrindoLinha = true;
+    try {
+      const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('SOF', id);
+      if (!podeAbrir) return;
+      const sof = await Api.chamar('obterSof', { id });
+      await Api.chamar('marcarSofVisualizado', { id });
+      await abrirFormulario(sof);
+    } finally {
+      abrindoLinha = false;
+    }
   }
 
   function camposAutopreenchimento(unidade, sof) {
