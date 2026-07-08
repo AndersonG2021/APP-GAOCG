@@ -5,6 +5,27 @@
 
 const TelaSof = (function () {
   const FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital'];
+  const ETAPAS_ANDAMENTO = [
+    'SES-NP_DGPO', 'SES-DGPO', 'SES', 'NAP_POAS', 'SES-GPOAS', 'SES-GORC', 'SES-GPF',
+    'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
+  ];
+  const CAMPOS_OBRIGATORIOS = [
+    { id: 'sofOss', rotulo: 'OSS' },
+    { id: 'sofCnpj', rotulo: 'CNPJ' },
+    { id: 'sofContrato', rotulo: 'Contrato de Gestão' },
+    { id: 'sofAcao', rotulo: 'Ação' },
+    { id: 'sofSubacao', rotulo: 'Subação' },
+    { id: 'sofGd', rotulo: 'G.D.' },
+    { id: 'sofSei', rotulo: 'SEI' },
+    { id: 'sofNumero', rotulo: 'Nº SOF' },
+    { id: 'sofPeriodoInicio', rotulo: 'Período (início)' },
+    { id: 'sofPeriodoFim', rotulo: 'Período (fim)' },
+    { id: 'sofDea', rotulo: 'DEA' },
+    { id: 'sofParcelaMensal', rotulo: 'Parcela Mensal' },
+    { id: 'sofFonte', rotulo: 'Fonte' },
+    { id: 'sofTotalSolicitado', rotulo: 'Total Solicitado' },
+    { id: 'sofObjeto', rotulo: 'Objeto' }
+  ];
   let unidades = [];
   let itens = [];
   let paginaAtual = 1;
@@ -101,7 +122,7 @@ const TelaSof = (function () {
 
   async function exportarCsv() {
     const resposta = await Api.chamar('listarSof', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    const colunas = ['id', 'unidade_id', 'sei', 'sof_numero', 'periodo', 'andamento', 'objeto', 'fonte', 'total_solicitado', 'frente', 'possui_ne'];
+    const colunas = ['id', 'unidade_id', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'objeto', 'fonte', 'total_solicitado', 'frente', 'possui_ne'];
     const linhas = [colunas.join(';')].concat(resposta.items.map(s => colunas.map(c => `"${String(s[c] === undefined ? '' : s[c]).replace(/"/g, '""')}"`).join(';')));
     baixarArquivo('sof.csv', linhas.join('\n'));
   }
@@ -147,8 +168,6 @@ const TelaSof = (function () {
     const usuario = Auth.usuario();
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
-    const opcoesAndamento = dedupPorValor(await Listas_obterOpcoesComFallback('ANDAMENTO_SOF'));
-
     const corpo = `
       <form id="formSof">
         <div class="campo"><label>Unidade *</label>
@@ -165,17 +184,17 @@ const TelaSof = (function () {
           <div class="campo"><label>Ação</label><input id="sofAcao" value="${UI.escaparHtml(snapshot.acao_snapshot)}" /></div>
           <div class="campo"><label>Subação</label><input id="sofSubacao" value="${UI.escaparHtml(snapshot.subacao_snapshot)}" /></div>
           <div class="campo"><label>G.D.</label><input id="sofGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
-          <div class="campo"><label>Tipo</label><input id="sofTipo" value="${UI.escaparHtml(sof ? sof.tipo : '')}" /></div>
           <div class="campo"><label>SEI</label><input id="sofSei" value="${UI.escaparHtml(sof ? sof.sei : '')}" placeholder="0000000000.000000/0000-00" /></div>
           <div class="campo"><label>Nº SOF</label><input id="sofNumero" value="${UI.escaparHtml(sof ? sof.sof_numero : '')}" placeholder="000/0000" /></div>
-          <div class="campo"><label>Período</label><input id="sofPeriodo" value="${UI.escaparHtml(sof ? sof.periodo : '')}" /></div>
-          <div class="campo"><label>Andamento</label>
-            <select id="sofAndamento">
+          <div class="campo"><label>Período - início</label><input type="date" id="sofPeriodoInicio" value="${UI.escaparHtml(sof ? sof.periodo_inicio : '')}" /></div>
+          <div class="campo"><label>Período - fim</label><input type="date" id="sofPeriodoFim" value="${UI.escaparHtml(sof ? sof.periodo_fim : '')}" /></div>
+          <div class="campo"><label>DEA</label>
+            <select id="sofDea">
               <option value="">-</option>
-              ${opcoesAndamento.map(o => `<option ${sof && sof.andamento === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
+              <option ${sof && sof.dea === 'SIM' ? 'selected' : ''}>SIM</option>
+              <option ${sof && sof.dea === 'NÃO' ? 'selected' : ''}>NÃO</option>
             </select>
           </div>
-          <div class="campo"><label>DEA</label><input id="sofDea" value="${UI.escaparHtml(sof ? sof.dea : '')}" /></div>
           <div class="campo"><label>T.A.</label><input id="sofTa" value="${UI.escaparHtml(sof ? sof.ta : '')}" /></div>
           <div class="campo"><label>Parcela Mensal</label><input id="sofParcelaMensal" type="number" step="0.01" value="${sof ? sof.parcela_mensal : ''}" /></div>
           <div class="campo"><label>Fonte</label>
@@ -187,7 +206,9 @@ const TelaSof = (function () {
         </div>
         <div class="campo"><label>Objeto</label><textarea id="sofObjeto" rows="2">${UI.escaparHtml(sof ? sof.objeto : '')}</textarea></div>
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${UI.escaparHtml(sof ? sof.observacao : '')}</textarea></div>
-        <div class="campo"><label><input type="checkbox" id="sofCompleto" ${sof && sof.completo ? 'checked' : ''} /> Cadastro completo (deixe desmarcado para rascunho incremental)</label></div>
+        <div class="campo"><label>Andamento</label>
+          <div id="stepperAndamento">${editando ? '' : '<p class="ajuda">Disponível depois que o processo for salvo.</p>'}</div>
+        </div>
         <p id="sofErro" class="erro-campo oculto"></p>
       </form>
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
@@ -213,7 +234,10 @@ const TelaSof = (function () {
 
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof));
 
-    if (editando) await renderNotasEmpenho(sof.id);
+    if (editando) {
+      atualizarStepperVisual(sof);
+      await renderNotasEmpenho(sof);
+    }
   }
 
   function coletarDadosFormulario() {
@@ -225,11 +249,10 @@ const TelaSof = (function () {
       acao_snapshot: document.getElementById('sofAcao').value.trim(),
       subacao_snapshot: document.getElementById('sofSubacao').value.trim(),
       gd_snapshot: document.getElementById('sofGd').value.trim(),
-      tipo: document.getElementById('sofTipo').value.trim(),
       sei: document.getElementById('sofSei').value.trim(),
       sof_numero: document.getElementById('sofNumero').value.trim(),
-      periodo: document.getElementById('sofPeriodo').value.trim(),
-      andamento: document.getElementById('sofAndamento').value,
+      periodo_inicio: document.getElementById('sofPeriodoInicio').value,
+      periodo_fim: document.getElementById('sofPeriodoFim').value,
       dea: document.getElementById('sofDea').value.trim(),
       ta: document.getElementById('sofTa').value.trim(),
       parcela_mensal: document.getElementById('sofParcelaMensal').value,
@@ -238,7 +261,7 @@ const TelaSof = (function () {
       total_solicitado: document.getElementById('sofTotalSolicitado').value,
       objeto: document.getElementById('sofObjeto').value.trim(),
       observacao: document.getElementById('sofObservacao').value.trim(),
-      completo: document.getElementById('sofCompleto').checked,
+      completo: true,
       frente: document.getElementById('sofFrente') ? document.getElementById('sofFrente').value : undefined
     };
   }
@@ -249,6 +272,8 @@ const TelaSof = (function () {
     const dados = coletarDadosFormulario();
     if (confirmado) dados.confirmado = true;
     if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
+    const mensagemObrigatorio = validarCamposObrigatorios();
+    if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
 
     try {
       let resposta;
@@ -278,48 +303,108 @@ const TelaSof = (function () {
     }
   }
 
-  async function renderNotasEmpenho(sofId) {
-    const notas = await Api.chamar('listarNotasEmpenhoPorSof', { sofId });
+  async function renderNotasEmpenho(sof) {
+    const notas = await Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id });
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th></tr></thead>
-        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td></tr>`).join('') || '<tr><td colspan="4" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th><th>Arquivo</th></tr></thead>
+        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="5" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
       <div class="grade-3" style="margin-top:10px">
         <div class="campo"><label>Tipo</label><select id="neTipo"><option value="original">Original</option><option value="reforco">Reforço</option></select></div>
         <div class="campo"><label>Número (obrigatório p/ original)</label><input id="neNumero" /></div>
         <div class="campo"><label>Valor</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
+      <div class="campo"><label>Arquivo da Nota de Empenho *</label><input type="file" id="neArquivo" accept=".pdf,image/*" required /></div>
       <button class="botao sucesso" id="btnAddNe">Adicionar Nota de Empenho</button>
       <p id="neErro" class="erro-campo oculto"></p>`;
 
     document.getElementById('btnAddNe').addEventListener('click', async () => {
       const erroEl = document.getElementById('neErro');
       erroEl.classList.add('oculto');
+      const arquivoInput = document.getElementById('neArquivo');
+      const arquivo = arquivoInput.files[0];
+      if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo da Nota de Empenho.'); return; }
+      if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
+
       try {
+        const arquivoBase64 = await lerArquivoBase64(arquivo);
+        const tipo = document.getElementById('neTipo').value;
         await Api.chamar('criarNotaEmpenho', {
-          data: { sof_id: sofId, tipo: document.getElementById('neTipo').value, numero_ne: document.getElementById('neNumero').value.trim(), valor: document.getElementById('neValor').value }
+          data: {
+            sof_id: sof.id, tipo, numero_ne: document.getElementById('neNumero').value.trim(), valor: document.getElementById('neValor').value,
+            arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
+          }
         });
         UI.toast('Nota de Empenho adicionada.', 'sucesso');
-        await renderNotasEmpenho(sofId);
+        await renderNotasEmpenho(sof);
+        if (tipo === 'original' && sof.andamento !== 'NE EMITIDA') {
+          sof.possui_ne = true;
+          await avancarEtapa(sof, 'NE EMITIDA');
+        }
       } catch (err) {
-        erroEl.textContent = err.message;
-        erroEl.classList.remove('oculto');
+        UI.mostrarErro(erroEl, err.message);
       }
     });
   }
 
-  async function Listas_obterOpcoesComFallback(tipoLista) {
-    try { return await TelaListas.obterOpcoes(tipoLista); } catch (e) { return []; }
+  /** Monta o HTML do stepper de Andamento (13 etapas fixas) a partir do andamento atual do SOF. */
+  function stepperHtml(sof) {
+    const atual = sof && sof.andamento ? ETAPAS_ANDAMENTO.indexOf(sof.andamento) : -1;
+    return `<div class="stepper">${ETAPAS_ANDAMENTO.map((etapa, i) => {
+      const estado = i <= atual ? 'concluido' : (i === atual + 1 ? 'proximo' : 'futuro');
+      return `<div class="stepper-no ${estado}">
+        <button type="button" class="stepper-marcador" data-etapa="${UI.escaparHtml(etapa)}" ${estado === 'proximo' ? '' : 'disabled'}>${i <= atual ? '✓' : (i + 1)}</button>
+        <span class="stepper-rotulo">${UI.escaparHtml(etapa)}</span>
+      </div>`;
+    }).join('')}</div>`;
   }
 
-  /** Gerente vê a união das opções de todas as frentes; se o texto se repetir entre frentes, mostra uma vez só no <select>. */
-  function dedupPorValor(opcoes) {
-    const vistos = new Set();
-    return opcoes.filter(o => (vistos.has(o.valor) ? false : (vistos.add(o.valor), true)));
+  function atualizarStepperVisual(sof) {
+    const alvo = document.getElementById('stepperAndamento');
+    if (!alvo) return;
+    alvo.innerHTML = stepperHtml(sof);
+    alvo.querySelectorAll('.stepper-marcador').forEach(btn => {
+      btn.addEventListener('click', () => avancarEtapa(sof, btn.dataset.etapa));
+    });
+  }
+
+  async function avancarEtapa(sof, etapa) {
+    const erroEl = document.getElementById('sofErro');
+    if (etapa === 'NE EMITIDA' && !sof.possui_ne) {
+      UI.mostrarErro(erroEl, 'Anexe a Nota de Empenho na seção abaixo para avançar esta etapa.');
+      const secao = document.getElementById('secaoNotasEmpenho');
+      if (secao) secao.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    try {
+      await Api.chamar('atualizarSof', { id: sof.id, data: { andamento: etapa } });
+      sof.andamento = etapa;
+      atualizarStepperVisual(sof);
+      UI.toast('Andamento atualizado.', 'sucesso');
+    } catch (err) {
+      UI.mostrarErro(erroEl, err.message);
+    }
+  }
+
+  function lerArquivoBase64(arquivo) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(String(leitor.result).split(',')[1] || '');
+      leitor.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+      leitor.readAsDataURL(arquivo);
+    });
+  }
+
+  function validarCamposObrigatorios() {
+    for (const campo of CAMPOS_OBRIGATORIOS) {
+      const valor = document.getElementById(campo.id).value.trim();
+      if (!valor) return 'Preencha o campo obrigatório: ' + campo.rotulo + '.';
+    }
+    return null;
   }
 
   return { render };
