@@ -85,6 +85,7 @@ const TelaUnidades = (function () {
     if (editando) {
       document.getElementById('btnToggleAtivo').addEventListener('click', async () => {
         await Api.chamar(unidade.ativo ? 'inativarUnidade' : 'reativarUnidade', { id: unidade.id });
+        Api.invalidarCache('listarUnidades');
         UI.toast('Unidade atualizada.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -108,6 +109,7 @@ const TelaUnidades = (function () {
       try {
         if (editando) await Api.chamar('atualizarUnidade', { id: unidade.id, data: dados });
         else await Api.chamar('criarUnidade', { data: dados });
+        Api.invalidarCache('listarUnidades');
         UI.toast('Unidade salva com sucesso.', 'sucesso');
         UI.fecharModal();
         await carregar();

@@ -13,12 +13,28 @@ const Api = (function () {
   const API_URL = 'https://script.google.com/macros/s/AKfycbzbLozyF4h0HLbCeJdWyj1skAmxgrUhjV17FvKzXKVqF9l3gIAnS6ufmvj-PvjAOv4ZTg/exec';
 
   let token = null;
+  const cache = new Map();
 
   function definirToken(novoToken) {
     token = novoToken;
   }
 
-  async function chamar(action, payload) {
+  function chaveCache(action, payload) {
+    return action + ':' + JSON.stringify(payload || {});
+  }
+
+  /** Remove do cache todas as entradas da ação informada (qualquer payload). */
+  function invalidarCache(action) {
+    Array.from(cache.keys()).forEach(chave => {
+      if (chave.indexOf(action + ':') === 0) cache.delete(chave);
+    });
+  }
+
+  async function chamar(action, payload, opcoes) {
+    const usarCache = !!(opcoes && opcoes.cache);
+    const chave = usarCache ? chaveCache(action, payload) : null;
+    if (usarCache && cache.has(chave)) return cache.get(chave);
+
     const corpo = Object.assign({ action, token }, payload || {});
 
     UI.mostrarCarregando();
@@ -41,11 +57,12 @@ const Api = (function () {
         }
         throw new Error(json.error || 'Erro desconhecido retornado pelo servidor.');
       }
+      if (usarCache) cache.set(chave, json.data);
       return json.data;
     } finally {
       UI.esconderCarregando();
     }
   }
 
-  return { chamar, definirToken };
+  return { chamar, definirToken, invalidarCache };
 })();
