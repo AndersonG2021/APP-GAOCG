@@ -351,13 +351,18 @@ const TelaSof = (function () {
     });
   }
 
-  /** Monta o HTML do stepper de Andamento (13 etapas fixas) a partir do andamento atual do SOF. */
+  /**
+   * Monta o HTML do stepper de Andamento (13 etapas fixas). Navegação é livre
+   * (qualquer nó, pra frente ou pra trás) — a única trava é o nó "NE EMITIDA",
+   * que só fica clicável depois que o SOF tiver uma Nota de Empenho anexada.
+   */
   function stepperHtml(sof) {
     const atual = sof && sof.andamento ? ETAPAS_ANDAMENTO.indexOf(sof.andamento) : -1;
     return `<div class="stepper">${ETAPAS_ANDAMENTO.map((etapa, i) => {
-      const estado = i <= atual ? 'concluido' : (i === atual + 1 ? 'proximo' : 'futuro');
+      const estado = i < atual ? 'concluido' : (i === atual ? 'atual' : 'futuro');
+      const bloqueado = etapa === 'NE EMITIDA' && !sof.possui_ne;
       return `<div class="stepper-no ${estado}">
-        <button type="button" class="stepper-marcador" data-etapa="${UI.escaparHtml(etapa)}" ${estado === 'proximo' ? '' : 'disabled'}>${i <= atual ? '✓' : (i + 1)}</button>
+        <button type="button" class="stepper-marcador" data-etapa="${UI.escaparHtml(etapa)}" ${bloqueado ? 'disabled' : ''} title="${bloqueado ? 'Anexe a Nota de Empenho para liberar esta etapa' : ''}">${i <= atual ? '✓' : (i + 1)}</button>
         <span class="stepper-rotulo">${UI.escaparHtml(etapa)}</span>
       </div>`;
     }).join('')}</div>`;
