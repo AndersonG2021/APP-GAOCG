@@ -173,19 +173,20 @@ table.tabela tbody tr.linha-parada:hover { background: #fef3c7; }
   content: ''; position: absolute; top: 15px; right: 50%; width: 100%; height: 3px;
   background: var(--cinza-300); z-index: 0; transition: background-color .25s ease;
 }
-.stepper-no.concluido:not(:first-child)::before { background: var(--verde); }
+.stepper-no.concluido:not(:first-child)::before, .stepper-no.atual:not(:first-child)::before { background: var(--verde); }
 .stepper-marcador {
   width: 30px; height: 30px; border-radius: 50%; border: none; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; background: var(--cinza-300); color: var(--cinza-700);
-  cursor: not-allowed; transition: transform .15s ease, background-color .2s ease, color .2s ease;
+  cursor: pointer; transition: transform .15s ease, background-color .2s ease, color .2s ease;
 }
+.stepper-marcador:disabled { cursor: not-allowed; opacity: .55; }
+.stepper-marcador:not(:disabled):hover { transform: scale(1.12); }
+.stepper-marcador:not(:disabled):active { transform: scale(0.95); }
 .stepper-no.concluido .stepper-marcador { background: var(--verde); color: var(--branco); }
-.stepper-no.proximo .stepper-marcador { background: var(--azul); color: var(--branco); cursor: pointer; }
-.stepper-no.proximo .stepper-marcador:hover { transform: scale(1.12); }
-.stepper-no.proximo .stepper-marcador:active { transform: scale(0.95); }
+.stepper-no.atual .stepper-marcador { background: var(--azul); color: var(--branco); box-shadow: 0 0 0 3px var(--azul-claro); }
 .stepper-rotulo { font-size: 10px; text-align: center; color: var(--cinza-500); margin-top: 6px; line-height: 1.25; }
-.stepper-no.concluido .stepper-rotulo, .stepper-no.proximo .stepper-rotulo { color: var(--cinza-900); font-weight: 600; }
+.stepper-no.concluido .stepper-rotulo, .stepper-no.atual .stepper-rotulo { color: var(--cinza-900); font-weight: 600; }
 
 /* ===== Modal ===== */
 .sobreposicao-modal {
