@@ -36,6 +36,7 @@ const TelaSof = (function () {
 
   async function render() {
     unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
+    const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">SOF</h2>
       <div class="painel">
@@ -43,6 +44,14 @@ const TelaSof = (function () {
           <div class="campo"><label>Busca livre</label><input id="sofBusca" placeholder="unidade, SEI, valor..." /></div>
           <div class="campo"><label>Unidade</label>
             <select id="sofFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>OSS</label><input id="sofFiltroOss" placeholder="OSS" /></div>
+          <div class="campo"><label>Objeto</label><input id="sofFiltroObjeto" placeholder="Objeto" /></div>
+          <div class="campo"><label>Tipo de unidade</label>
+            <select id="sofFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>DEA</label>
+            <select id="sofFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
           </div>
           <div class="campo"><label>Fonte</label>
             <select id="sofFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
@@ -53,14 +62,16 @@ const TelaSof = (function () {
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao" id="btnExportarSof">Exportar CSV</button>
           <span style="flex:1"></span>
-          <button class="botao primario" id="btnNovoSof">+ Novo processo</button>
+          <button class="botao primario" id="btnNovoSof">+ Nova SOF</button>
         </div>
         <div id="listaSof"></div>
         <div class="paginacao" id="paginacaoSof"></div>
       </div>`;
 
     document.getElementById('btnFiltrarSof').addEventListener('click', () => { paginaAtual = 1; carregar(); });
-    document.getElementById('sofBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
+    ['sofBusca', 'sofFiltroOss', 'sofFiltroObjeto'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
+    });
     document.getElementById('btnNovoSof').addEventListener('click', async function () {
       this.disabled = true;
       try { await abrirFormulario(); } finally { this.disabled = false; }
@@ -73,6 +84,10 @@ const TelaSof = (function () {
     return {
       busca: document.getElementById('sofBusca').value.trim(),
       unidade_id: document.getElementById('sofFiltroUnidade').value,
+      oss: document.getElementById('sofFiltroOss').value.trim(),
+      objeto: document.getElementById('sofFiltroObjeto').value.trim(),
+      tipo_unidade: document.getElementById('sofFiltroTipoUnidade').value,
+      dea: document.getElementById('sofFiltroDea').value,
       fonte: document.getElementById('sofFiltroFonte').value,
       frente: document.getElementById('sofFiltroFrente').value
     };
@@ -82,30 +97,77 @@ const TelaSof = (function () {
     const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtrosAtuais()));
     itens = resposta.items;
     totalRegistros = resposta.total;
-    renderTabela();
+    renderCards();
     renderPaginacao();
   }
 
-  function renderTabela() {
+  function percentualAndamento(sof) {
+    const idx = sof && sof.andamento ? ETAPAS_ANDAMENTO.indexOf(sof.andamento) : -1;
+    if (idx < 0) return 0;
+    return Math.round(((idx + 1) / ETAPAS_ANDAMENTO.length) * 100);
+  }
+
+  const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+
+  function renderCards() {
     const alvo = document.getElementById('listaSof');
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum processo de SOF encontrado.</p>'; return; }
-    alvo.innerHTML = `
-      <table class="tabela">
-        <thead><tr><th>Unidade</th><th>SEI</th><th>Nº SOF</th><th>Andamento</th><th>Frente</th><th>NE</th><th>Total Solicitado</th></tr></thead>
-        <tbody>${itens.map(s => {
-          const unidade = unidades.find(u => u.id === s.unidade_id);
-          return `<tr data-id="${s.id}" class="${s.destacar_parado ? 'linha-parada' : ''}">
-            <td>${UI.escaparHtml(unidade ? unidade.nome : s.unidade_id)}</td>
-            <td>${UI.escaparHtml(s.sei)}</td>
-            <td>${UI.escaparHtml(s.sof_numero)}</td>
-            <td>${UI.escaparHtml(s.andamento)}${s.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
-            <td>${UI.escaparHtml(s.frente)}</td>
-            <td>${s.possui_ne ? '<span class="selo verde">Emitida</span>' : '<span class="selo amarelo">Pendente</span>'}</td>
-            <td>${UI.formatarMoeda(s.total_solicitado)}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
-    alvo.querySelectorAll('tr[data-id]').forEach(tr => tr.addEventListener('click', () => abrirSofExistente(tr.dataset.id)));
+    alvo.innerHTML = `<div class="grade-cards-sof">${itens.map(s => {
+      const unidade = unidades.find(u => u.id === s.unidade_id);
+      const pct = percentualAndamento(s);
+      const numerosNe = (s.notas_empenho_numeros || []).filter(Boolean);
+      return `
+        <div class="cartao-sof ${s.destacar_parado ? 'parado' : ''}" data-id="${s.id}">
+          <div class="cartao-sof-acoes">
+            <button type="button" class="botao-icone editar" data-acao="editar" title="Editar">${ICONE_LAPIS}</button>
+            <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
+          </div>
+          <div class="cartao-sof-corpo">
+            <div class="cartao-sof-cabecalho">
+              <h3>${UI.escaparHtml(unidade ? unidade.nome : s.unidade_id)}</h3>
+              <span class="cartao-sof-total">${UI.formatarMoeda(s.total_solicitado)}</span>
+            </div>
+            <p class="cartao-sof-objeto">${UI.escaparHtml(s.objeto || '-')}</p>
+            <div class="cartao-sof-meta">
+              <span>Nº SOF: <strong>${UI.escaparHtml(s.sof_numero || '-')}</strong></span>
+              ${s.destacar_parado ? '<span class="selo amarelo">Parado</span>' : ''}
+              ${s.possui_ne
+                ? `<span class="selo verde">NE ${numerosNe.length ? UI.escaparHtml(numerosNe.join(', ')) : 'emitida'}</span>`
+                : '<span class="selo amarelo">NE pendente</span>'}
+            </div>
+            <div class="cartao-sof-andamento">
+              <div class="cartao-sof-andamento-topo">
+                <span>${UI.escaparHtml(s.andamento || '-')}</span>
+                <span>${pct}%</span>
+              </div>
+              <div class="barra-progresso"><div class="barra-progresso-preenchimento ${pct >= 100 ? 'completo' : ''}" style="width:${pct}%"></div></div>
+            </div>
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    alvo.querySelectorAll('.cartao-sof').forEach(cartao => {
+      const id = cartao.dataset.id;
+      cartao.querySelector('.cartao-sof-corpo').addEventListener('click', () => abrirSofExistente(id));
+      cartao.querySelector('.botao-icone.editar').addEventListener('click', e => { e.stopPropagation(); abrirSofExistente(id); });
+      cartao.querySelector('.botao-icone.excluir').addEventListener('click', e => {
+        e.stopPropagation();
+        excluirSofClique(itens.find(i => i.id === id));
+      });
+    });
+  }
+
+  async function excluirSofClique(sof) {
+    if (!sof) return;
+    if (!confirm('Excluir este processo de SOF? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.')) return;
+    try {
+      await Api.chamar('excluirSof', { id: sof.id });
+      UI.toast('SOF excluído.', 'sucesso');
+      await carregar();
+    } catch (err) {
+      UI.toast(err.message, 'erro');
+    }
   }
 
   function renderPaginacao() {
@@ -213,7 +275,7 @@ const TelaSof = (function () {
       </form>
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
 
-    UI.abrirModal(editando ? 'Editar SOF' : 'Novo processo de SOF', corpo,
+    UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
       `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`);
 
     document.getElementById('sofUnidade').addEventListener('change', function () {

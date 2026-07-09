@@ -1,8 +1,14 @@
 # GAOCG App — Progresso das mudanças (plano em fases)
 
 > Este arquivo existe para permitir retomar o trabalho em qualquer computador: basta clonar
-> este repositório e pedir para o Claude Code ler este arquivo. O backend (`.gs`) não está
-> neste repositório — vive só no editor do Google Apps Script vinculado à planilha.
+> este repositório e pedir para o Claude Code ler este arquivo. O backend real vive só no
+> editor do Google Apps Script vinculado à planilha (git não implanta nada sozinho) — mas a
+> pasta `/backend` deste repositório guarda **cópias de referência** do estado atual esperado
+> de cada arquivo `.gs`, pra nunca depender só do histórico de chat pra saber o que já foi
+> colado. **Sempre que um arquivo `.gs` mudar, atualize a cópia correspondente em `/backend`
+> no mesmo commit.** Se `/backend/X.gs` e o que está colado no editor do Apps Script
+> divergirem, o editor do Apps Script é que manda (é o que roda de verdade) — mas isso deveria
+> ser raro se a cópia for sempre atualizada junto.
 
 ## Ordem combinada das fases
 Bugs → UX global → SOF → Notas de Empenho → Recibos.
@@ -43,10 +49,44 @@ Backend (colado pelo usuário no editor do Apps Script, **já implantado**):
 - Ordens Bancárias: `1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN` (reservada para a Fase 5 — Recibos)
 
 **Testado e confirmado pelo usuário:** navegação livre do stepper (frente/trás) funcionando, trava do "NE EMITIDA" funcionando.
-**Ainda não testado pelo usuário (próximo passo ao retomar):**
+**Ainda não testado pelo usuário:**
 - Anexo de Nota de Empenho realmente salvando no Google Drive e o link "Ver arquivo" abrindo certo.
 - Validação de campos obrigatórios bloqueando corretamente ao faltar algum.
-- DEA como dropdown e as duas datas de período salvando/carregando certo.
+
+### Fase 3.1 — Bugs de dados (G.D./período) + redesenho do painel de SOF (sessão 2026-07-09)
+
+**Bugs relatados pelo usuário:** G.D. aparecendo como data (`1950-03-03T00:00:00`) e Período início/fim nunca persistindo (campo sempre voltava vazio ao reabrir).
+
+**Causa raiz encontrada:** `aplicarFormatoTexto_` (`Utils.gs`) decidia quais colunas proteger contra a auto-conversão texto→data do Sheets usando uma constante `HEADERS.SOF` desatualizada (ainda tinha o campo antigo `periodo` em vez de `periodo_inicio`/`periodo_fim`, que foram criados direto na planilha na Fase 3 sem atualizar o código). Isso deixou essas duas colunas sem proteção → o Sheets convertia a data digitada num objeto `Date` real → a leitura devolvia ISO com hora (`...T00:00:00`), que um `<input type="date">` rejeita silenciosamente. O mesmo mecanismo corrompeu o G.D.: o valor `"3.3.50"` da unidade (texto legítimo, é o G.D. padrão usado em várias unidades) foi interpretado como data dd.mm.aa (`03/03/1950`) no momento em que foi copiado pro `gd_snapshot` do SOF, porque essa coluna também ficou sem proteção.
+
+**Fix aplicado (`Utils.gs`):** `aplicarFormatoTexto_`/nova `protegerFormatoLinha_` passaram a ler o cabeçalho real da planilha (`getHeaders_`) em vez de uma lista hardcoded, e a proteção passou a ser aplicada a cada escrita (`appendObjectRow_`/`updateObjectRow_`), não só uma vez no setup. Nova função de manutenção `corrigirFormatoTexto()` para reaplicar em massa.
+
+**Regressão descoberta durante o teste do fix acima:** a primeira versão do fix forçava texto (`'@'`) em **todas** as colunas não-numéricas, inclusive as booleanas (`possui_ne`, `completo`, `excluido` etc.). Isso fazia esses campos virarem string `"true"`/`"false"` — e qualquer checagem direta tipo `sof.possui_ne ? ... : ...` no frontend passa a ser sempre verdadeira (string não vazia é truthy em JS), então **toda SOF passou a aparecer com NE "Emitida"**, mesmo sem nota anexada. Corrigido adicionando `COLUNAS_BOOLEANAS` (mesmo princípio de `COLUNAS_NUMERICAS`) e fazendo as duas funções **restaurarem** o formato `General` nessas colunas (não bastava só pular — o `'@'` de uma rodada anterior de `corrigirFormatoTexto()` ficava "preso" na coluna até ser explicitamente revertido).
+
+- Estado atual (ver `/backend/Utils.gs` — já reflete a versão final/correta): usuário colou e implantou; **ainda precisa** rodar `corrigirFormatoTexto()` de novo (a versão com o reset pra `General`) e depois corrigir manualmente as células de `possui_ne`/G.D./período que já foram corrompidas antes do fix (apagar e redigitar — a proteção de formato não recupera um valor que já virou data/texto errado).
+- **Próximo passo ao retomar:** confirmar com o usuário que esse ciclo (deploy → `corrigirFormatoTexto()` → correção manual das células → reload do app) foi concluído, e validar visualmente: G.D. não aparece mais como data, período persiste ao reabrir um SOF, e o selo de NE reflete a realidade (só aparece "Emitida" pra quem realmente tem Nota de Empenho anexada).
+
+**Redesenho do painel de SOF (pedido do usuário, feito junto):** tabela virou cards (`renderCards()` em `js/sof.js`, classes `.cartao-sof`/`.grade-cards-sof` em `css/style.css`). Cada card mostra: unidade, objeto, Nº SOF, total solicitado, andamento com barra de progresso (%), número(s) de NE emitida(s) ou selo "pendente", selo "Parado", e dois botões à esquerda (editar = lápis, excluir = lixeira vermelha). Botão "+ Novo processo" virou "+ Nova SOF". Novos filtros: OSS, Objeto, Tipo de unidade (dinâmico a partir das unidades carregadas), DEA — além dos que já existiam (Unidade/Fonte/Frente).
+
+- **Exclusão de SOF é lógica** (soft delete): marca `excluido = true` na aba SOF, mantém linha e log de auditoria. Podem excluir: gerente ou analista da frente responsável pelo processo (mais restrito que a edição cruzada, que permite qualquer analista mediante confirmação).
+- Backend: nova função `excluirSof` (`Sof.gs`), novo `case 'excluirSof'` em `Code.gs`, `listarSof` ganhou filtros `objeto`/`dea`/`tipo_unidade` e passou a agregar `notas_empenho_numeros` por SOF (pra mostrar o(s) número(s) de NE no card).
+- **Coluna nova que o usuário já deveria ter criado na planilha:** aba **SOF**: `excluido` (booleano).
+- Frontend (`js/sof.js`/`css/style.css`) commitado neste repositório. Backend (`/backend/Utils.gs`, `/backend/Sof.gs`, `/backend/Code.gs`) colado pelo usuário e implantado, **mas ver bloco de bugs acima — ainda tem passos de correção manual pendentes antes de considerar essa parte 100% validada**.
+- **Ainda não testado:** botão de excluir (lixeira) ponta a ponta; filtros novos (OSS/Objeto/Tipo de unidade/DEA) retornando os resultados certos; cards no site publicado de verdade (só foi validado localmente com dados mockados, sem o backend real).
+
+### Fase 3.2 — SOF com múltiplas fontes/parcelas + remover "frente" do SOF (NÃO INICIADA, aguardando planejamento)
+
+Pedido novo do usuário (ainda não discutido em detalhe, não entrar direto implementando — fazer uma sessão de planejamento primeiro):
+
+- **Multi-fonte/multi-parcela por SOF:** hoje um SOF tem um único `fonte` + `parcela_mensal`. O usuário quer poder ter, por exemplo, a SOF `001/2024` com total de R$500, sendo R$200 na fonte TESOURO (parcela mensal R$20) e R$300 na fonte SUS (parcela mensal R$30) — ou seja, uma SOF pode se referir a mais de um pagamento/fonte simultaneamente. Isso muda o modelo de dados do SOF (hoje `fonte`/`parcela_mensal` são campos únicos na própria linha).
+- **Remover o conceito de "frente" do SOF:** o usuário quer que a aplicação passe a distinguir só entre analista e gerente, sem a segmentação por frente (`SOF-UPA`/`SOF-UPAE`/`SOF-Hospital`) que existe hoje. Importante saber que `frente` hoje é usado em vários pontos que vão precisar de decisão explícita de como ficam:
+  - `atualizarSof`: exige confirmação extra quando um analista edita um SOF de frente diferente da sua (`foraDaFrente`).
+  - `excluirSof` (recém-criada): permissão de exclusão é gerente OU analista da mesma frente.
+  - `LogAuditoria`: grava `frente_processo`/`frente_usuario`, e há indicador de dashboard de "edições fora da frente".
+  - `ListasPersonalizadas`: já não afeta mais o Andamento do SOF (virou o stepper fixo de 13 etapas na Fase 3, independente de frente) — então o impacto aqui é menor do que parecia à primeira vista.
+  - Cadastro de usuário analista (`Usuarios.gs`) hoje exige vincular uma frente.
+  - Não ficou claro se essa remoção da frente vale só pra SOF ou pra Recibos também (Recibos ainda usa frente pra Andamento/Status via ListasPersonalizadas) — **perguntar ao usuário**.
+- **Próximo passo ao retomar:** abrir uma sessão de planejamento (plan mode) dedicada a isso antes de tocar em código, esclarecendo o escopo acima.
 
 ## Fase 4 — Notas de Empenho (NÃO INICIADA)
 Do pedido original do usuário:
@@ -66,5 +106,6 @@ Do pedido original do usuário:
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
-- Backend não versionado — vive só no Apps Script; **sempre que uma fase mexer no backend, colar manualmente e reimplantar (Implantar → Gerenciar implantações → editar → Nova versão)**.
+- Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
+- `/backend/Utils.gs`, `/backend/Sof.gs`, `/backend/Code.gs`: cópias de referência do estado atual esperado (ver Fase 3.1 acima pro histórico de por que `Utils.gs` mudou).

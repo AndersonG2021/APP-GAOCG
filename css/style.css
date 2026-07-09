@@ -228,5 +228,34 @@ table.tabela tbody tr.linha-parada:hover { background: #fef3c7; }
 .cartao-indicador .rotulo { font-size: 12px; color: var(--cinza-500); }
 .grade-indicadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
 
+/* ===== Cards de SOF ===== */
+.grade-cards-sof { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.cartao-sof {
+  display: flex; gap: 10px; background: var(--branco); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 12px; cursor: default; border-left: 4px solid transparent;
+}
+.cartao-sof.parado { border-left-color: var(--amarelo); background: var(--amarelo-claro); }
+.cartao-sof-acoes { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.botao-icone {
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border: none; border-radius: 8px; background: var(--cinza-100); color: var(--cinza-700);
+  cursor: pointer; transition: transform .08s ease, filter .08s ease, background-color .15s ease;
+}
+.botao-icone:hover { filter: brightness(0.97); }
+.botao-icone:active { transform: scale(0.9); }
+.botao-icone.editar:hover { background: var(--azul-claro); color: var(--azul-escuro); }
+.botao-icone.excluir { color: var(--vermelho); }
+.botao-icone.excluir:hover { background: var(--vermelho-claro); }
+.cartao-sof-corpo { flex: 1; min-width: 0; cursor: pointer; }
+.cartao-sof-cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.cartao-sof-cabecalho h3 { margin: 0; font-size: 14.5px; color: var(--azul-escuro); }
+.cartao-sof-total { font-weight: 700; font-size: 14px; color: var(--verde); white-space: nowrap; }
+.cartao-sof-objeto { margin: 4px 0 8px; font-size: 12.5px; color: var(--cinza-700); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cartao-sof-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--cinza-700); margin-bottom: 10px; }
+.cartao-sof-andamento-topo { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--cinza-500); margin-bottom: 4px; }
+.barra-progresso { width: 100%; height: 6px; border-radius: 999px; background: var(--cinza-200); overflow: hidden; }
+.barra-progresso-preenchimento { height: 100%; background: var(--azul); border-radius: 999px; transition: width .25s ease; }
+.barra-progresso-preenchimento.completo { background: var(--verde); }
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--cinza-300); border-radius: 999px; }
