@@ -74,19 +74,37 @@ Backend (colado pelo usuário no editor do Apps Script, **já implantado**):
 - Frontend (`js/sof.js`/`css/style.css`) commitado neste repositório. Backend (`/backend/Utils.gs`, `/backend/Sof.gs`, `/backend/Code.gs`) colado pelo usuário e implantado, **mas ver bloco de bugs acima — ainda tem passos de correção manual pendentes antes de considerar essa parte 100% validada**.
 - **Ainda não testado:** botão de excluir (lixeira) ponta a ponta; filtros novos (OSS/Objeto/Tipo de unidade/DEA) retornando os resultados certos; cards no site publicado de verdade (só foi validado localmente com dados mockados, sem o backend real).
 
-### Fase 3.2 — SOF com múltiplas fontes/parcelas + remover "frente" do SOF (NÃO INICIADA, aguardando planejamento)
+### Fase 3.2 — SOF com múltiplas fontes/parcelas + remover "frente" (CÓDIGO CONCLUÍDO, sessão 2026-07-09, aguardando o usuário colar/implantar e ajustar a planilha)
 
-Pedido novo do usuário (ainda não discutido em detalhe, não entrar direto implementando — fazer uma sessão de planejamento primeiro):
+Decisões tomadas com o usuário (sessão de plan mode antes de implementar):
+1. Remover `frente` de **SOF e Recibos juntos**, numa fase só.
+2. Multi-fonte do SOF: dentro do mesmo formulário, linhas repetíveis de Fonte/Parcela Mensal/Total Solicitado (botão "+ Adicionar fonte"), aviso (não bloqueante) se a fonte repetir numa linha nova. Card mostra o total de cada fonte + o total geral (soma) em destaque.
+3. Permissão sem frente: qualquer analista pode editar/excluir qualquer SOF ou Recibo (sem confirmação cruzada) — só analista x gerente.
+4. Auditoria/dashboard: indicador "fora da frente" vira "fora do dono" (dono = `criado_por` de quem criou o processo).
 
-- **Multi-fonte/multi-parcela por SOF:** hoje um SOF tem um único `fonte` + `parcela_mensal`. O usuário quer poder ter, por exemplo, a SOF `001/2024` com total de R$500, sendo R$200 na fonte TESOURO (parcela mensal R$20) e R$300 na fonte SUS (parcela mensal R$30) — ou seja, uma SOF pode se referir a mais de um pagamento/fonte simultaneamente. Isso muda o modelo de dados do SOF (hoje `fonte`/`parcela_mensal` são campos únicos na própria linha).
-- **Remover o conceito de "frente" do SOF:** o usuário quer que a aplicação passe a distinguir só entre analista e gerente, sem a segmentação por frente (`SOF-UPA`/`SOF-UPAE`/`SOF-Hospital`) que existe hoje. Importante saber que `frente` hoje é usado em vários pontos que vão precisar de decisão explícita de como ficam:
-  - `atualizarSof`: exige confirmação extra quando um analista edita um SOF de frente diferente da sua (`foraDaFrente`).
-  - `excluirSof` (recém-criada): permissão de exclusão é gerente OU analista da mesma frente.
-  - `LogAuditoria`: grava `frente_processo`/`frente_usuario`, e há indicador de dashboard de "edições fora da frente".
-  - `ListasPersonalizadas`: já não afeta mais o Andamento do SOF (virou o stepper fixo de 13 etapas na Fase 3, independente de frente) — então o impacto aqui é menor do que parecia à primeira vista.
-  - Cadastro de usuário analista (`Usuarios.gs`) hoje exige vincular uma frente.
-  - Não ficou claro se essa remoção da frente vale só pra SOF ou pra Recibos também (Recibos ainda usa frente pra Andamento/Status via ListasPersonalizadas) — **perguntar ao usuário**.
-- **Próximo passo ao retomar:** abrir uma sessão de planejamento (plan mode) dedicada a isso antes de tocar em código, esclarecendo o escopo acima.
+**Feito nesta sessão:**
+- `backend/Utils.gs`: `HEADERS`/`COLUNAS_NUMERICAS`/`COLUNAS_BOOLEANAS` atualizados (frente removida de Usuarios/ListasPersonalizadas/SOF/Recibos/LogAuditoria; nova aba `SofFontes`; `LogAuditoria` ganha `dono_processo`/`fora_do_dono` no lugar de `frente_usuario`/`frente_processo`/`fora_da_frente`). Constante `FRENTES` removida.
+- `backend/Sof.gs`: reescrito. `SOF_FRENTES`/`frenteDoSof_` removidos; `atualizarSof`/`excluirSof` não têm mais trava de frente (qualquer perfil edita/exclui). Novo modelo: `dados.fontes = [{fonte, parcela_mensal, total_solicitado}, ...]` em `criarSof`/`atualizarSof` (substituição completa da lista a cada save via `substituirFontesDoSof_`); `obterSof`/`listarSof` anexam `sof.fontes` e `sof.total_solicitado` (calculado = soma). Filtro `fonte` em `listarSof` agora verifica qualquer fonte do SOF.
+- `js/sof.js`: formulário com seção de linhas de fonte dinâmica (`renderFontesFormulario`/`lerLinhasFontesDoDom_`), aviso de fonte duplicada, soma ao vivo, cards com total geral + breakdown por fonte (`.cartao-sof-fontes`), CSV com coluna `fontes` flatten (`FONTE:valor;FONTE:valor`). Filtro/campo/coluna de Frente removidos. Bloco de confirmação cruzada (`precisaConfirmacao`/`frente_processo`) removido.
+- `css/style.css`: estilos novos `.linhas-fonte`/`.linha-fonte`/`.linha-fonte-remover` (form) e `.cartao-sof-fontes`/`.cartao-sof-fonte-linha` (card).
+- `js/recibos.js`, `js/usuarios.js`, `js/listas.js`: frente removida (filtros, campos de formulário, colunas de tabela, CSV, confirmação cruzada em Recibos). Em `js/listas.js`, as opções de Andamento(SOF)/Status(Recibo) passam a ser globais (não mais por frente).
+- `js/log-auditoria.js`: filtro/coluna "fora da frente" vira "fora do dono" (`fora_do_dono`).
+- `js/dashboard.js`: indicador `edicoes_fora_da_frente` vira `edicoes_fora_do_dono`; colunas "Frente" das tabelas de SOF pendente/processos parados viram "Criado por".
+- `js/auth.js`: função `frenteDoUsuario()` removida (não tinha mais uso). `js/app.js`: topo mostra só "Analista"/"Gerente" (sem frente); modal de perfil troca o campo "Frente" por "Perfil".
+- `js/notas-empenho.js`: coluna "Frente" da listagem trocada por "Criado por" (`n.sof_criado_por` no lugar de `n.sof_frente`) — **isso exige que o backend `NotasEmpenho.gs` (`listarNotasEmpenho`) pare de juntar `sof_frente` e passe a juntar `sof_criado_por`**; ver bloco de pendências abaixo.
+
+**Backend restante (o usuário colou o conteúdo atual de todos em `/backend`, sem risco de perder funcionalidade já implantada):**
+- `Auth.gs`: `login_` para de devolver `frente` no objeto `user`.
+- `Usuarios.gs`: `criarUsuario`/`atualizarUsuario` não leem/gravam mais `frente`, nem validam contra `FRENTES`.
+- `ListasPersonalizadas.gs`: `criarOpcao`/`atualizarOpcao`/`listarOpcoes` viram globais (sem `frente`); `opcaoTemPausaContagem_(tipoLista, valor)` perdeu o parâmetro de frente (assinatura já usada assim em `Sof.gs`/`Recibos.gs`).
+- `LogAuditoria.gs`: `registrarLog_`/`registrarDiferencas_` recebem `donoProcesso` no lugar do parâmetro de frente; grava `dono_processo`/`fora_do_dono` (calculado como `session.id !== donoProcesso`); `listarLogAuditoria` filtra por `fora_do_dono`; `contarEdicoesForaFrente_` virou `contarEdicoesForaDono_`.
+- `Recibos.gs`: `RECIBO_FRENTES`/`frenteDoRecibo_` removidos; `atualizarRecibo` sem trava de edição cruzada (livre pra qualquer perfil); logs usam `criado_por` como dono.
+- `Dashboard.gs`: removida a segmentação por frente nas 3 funções de indicador (`dashboardRecibos_`/`dashboardSofPendenteNe_`/`dashboardParados_`) — **decisão tomada nesta sessão sem confirmação explícita do usuário:** como não sobrou nenhuma dimensão pra segmentar por perfil, o dashboard passou a mostrar os mesmos números pra analista e gerente (antes o analista só via a própria frente). `edicoes_fora_da_frente` → `edicoes_fora_do_dono`.
+- `NotasEmpenho.gs`: `criarNotaEmpenho`/`listarNotasEmpenho` usam `sof.criado_por`/`sof_criado_por` no lugar de `sof.frente`/`sof_frente`; a listagem também deixou de filtrar por frente do analista (vira transversal, mesmo princípio já usado em `listarSof`).
+
+**Pendência nova, pequena, fora do escopo original do plano:** `backend/Contadores.gs` (não coletado nesta sessão) precisa ganhar uma entrada nova no mapa `PREFIXOS_ID` pra gerar id da aba `SofFontes`, por exemplo `SofFontes: 'SFT'`. Sem isso, `proximoId_('SofFontes')` (usado em `Sof.gs`) lança erro "Prefixo de ID não definido".
+
+**Próximo passo ao retomar:** o usuário precisa (1) colar/implantar os 7 `.gs` atualizados no Apps Script; (2) adicionar a entrada `SofFontes` em `PREFIXOS_ID` no `Contadores.gs`; (3) criar a aba `SofFontes` (`id`, `sof_id`, `fonte`, `parcela_mensal`, `total_solicitado`, `criado_por`, `data_criacao`) e copiar manualmente os dados existentes de `fonte`/`parcela_mensal`/`total_solicitado` da aba SOF antes de apagar essas colunas de lá; (4) remover a coluna `frente` das abas Usuarios/ListasPersonalizadas/SOF/Recibos; (5) trocar `frente_usuario`/`frente_processo`/`fora_da_frente` por `dono_processo`/`fora_do_dono` em LogAuditoria. Depois, testar: criar SOF com 2+ fontes (incluindo aviso de fonte repetida), editar/excluir SOF e Recibo de outro analista sem trava, card com total geral + por fonte, indicador novo no dashboard/log de auditoria, e confirmar com o usuário se a mudança de visibilidade do dashboard (analista vendo os mesmos números do gerente) é aceitável ou se precisa de outro critério.
 
 ## Fase 4 — Notas de Empenho (NÃO INICIADA)
 Do pedido original do usuário:

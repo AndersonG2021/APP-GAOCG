@@ -39,7 +39,7 @@ const Dashboard = (function () {
         <div class="cartao-indicador"><div class="valor">${UI.formatarMoeda(dados.recibos.total_valor_pago)}</div><div class="rotulo">Total pago no período</div></div>
         <div class="cartao-indicador"><div class="valor">${dados.sof_ne_pendente.total_pendentes}</div><div class="rotulo">SOF com NE pendente de emissão</div></div>
         <div class="cartao-indicador"><div class="valor">${dados.processos_parados.length}</div><div class="rotulo">Processos "parados" (5+ dias)</div></div>
-        ${dados.edicoes_fora_da_frente !== undefined ? `<div class="cartao-indicador"><div class="valor">${dados.edicoes_fora_da_frente}</div><div class="rotulo">Edições fora da frente (histórico)</div></div>` : ''}
+        ${dados.edicoes_fora_do_dono !== undefined ? `<div class="cartao-indicador"><div class="valor">${dados.edicoes_fora_do_dono}</div><div class="rotulo">Edições em processo de outro usuário (histórico)</div></div>` : ''}
       </div>
 
       <h3 style="font-size:14px;margin:16px 0 8px">Recibos por status (competência atual)</h3>
@@ -50,14 +50,14 @@ const Dashboard = (function () {
 
       <h3 style="font-size:14px;margin:16px 0 8px">SOF com Nota de Empenho pendente</h3>
       <table class="tabela">
-        <thead><tr><th>SEI</th><th>Nº SOF</th><th>Frente</th></tr></thead>
-        <tbody>${dados.sof_ne_pendente.itens.map(s => `<tr><td>${UI.escaparHtml(s.sei)}</td><td>${UI.escaparHtml(s.sof_numero)}</td><td>${UI.escaparHtml(s.frente)}</td></tr>`).join('') || '<tr><td colspan="3" class="estado-vazio">Nenhum SOF pendente.</td></tr>'}</tbody>
+        <thead><tr><th>SEI</th><th>Nº SOF</th><th>Criado por</th></tr></thead>
+        <tbody>${dados.sof_ne_pendente.itens.map(s => `<tr><td>${UI.escaparHtml(s.sei)}</td><td>${UI.escaparHtml(s.sof_numero)}</td><td>${UI.escaparHtml(s.criado_por)}</td></tr>`).join('') || '<tr><td colspan="3" class="estado-vazio">Nenhum SOF pendente.</td></tr>'}</tbody>
       </table>
 
       <h3 style="font-size:14px;margin:16px 0 8px">Processos parados (5+ dias sem alteração de andamento/status)</h3>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Identificação</th><th>Frente</th><th>Dias parado</th></tr></thead>
-        <tbody>${dados.processos_parados.map(p => `<tr><td>${p.tipo_processo}</td><td>${UI.escaparHtml(p.sei || p.numero_processo || p.id)}</td><td>${UI.escaparHtml(p.frente)}</td><td>${p.dias_parado}</td></tr>`).join('') || '<tr><td colspan="4" class="estado-vazio">Nenhum processo parado no momento.</td></tr>'}</tbody>
+        <thead><tr><th>Tipo</th><th>Identificação</th><th>Criado por</th><th>Dias parado</th></tr></thead>
+        <tbody>${dados.processos_parados.map(p => `<tr><td>${p.tipo_processo}</td><td>${UI.escaparHtml(p.sei || p.numero_processo || p.id)}</td><td>${UI.escaparHtml(p.criado_por)}</td><td>${p.dias_parado}</td></tr>`).join('') || '<tr><td colspan="4" class="estado-vazio">Nenhum processo parado no momento.</td></tr>'}</tbody>
       </table>`;
   }
 

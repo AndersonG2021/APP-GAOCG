@@ -3,7 +3,6 @@
  */
 
 const TelaUsuarios = (function () {
-  const FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital', 'Recibo-UPA', 'Recibo-UPAE', 'Recibo-Hospital'];
   let usuarios = [];
 
   async function render() {
@@ -32,13 +31,12 @@ const TelaUsuarios = (function () {
     const alvo = document.getElementById('listaUsuarios');
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Frente</th><th>Ativo</th></tr></thead>
+        <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Ativo</th></tr></thead>
         <tbody>${usuarios.map(u => `
           <tr data-id="${u.id}">
             <td>${UI.escaparHtml(u.nome)}</td>
             <td>${UI.escaparHtml(u.login)}</td>
             <td>${u.perfil === 'gerente' ? '<span class="selo azul">Gerente</span>' : '<span class="selo cinza">Analista</span>'}</td>
-            <td>${UI.escaparHtml(u.frente || '-')}</td>
             <td>${u.ativo ? '<span class="selo verde">Ativo</span>' : '<span class="selo cinza">Inativo</span>'}</td>
           </tr>`).join('')}
         </tbody>
@@ -61,11 +59,6 @@ const TelaUsuarios = (function () {
             <option value="gerente" ${usuario && usuario.perfil === 'gerente' ? 'selected' : ''}>Gerente</option>
           </select>
         </div>
-        <div class="campo" id="grupoFrente"><label>Frente</label>
-          <select id="usFrente">
-            ${FRENTES.map(f => `<option ${usuario && usuario.frente === f ? 'selected' : ''}>${f}</option>`).join('')}
-          </select>
-        </div>
         <p id="usErro" class="erro-campo oculto"></p>
       </form>`;
     const rodape = `
@@ -76,13 +69,6 @@ const TelaUsuarios = (function () {
       <button class="botao primario" id="btnSalvarUsuario">Salvar</button>`;
 
     UI.abrirModal(editando ? 'Editar usuário' : 'Novo usuário', corpo, rodape);
-
-    const perfilSelect = document.getElementById('usPerfil');
-    const atualizarVisibilidadeFrente = () => {
-      document.getElementById('grupoFrente').classList.toggle('oculto', perfilSelect.value === 'gerente');
-    };
-    perfilSelect.addEventListener('change', atualizarVisibilidadeFrente);
-    atualizarVisibilidadeFrente();
 
     document.getElementById('btnCancelarUsuario').addEventListener('click', UI.fecharModal);
 
@@ -114,8 +100,7 @@ const TelaUsuarios = (function () {
       erroEl.classList.add('oculto');
       const dados = {
         nome: document.getElementById('usNome').value.trim(),
-        perfil: document.getElementById('usPerfil').value,
-        frente: document.getElementById('usFrente').value
+        perfil: document.getElementById('usPerfil').value
       };
       if (!editando) {
         dados.login = document.getElementById('usLogin').value.trim();
