@@ -271,6 +271,17 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-sof-andamento-topo { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--cinza-500); margin-bottom: 4px; }
 .barra-progresso { width: 100%; height: 6px; border-radius: 999px; background: var(--cinza-200); overflow: hidden; }
 .barra-progresso-preenchimento { height: 100%; background: var(--azul); border-radius: 999px; transition: width .25s ease; }
+
+/* ===== Cards de Notas de Empenho ===== */
+.cartao-ne {
+  display: flex; flex-direction: column; gap: 4px; background: var(--branco); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 12px; border-left: 4px solid transparent;
+}
+.cartao-ne.alerta { border-left-color: var(--vermelho); background: var(--vermelho-claro); }
+.cartao-ne-valor { font-weight: 700; font-size: 16px; color: var(--verde); white-space: nowrap; }
+.cartao-ne-valor.vermelho { color: var(--vermelho); }
+.cartao-ne-detalhe { font-size: 11.5px; color: var(--cinza-500); margin: 0 0 8px; }
+.cartao-ne-rodape { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 .barra-progresso-preenchimento.completo { background: var(--verde); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }

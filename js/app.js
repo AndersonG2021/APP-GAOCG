@@ -58,6 +58,15 @@ const UI = (function () {
     }
   }
 
+  function lerArquivoBase64(arquivo) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(String(leitor.result).split(',')[1] || '');
+      leitor.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+      leitor.readAsDataURL(arquivo);
+    });
+  }
+
   function formatarMoeda(valor) {
     const n = Number(valor) || 0;
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -101,7 +110,7 @@ const UI = (function () {
   });
 
   return {
-    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, mostrarErro,
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
   };
 })();

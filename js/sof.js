@@ -438,24 +438,42 @@ const TelaSof = (function () {
     }
   }
 
+  function camposNumeroNeHtml(notas, tipo) {
+    if (tipo === 'reforco') {
+      const numerosOriginais = Array.from(new Set(notas.filter(n => n.tipo === 'original').map(n => n.numero_ne).filter(Boolean)));
+      if (!numerosOriginais.length) return '<p class="ajuda">Nenhuma NE original cadastrada ainda neste SOF — adicione a original primeiro.</p>';
+      return `<select id="neNumero">${numerosOriginais.map(num => `<option value="${UI.escaparHtml(num)}">${UI.escaparHtml(num)}</option>`).join('')}</select>`;
+    }
+    return '<input id="neNumero" />';
+  }
+
   async function renderNotasEmpenho(sof, notasPromise) {
     const notas = await (notasPromise || Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id }));
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
+    const opcoesFonte = (sof.fontes || []).map(f => f.fonte).filter(Boolean);
+    const fontesDisponiveis = opcoesFonte.length ? opcoesFonte : OPCOES_FONTE;
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th><th>Arquivo</th></tr></thead>
-        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="5" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor</th><th>Período</th><th>Arquivo</th></tr></thead>
+        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
       <div class="grade-3" style="margin-top:10px">
         <div class="campo"><label>Tipo</label><select id="neTipo"><option value="original">Original</option><option value="reforco">Reforço</option></select></div>
-        <div class="campo"><label>Número (obrigatório p/ original)</label><input id="neNumero" /></div>
+        <div class="campo"><label>Número *</label><div id="neNumeroContainer">${camposNumeroNeHtml(notas, 'original')}</div></div>
+        <div class="campo"><label>Fonte *</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
+      </div>
+      <div class="grade-3">
         <div class="campo"><label>Valor</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
       <div class="campo"><label>Arquivo da Nota de Empenho *</label><input type="file" id="neArquivo" accept=".pdf,image/*" required /></div>
       <button class="botao sucesso" id="btnAddNe">Adicionar Nota de Empenho</button>
       <p id="neErro" class="erro-campo oculto"></p>`;
+
+    document.getElementById('neTipo').addEventListener('change', function () {
+      document.getElementById('neNumeroContainer').innerHTML = camposNumeroNeHtml(notas, this.value);
+    });
 
     document.getElementById('btnAddNe').addEventListener('click', async () => {
       const erroEl = document.getElementById('neErro');
@@ -464,13 +482,17 @@ const TelaSof = (function () {
       const arquivo = arquivoInput.files[0];
       if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo da Nota de Empenho.'); return; }
       if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
+      const numeroEl = document.getElementById('neNumero');
+      if (!numeroEl || !numeroEl.value.trim()) { UI.mostrarErro(erroEl, 'Informe o número da Nota de Empenho.'); return; }
+      const fonte = document.getElementById('neFonte').value;
+      if (!fonte) { UI.mostrarErro(erroEl, 'Selecione a fonte da Nota de Empenho.'); return; }
 
       try {
-        const arquivoBase64 = await lerArquivoBase64(arquivo);
+        const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
         const tipo = document.getElementById('neTipo').value;
         await Api.chamar('criarNotaEmpenho', {
           data: {
-            sof_id: sof.id, tipo, numero_ne: document.getElementById('neNumero').value.trim(), valor: document.getElementById('neValor').value,
+            sof_id: sof.id, tipo, numero_ne: numeroEl.value.trim(), fonte, valor: document.getElementById('neValor').value,
             arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
           }
         });
@@ -528,15 +550,6 @@ const TelaSof = (function () {
     } catch (err) {
       UI.mostrarErro(erroEl, err.message);
     }
-  }
-
-  function lerArquivoBase64(arquivo) {
-    return new Promise((resolve, reject) => {
-      const leitor = new FileReader();
-      leitor.onload = () => resolve(String(leitor.result).split(',')[1] || '');
-      leitor.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
-      leitor.readAsDataURL(arquivo);
-    });
   }
 
   function validarCamposObrigatorios() {
