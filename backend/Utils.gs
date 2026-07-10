@@ -139,17 +139,20 @@ function corrigirFormatoTexto() {
  * escrita (appendObjectRow_/updateObjectRow_) para que a proteção valha
  * também para linhas criadas/editadas depois do setup inicial da planilha -
  * aplicarFormatoTexto_ sozinha só cobre o que já existia quando foi rodada.
+ *
+ * Aplica os formatos da linha inteira numa única chamada (setNumberFormats em
+ * lote), em vez de uma chamada de getRange/setNumberFormat por coluna - com
+ * ~30 colunas na aba SOF, isso era ~30 chamadas separadas ao serviço de
+ * planilhas em toda escrita (inclusive marcarSofVisualizado, disparado a cada
+ * abertura de card). Ver RELATORIO_LENTIDAO_SOF.md.
  */
 function protegerFormatoLinha_(sheet, headers, linha) {
   var nomeAba = sheet.getName();
   var protegidas = (COLUNAS_NUMERICAS[nomeAba] || []).concat(COLUNAS_BOOLEANAS[nomeAba] || []);
-  headers.forEach(function (coluna, indice) {
-    if (protegidas.indexOf(coluna) !== -1) {
-      sheet.getRange(linha, indice + 1, 1, 1).setNumberFormat('General');
-      return;
-    }
-    sheet.getRange(linha, indice + 1, 1, 1).setNumberFormat('@');
+  var formatos = headers.map(function (coluna) {
+    return protegidas.indexOf(coluna) !== -1 ? 'General' : '@';
   });
+  sheet.getRange(linha, 1, 1, headers.length).setNumberFormats([formatos]);
 }
 
 /** Converte uma aba inteira em array de objetos, com _row (índice 1-based na planilha). */

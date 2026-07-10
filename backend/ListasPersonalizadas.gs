@@ -5,17 +5,40 @@
 
 var TIPOS_LISTA = ['ANDAMENTO_SOF', 'STATUS_RECIBO'];
 
+/**
+ * Lê a aba ListasPersonalizadas inteira, com cache de 30s. Sem isso,
+ * opcaoTemPausaContagem_ relia essa aba do zero a cada chamada - e é chamada
+ * uma vez por linha em listarSof/listarRecibos (N+1). Ver
+ * RELATORIO_LENTIDAO_SOF.md. Prefira passar o resultado desta função adiante
+ * (parâmetro listasPreCarregadas) quando for chamar em loop, em vez de deixar
+ * cada chamada bater no cache de novo.
+ */
+function todasOpcoesComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'listas_personalizadas';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.LISTAS));
+  rows.forEach(function (l) { delete l._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheListas_() {
+  CacheService.getScriptCache().remove('listas_personalizadas');
+}
+
 /** Todos os perfis veem o mesmo conjunto global de opções ativas daquele tipo_lista. */
 function listarOpcoes(session, params) {
   params = params || {};
   var tipoLista = params.tipo_lista;
   if (TIPOS_LISTA.indexOf(tipoLista) === -1) return fail_('tipo_lista inválido.');
 
-  var rows = sheetToObjects_(getSheet_(SHEETS.LISTAS)).filter(function (l) {
+  var rows = todasOpcoesComCache_().filter(function (l) {
     return l.tipo_lista === tipoLista && toBool_(l.ativo);
   });
 
-  rows.forEach(function (l) { delete l._row; });
   return ok_(rows);
 }
 
@@ -40,6 +63,7 @@ function criarOpcao(session, dados) {
     data_criacao: nowIso_()
   };
   appendObjectRow_(sheet, novo);
+  invalidarCacheListas_();
   return ok_(novo);
 }
 
@@ -59,13 +83,19 @@ function atualizarOpcao(session, id, dados) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheListas_();
   return ok_(atualizado);
 }
 
-/** Usado internamente para saber se o andamento/status atual de um processo é espera externa conhecida. */
-function opcaoTemPausaContagem_(tipoLista, valor) {
+/**
+ * Usado internamente para saber se o andamento/status atual de um processo é
+ * espera externa conhecida. Aceita um array já carregado (listasPreCarregadas)
+ * para evitar reler/rebuscar o cache uma vez por linha em loops de listagem
+ * (listarSof/listarRecibos) - se omitido, busca (com cache) sozinho.
+ */
+function opcaoTemPausaContagem_(tipoLista, valor, listasPreCarregadas) {
   if (!valor) return false;
-  var rows = sheetToObjects_(getSheet_(SHEETS.LISTAS));
+  var rows = listasPreCarregadas || todasOpcoesComCache_();
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i];
     if (l.tipo_lista === tipoLista && l.valor === valor) {

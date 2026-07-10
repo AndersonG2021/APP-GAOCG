@@ -106,6 +106,23 @@ Decisões tomadas com o usuário (sessão de plan mode antes de implementar):
 
 **Próximo passo ao retomar:** o usuário precisa (1) colar/implantar os 7 `.gs` atualizados no Apps Script; (2) adicionar a entrada `SofFontes` em `PREFIXOS_ID` no `Contadores.gs`; (3) criar a aba `SofFontes` (`id`, `sof_id`, `fonte`, `parcela_mensal`, `total_solicitado`, `criado_por`, `data_criacao`) e copiar manualmente os dados existentes de `fonte`/`parcela_mensal`/`total_solicitado` da aba SOF antes de apagar essas colunas de lá; (4) remover a coluna `frente` das abas Usuarios/ListasPersonalizadas/SOF/Recibos; (5) trocar `frente_usuario`/`frente_processo`/`fora_da_frente` por `dono_processo`/`fora_do_dono` em LogAuditoria. Depois, testar: criar SOF com 2+ fontes (incluindo aviso de fonte repetida), editar/excluir SOF e Recibo de outro analista sem trava, card com total geral + por fonte, indicador novo no dashboard/log de auditoria, e confirmar com o usuário se a mudança de visibilidade do dashboard (analista vendo os mesmos números do gerente) é aceitável ou se precisa de outro critério.
 
+### Performance — lentidão ao abrir card de SOF (sessão 2026-07-09)
+
+Usuário relatou 8-15s ao clicar num card de SOF. Diagnóstico completo e mitigações aplicadas em `RELATORIO_LENTIDAO_SOF.md` (na raiz do repo) — resumo: cadeia de 4 chamadas de rede sequenciais ao abrir um card, `protegerFormatoLinha_` fazendo uma chamada de `setNumberFormat` por coluna em toda escrita (inclusive `marcarSofVisualizado`), releituras completas de planilha sem cache, e N+1 em `opcaoTemPausaContagem_`.
+
+**Aplicado nesta sessão (sem exigir mudança nenhuma na planilha):**
+- `Utils.gs`: `protegerFormatoLinha_` em lote (uma chamada por linha escrita, não uma por coluna).
+- `js/sof.js`/`js/recibos.js`: `marcarSofVisualizado`/`marcarReciboVisualizado` viraram fire-and-forget; em `sof.js`, `listarNotasEmpenhoPorSof` passou a rodar em paralelo com `obterSof` em vez de depois. Feedback visual (`.carregando`) no card/linha clicada.
+- `Auth.gs`/`Usuarios.gs`: cache de 30s (`CacheService`) pro usuário autenticado, invalidado nas escritas (`atualizarUsuario`/`inativarUsuario`/`redefinirSenha`/`alterarMinhaSenha`).
+- `ListasPersonalizadas.gs`: cache de 30s pra aba inteira, invalidado em `criarOpcao`/`atualizarOpcao`.
+- `Sof.gs`/`Recibos.gs`/`Dashboard.gs`: `opcaoTemPausaContagem_` aceita lista pré-carregada; `listarSof`/`listarRecibos`/`dashboardParados_` carregam `ListasPersonalizadas` uma única vez por chamada em vez de uma vez por linha; o cálculo de "parado" em `listarSof`/`listarRecibos` passou a rodar só na página visível, não em todas as linhas filtradas.
+
+**Pendência nova, pequena:** `backend/Contadores.gs` ainda precisa da entrada `SofFontes: 'SFT'` em `PREFIXOS_ID` (ver bloco da Fase 3.2 acima) — não é da performance, mas é bloqueante pra `criarSof` funcionar.
+
+**Não feito (não tinha o arquivo atual pra editar com segurança):** cache de leitura pra aba Unidades, otimização de `abrirEdicao`/`EdicoesEmAndamento.gs`. Ver seção 5 do relatório.
+
+**Próximo passo ao retomar:** colar/implantar de novo `Utils.gs`, `Auth.gs`, `Usuarios.gs`, `ListasPersonalizadas.gs`, `Sof.gs`, `Recibos.gs`, `Dashboard.gs`; medir se a lentidão melhorou de fato ao abrir um card de SOF.
+
 ## Fase 4 — Notas de Empenho (NÃO INICIADA)
 Do pedido original do usuário:
 - Notas de Empenho anexadas via SOF já devem cair automaticamente na aba própria de Notas de Empenho (a listagem já existe via `listarNotasEmpenho`/`js/notas-empenho.js` — falta revisar/redesenhar a tela).

@@ -72,12 +72,38 @@ function requireAuth_(token) {
   }
   if (!payload || !payload.uid) return null;
 
-  var usuario = findById_(getSheet_(SHEETS.USUARIOS), payload.uid);
+  var usuario = buscarUsuarioComCache_(payload.uid);
   if (!usuario || !toBool_(usuario.ativo)) return null;
 
+  return usuario;
+}
+
+/**
+ * Toda requisição autenticada revalida o usuário (perfil/ativo) - sem isso,
+ * uma revogação de acesso não teria efeito imediato. Isso significava reler a
+ * aba Usuarios inteira em toda chamada, mesmo as puramente informativas
+ * (ver RELATORIO_LENTIDAO_SOF.md). Cache de 30s via CacheService: barato o
+ * bastante pra não pesar, curto o bastante pra uma inativação valer quase na
+ * hora (as escritas em Usuarios.gs já invalidam a entrada na hora, então o
+ * atraso real só acontece se a leitura cacheada já tiver acontecido um
+ * instante antes da escrita).
+ */
+function buscarUsuarioComCache_(usuarioId) {
+  var cache = CacheService.getScriptCache();
+  var chave = 'usuario_' + usuarioId;
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var usuario = findById_(getSheet_(SHEETS.USUARIOS), usuarioId);
+  if (!usuario) return null;
   delete usuario._row;
   delete usuario.senha_hash;
+  cache.put(chave, JSON.stringify(usuario), 30);
   return usuario;
+}
+
+function invalidarCacheUsuario_(usuarioId) {
+  CacheService.getScriptCache().remove('usuario_' + usuarioId);
 }
 
 function login_(loginInformado, senhaInformada) {
@@ -128,5 +154,6 @@ function alterarMinhaSenha(session, senhaAtual, novaSenha) {
   var rowIndex = usuario._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(session.id);
   return ok_({ sucesso: true });
 }

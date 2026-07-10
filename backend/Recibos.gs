@@ -8,9 +8,10 @@ function diasSemAlteracaoRecibo_(dataIso) {
   return diasSemAlteracao_(dataIso);
 }
 
-function calcularDestaqueParadoRecibo_(recibo) {
+/** listasCarregadas opcional - ver calcularDestaqueParadoSof_ em Sof.gs. */
+function calcularDestaqueParadoRecibo_(recibo, listasCarregadas) {
   var dias = diasSemAlteracao_(recibo.data_ultima_alteracao_status || recibo.data_criacao);
-  var pausado = opcaoTemPausaContagem_('STATUS_RECIBO', recibo.status);
+  var pausado = opcaoTemPausaContagem_('STATUS_RECIBO', recibo.status, listasCarregadas);
   return { dias_parado: dias, destacar_parado: dias > 5 && !pausado && !toBool_(recibo.visualizado_apos_alerta) };
 }
 
@@ -217,7 +218,6 @@ function listarRecibos(session, params) {
     });
   }
 
-  rows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r)); });
   rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
 
   var pageSize = Number(params.pageSize) || 20;
@@ -225,6 +225,11 @@ function listarRecibos(session, params) {
   var total = rows.length;
   var start = (page - 1) * pageSize;
   var pageRows = rows.slice(start, start + pageSize);
+
+  // destacar_parado só é exibido - calcular só na página visível, com uma
+  // única leitura (cacheada) de ListasPersonalizadas (ver RELATORIO_LENTIDAO_SOF.md).
+  var listasCarregadas = todasOpcoesComCache_();
+  pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas)); });
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
 }

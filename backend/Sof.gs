@@ -39,9 +39,14 @@ function diasSemAlteracao_(dataIso) {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-function calcularDestaqueParadoSof_(sof) {
+/**
+ * listasCarregadas é opcional: quando listarSof processa várias linhas de uma
+ * vez, ele carrega ListasPersonalizadas uma única vez e repassa aqui, em vez
+ * de cada linha bater no cache de novo (ver RELATORIO_LENTIDAO_SOF.md).
+ */
+function calcularDestaqueParadoSof_(sof, listasCarregadas) {
   var dias = diasSemAlteracao_(sof.data_ultima_alteracao_andamento || sof.data_criacao);
-  var pausado = opcaoTemPausaContagem_('ANDAMENTO_SOF', sof.andamento);
+  var pausado = opcaoTemPausaContagem_('ANDAMENTO_SOF', sof.andamento, listasCarregadas);
   return { dias_parado: dias, destacar_parado: dias > 5 && !pausado && !toBool_(sof.visualizado_apos_alerta) };
 }
 
@@ -313,7 +318,6 @@ function listarSof(session, params) {
     });
   }
 
-  rows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoSof_(r)); });
   rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
 
   var pageSize = Number(params.pageSize) || 20;
@@ -321,6 +325,13 @@ function listarSof(session, params) {
   var total = rows.length;
   var start = (page - 1) * pageSize;
   var pageRows = rows.slice(start, start + pageSize);
+
+  // destacar_parado só é exibido, nunca filtrado/ordenado - calcular só na
+  // página visível (não em "rows" inteiro) e reaproveitar uma única leitura
+  // de ListasPersonalizadas evita o N+1 de opcaoTemPausaContagem_ (ver
+  // RELATORIO_LENTIDAO_SOF.md).
+  var listasCarregadas = todasOpcoesComCache_();
+  pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoSof_(r, listasCarregadas)); });
 
   var idsComNe = pageRows.filter(function (r) { return toBool_(r.possui_ne); }).map(function (r) { return r.id; });
   if (idsComNe.length) {

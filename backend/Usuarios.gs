@@ -67,6 +67,7 @@ function atualizarUsuario(session, id, dados) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(id);
 
   var resposta = Object.assign({}, atualizado);
   delete resposta.senha_hash;
@@ -84,6 +85,7 @@ function inativarUsuario(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(id);
   return ok_({ id: id, ativo: false });
 }
 
@@ -100,5 +102,6 @@ function redefinirSenha(session, id, novaSenha) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(id);
   return ok_({ id: id });
 }

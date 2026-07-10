@@ -202,15 +202,28 @@ const TelaSof = (function () {
   async function abrirSofExistente(id) {
     if (abrindoLinha) return;
     abrindoLinha = true;
+    marcarCartaoCarregando(id, true);
     try {
       const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('SOF', id);
       if (!podeAbrir) return;
+      // marcarSofVisualizado é só informativo (tira o destaque de "parado") e
+      // não precisa bloquear a abertura do card; listarNotasEmpenhoPorSof só
+      // depende do id (não do resultado de obterSof), então já dispara junto.
+      // As 3 chamadas rodam em paralelo em vez de em fila - ver RELATORIO_LENTIDAO_SOF.md.
+      Api.chamar('marcarSofVisualizado', { id }).catch(() => {});
+      const notasPromise = Api.chamar('listarNotasEmpenhoPorSof', { sofId: id }).catch(() => []);
       const sof = await Api.chamar('obterSof', { id });
-      await Api.chamar('marcarSofVisualizado', { id });
-      await abrirFormulario(sof);
+      await abrirFormulario(sof, notasPromise);
     } finally {
       abrindoLinha = false;
+      marcarCartaoCarregando(id, false);
     }
+  }
+
+  /** Feedback visual imediato no clique (o card fica "carregando" enquanto as chamadas de rede resolvem). */
+  function marcarCartaoCarregando(id, carregando) {
+    const cartao = document.querySelector(`.cartao-sof[data-id="${id}"]`);
+    if (cartao) cartao.classList.toggle('carregando', carregando);
   }
 
   function camposAutopreenchimento(unidade, sof) {
@@ -226,7 +239,7 @@ const TelaSof = (function () {
     return resultado;
   }
 
-  async function abrirFormulario(sof) {
+  async function abrirFormulario(sof, notasPromise) {
     const editando = !!sof;
     sofEmEdicaoId = editando ? sof.id : null;
     linhasFontes = (sof && sof.fontes && sof.fontes.length)
@@ -311,7 +324,7 @@ const TelaSof = (function () {
 
     if (editando) {
       atualizarStepperVisual(sof);
-      await renderNotasEmpenho(sof);
+      await renderNotasEmpenho(sof, notasPromise);
     }
   }
 
@@ -425,8 +438,8 @@ const TelaSof = (function () {
     }
   }
 
-  async function renderNotasEmpenho(sof) {
-    const notas = await Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id });
+  async function renderNotasEmpenho(sof, notasPromise) {
+    const notas = await (notasPromise || Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id }));
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `

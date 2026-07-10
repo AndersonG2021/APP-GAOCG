@@ -109,15 +109,25 @@ const TelaRecibos = (function () {
   async function abrirReciboExistente(id) {
     if (abrindoLinha) return;
     abrindoLinha = true;
+    marcarLinhaCarregando(id, true);
     try {
       const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('Recibo', id);
       if (!podeAbrir) return;
       const recibo = itens.find(r => r.id === id);
-      await Api.chamar('marcarReciboVisualizado', { id });
+      // marcarReciboVisualizado é só informativo (tira o destaque de "parado")
+      // e não precisa bloquear a abertura do formulário - ver RELATORIO_LENTIDAO_SOF.md.
+      Api.chamar('marcarReciboVisualizado', { id }).catch(() => {});
       await abrirFormularioEdicao(recibo);
     } finally {
       abrindoLinha = false;
+      marcarLinhaCarregando(id, false);
     }
+  }
+
+  /** Feedback visual imediato no clique (a linha fica "carregando" enquanto as chamadas de rede resolvem). */
+  function marcarLinhaCarregando(id, carregando) {
+    const linha = document.querySelector(`tr[data-id="${id}"]`);
+    if (linha) linha.classList.toggle('carregando', carregando);
   }
 
   function opcoesUnidade(selecionadaId) {

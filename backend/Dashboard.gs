@@ -43,14 +43,18 @@ function dashboardSofPendenteNe_(session) {
 
 /** Processos (SOF e Recibo) atualmente destacados como "parados" (>5 dias, sem pausa_contagem_parado). */
 function dashboardParados_(session) {
+  // Uma única leitura (com cache) de ListasPersonalizadas para todas as linhas
+  // de SOF+Recibo, em vez de uma por linha (ver RELATORIO_LENTIDAO_SOF.md).
+  var listasCarregadas = todasOpcoesComCache_();
+
   var sofs = sheetToObjects_(getSheet_(SHEETS.SOF)).map(function (s) {
     delete s._row;
-    return Object.assign({ tipo_processo: 'SOF' }, s, calcularDestaqueParadoSof_(s));
+    return Object.assign({ tipo_processo: 'SOF' }, s, calcularDestaqueParadoSof_(s, listasCarregadas));
   }).filter(function (s) { return s.destacar_parado; });
 
   var recibos = sheetToObjects_(getSheet_(SHEETS.RECIBOS)).map(function (r) {
     delete r._row;
-    return Object.assign({ tipo_processo: 'Recibo' }, r, calcularDestaqueParadoRecibo_(r));
+    return Object.assign({ tipo_processo: 'Recibo' }, r, calcularDestaqueParadoRecibo_(r, listasCarregadas));
   }).filter(function (r) { return r.destacar_parado; });
 
   return sofs.concat(recibos);
