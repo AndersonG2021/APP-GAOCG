@@ -122,11 +122,25 @@ Usuário relatou 8-15s ao clicar num card de SOF. Diagnóstico completo e mitiga
 
 **Próximo passo ao retomar:** colar/implantar de novo `Utils.gs`, `Auth.gs`, `Usuarios.gs`, `ListasPersonalizadas.gs`, `Sof.gs`, `Recibos.gs`, `Dashboard.gs`; medir se a lentidão melhorou de fato ao abrir um card de SOF.
 
-## Fase 4 — Notas de Empenho (NÃO INICIADA)
-Do pedido original do usuário:
-- Notas de Empenho anexadas via SOF já devem cair automaticamente na aba própria de Notas de Empenho (a listagem já existe via `listarNotasEmpenho`/`js/notas-empenho.js` — falta revisar/redesenhar a tela).
-- Cards por NE: número, objeto, **valor atual** em destaque (verde), botão de reforço. Quando o "valor atual" fica menor que a parcela mensal usada para liquidação, o card fica vermelho e é destacado no topo da tela.
-- Lógica de "valor atual" = valor original + reforços − valores liquidados (a subtração acontece quando uma Nota de Liquidação é anexada a um Recibo — depende da Fase 5 também, ou de um evento de liquidação a definir).
+## Fase 4 — Notas de Empenho (CONCLUÍDA, testada e confirmada pelo usuário)
+
+Decisões tomadas antes de implementar (a Fase 3.2 tinha mudado o SOF pra múltiplas fontes, o que tornou o pedido original ambíguo):
+1. Cada Nota de Empenho fica vinculada a **uma fonte específica** do SOF — o alerta vermelho compara o valor atual com a parcela mensal *dessa* fonte (soma de `SofFontes` filtrada por fonte).
+2. O Recibo mantém um campo numérico `valor_liquidado` (já existia antes desta fase) **junto** com o futuro anexo de Nota de Liquidação (Fase 5) — é esse número que alimenta a subtração, já que o OCR segue adiado.
+
+**Backend (`backend/NotasEmpenho.gs`, colado e implantado):**
+- `criarNotaEmpenho`: `numero_ne` agora obrigatório também pra `reforco` (usado pra agrupar sob o mesmo card); reforço exige que já exista uma NE `original` com esse número no mesmo SOF; novo campo obrigatório `fonte`.
+- Nova `valorLiquidadoPorNe_(numeroNe)`: soma `valor_liquidado` de `Recibos` cujo `nota_empenho` bate com o número da NE (mesma convenção de texto livre já usada no autopreenchimento do Recibo — sem FK nova).
+- `listarNotasEmpenho` reescrita: agora agrupa por `numero_ne` (um card = original + todos os reforços), calcula `valor_bruto`, `valor_liquidado`, `valor_atual`, `parcela_mensal_referencia` (da fonte, via `agruparFontesPorSof_` de `Sof.gs`) e `alerta` (valor atual abaixo da parcela mensal); alertas vêm primeiro na ordenação. `listarNotasEmpenhoPorSof` (usada dentro do card de SOF) não mudou.
+- **Coluna nova na planilha, aba NotasEmpenho:** `fonte` (já criada pelo usuário).
+
+**Frontend:**
+- `js/sof.js` (mini-formulário "Adicionar Nota de Empenho" dentro do SOF): novo campo obrigatório Fonte (`<select>` a partir de `sof.fontes`); campo Número vira `<select>` com os números de NE originais existentes quando `tipo = reforco` (evita reforço órfão por erro de digitação).
+- `js/app.js`: `lerArquivoBase64` virou `UI.lerArquivoBase64` (estava duplicada, centralizada pra ser reaproveitada por `sof.js` e `notas-empenho.js`).
+- `js/notas-empenho.js`: reescrita completa — grade de cards (`.cartao-ne`, reaproveitando o padrão visual de `.cartao-sof`), valor atual em destaque (verde/vermelho), detalhamento bruto−liquidado, links pros arquivos anexados, botão "+ Reforço" que abre um modal pequeno (valor + arquivo) sem precisar abrir o SOF. Filtros: Unidade e Fonte.
+- `css/style.css`: `.cartao-ne`, `.cartao-ne.alerta`, `.cartao-ne-valor(.vermelho)`, `.cartao-ne-detalhe`, `.cartao-ne-rodape`.
+
+**Testado e confirmado pelo usuário:** NE original com fonte → reforço (seleção do número) → card com valor bruto certo → Recibo com `nota_empenho`/`valor_liquidado` reduzindo o valor atual do card → alerta vermelho + destaque no topo quando abaixo da parcela mensal → botão "+ Reforço" direto pelo card.
 
 ## Fase 5 — Recibos (NÃO INICIADA)
 Do pedido original do usuário:
