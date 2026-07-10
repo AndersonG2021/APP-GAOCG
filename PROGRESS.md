@@ -142,15 +142,25 @@ Decisões tomadas antes de implementar (a Fase 3.2 tinha mudado o SOF pra múlti
 
 **Testado e confirmado pelo usuário:** NE original com fonte → reforço (seleção do número) → card com valor bruto certo → Recibo com `nota_empenho`/`valor_liquidado` reduzindo o valor atual do card → alerta vermelho + destaque no topo quando abaixo da parcela mensal → botão "+ Reforço" direto pelo card.
 
-## Fase 5 — Recibos (NÃO INICIADA)
+## Fase 5 — Recibos (PLANEJAMENTO EM ANDAMENTO, sessão 2026-07-10 — interrompida antes de fechar as decisões)
+
 Do pedido original do usuário:
 - Filtros para todos os campos + cards de indicadores (pendentes, total pago no ano, total a pagar).
-- Autopreenchimento por unidade+objeto (parcela contratual, fonte, NE) baseado no último lançamento — **já existe parcialmente** em `js/recibos.js` (`historicoRecibosUnidade`), só falta revisar se cobre tudo que foi pedido.
-- Novo fluxo de status (com ramificação por fonte SUS/TESOURO): ENVIADO DE VOLTA → AGUARDANDO ASSINATURA DO ATESTO → AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO (CLSUS ou CLTESOURO) → AGUARDANDO ASSINATURA DA LIQUIDAÇÃO → ENVIADO AO SETOR DE PAGAMENTO (CPAG_TESOURO ou CPAG_SUS) → PAGO.
-- Renomear "Este pagamento é feito por rateio" → "Este pagamento é feito por mais de uma parcela?" (checkbox ao lado do texto).
+- Autopreenchimento por unidade+objeto (parcela contratual, fonte, NE) baseado no último lançamento — **já existe** em `js/recibos.js` (`historicoRecibosUnidade`, no listener de `recObjeto`/`change`), parece cobrir o pedido — só validar se falta algum campo.
+- Novo fluxo de status (com ramificação por fonte SUS/TESOURO): ENVIADO DE VOLTA A UNIDADE PARA CORREÇÃO → AGUARDANDO ASSINATURA DO ATESTO → AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO (CLSUS ou CLTESOURO conforme fonte) → AGUARDANDO ASSINATURA DA LIQUIDAÇÃO → ENVIADO AO SETOR DE PAGAMENTO (CPAG_TESOURO ou CPAG_SUS) → PAGO.
+- Renomear "Este pagamento é feito por rateio (2+ parcelas)" → "Este pagamento é feito por mais de uma parcela?" com o checkbox ao lado do texto (hoje o checkbox já vem antes do texto no HTML, mas o rótulo precisa mudar).
 - Trocar campos de "valor liquidado"/"valor pago" por anexos de Nota de Liquidação e Ordem Bancária (mesma mecânica de upload da Fase 3), que alimentam a subtração de valor da NE (Fase 4).
-- Botão "X" pra remover parcela extra quando o rateio estiver marcado.
+- Botão "X" pra remover parcela extra quando o rateio estiver marcado (hoje `adicionarLinhaRateio` em `js/recibos.js` não tem botão de remover linha).
 - (Bug de "Selecione a unidade" no Recibo já resolvido na Fase 1.)
+
+**Análise já feita (código atual lido, `js/recibos.js` e `backend/Recibos.gs` completos) — retomar planejamento a partir daqui:**
+- O fluxo de status novo tem a mesma tensão arquitetural que o Andamento do SOF teve na Fase 3: hoje o Status do Recibo vem de `ListasPersonalizadas` (`STATUS_RECIBO`, customizável, `js/listas.js`/`TelaListas.obterOpcoes`). Virar um fluxo fixo com ramificação por fonte (SUS/TESOURO) provavelmente aposenta esse uso de Listas Personalizadas (mesma decisão tomada pro Andamento na Fase 3.1) — **perguntar ao usuário se confirma isso antes de implementar** (pergunta estava a caminho quando a sessão foi interrompida).
+- **Tensão real a resolver com o usuário:** o pedido original quer *trocar* (remover) os campos numéricos `valor_liquidado`/`valor_pago` por anexos de arquivo. Mas: (a) a Fase 4 já depende de `valor_liquidado` numérico pra abater da Nota de Empenho (`valorLiquidadoPorNe_` em `backend/NotasEmpenho.gs`, decisão tomada explicitamente nessa fase de manter o número até o OCR existir); (b) os cards de indicador desta própria Fase 5 ("total pago no ano", "total a pagar") também precisam de um número pra somar. **Recomendação a validar com o usuário:** manter os dois campos numéricos só que agora lado a lado com o upload dos respectivos documentos (Nota de Liquidação anexa ao lado do número de Valor Liquidado; Ordem Bancária anexa ao lado do número de Valor Pago), em vez de removê-los — mesmo princípio já usado na Fase 4.
+- Falta decidir com o usuário: (1) status fixo substitui Listas Personalizadas — sim/não; (2) o que fazer com as duas etapas do fluxo que dependem da fonte quando `fonte` for "Outra"/vazia (bloquear até definir SUS/TESOURO, ou usar rótulo genérico); (3) confirmar manter valor_liquidado/valor_pago numéricos junto dos anexos; (4) critério de "total pago no ano"/"a pagar" nos cards — por ano da competência (mais simples, já existe como campo) ou por uma data real de pagamento (exigiria campo novo).
+- Campos/estrutura atual de Recibo (`backend/Recibos.gs`, `montarLinhaRecibo_`): `unidade_id, oss_snapshot, cnpj_snapshot, tipo_unidade, objeto, instrumento, parcela_contratual, fonte, nota_empenho, competencia, valor_liquidado, valor_pago, ordem_bancaria (texto livre, só o número), numero_processo, observacao, status, rateio_grupo_id, percentual_rateio, completo`. Sem coluna de frente (já removida na Fase 3.2). Pastas do Drive já reservadas (ver seção de referências): Notas de Liquidação e Ordens Bancárias.
+- Rateio: `criarGrupoRateioRecibo`/`recalcularAlertaRecibo_` já existem e funcionam por `rateio_grupo_id`; o botão de remover linha é só frontend (`adicionarLinhaRateio` em `js/recibos.js`), sem mudança de backend necessária pra isso.
+
+**Próximo passo ao retomar:** fazer as 4 perguntas de decisão acima ao usuário (estavam prontas mas a resposta foi interrompida), aí montar o plano formal (plan mode) igual às fases anteriores antes de implementar.
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
