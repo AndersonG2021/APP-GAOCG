@@ -93,7 +93,7 @@ Decisões tomadas com o usuário (sessão de plan mode antes de implementar):
 - `js/auth.js`: função `frenteDoUsuario()` removida (não tinha mais uso). `js/app.js`: topo mostra só "Analista"/"Gerente" (sem frente); modal de perfil troca o campo "Frente" por "Perfil".
 - `js/notas-empenho.js`: coluna "Frente" da listagem trocada por "Criado por" (`n.sof_criado_por` no lugar de `n.sof_frente`) — **isso exige que o backend `NotasEmpenho.gs` (`listarNotasEmpenho`) pare de juntar `sof_frente` e passe a juntar `sof_criado_por`**; ver bloco de pendências abaixo.
 
-**Backend restante (o usuário colou o conteúdo atual de todos em `/backend`, sem risco de perder funcionalidade já implantada):**
+**Backend concluído e commitado** (o usuário colou o conteúdo atual de todos em `/backend`, o que permitiu editar sem risco de perder funcionalidade já implantada; falta só o usuário colar/reimplantar no editor do Apps Script - ver "Próximo passo" abaixo):
 - `Auth.gs`: `login_` para de devolver `frente` no objeto `user`.
 - `Usuarios.gs`: `criarUsuario`/`atualizarUsuario` não leem/gravam mais `frente`, nem validam contra `FRENTES`.
 - `ListasPersonalizadas.gs`: `criarOpcao`/`atualizarOpcao`/`listarOpcoes` viram globais (sem `frente`); `opcaoTemPausaContagem_(tipoLista, valor)` perdeu o parâmetro de frente (assinatura já usada assim em `Sof.gs`/`Recibos.gs`).
@@ -143,4 +143,4 @@ Do pedido original do usuário:
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend/Utils.gs`, `/backend/Sof.gs`, `/backend/Code.gs`: cópias de referência do estado atual esperado (ver Fase 3.1 acima pro histórico de por que `Utils.gs` mudou).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados nesta sessão - ver pendências da Fase 3.2/Performance). Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
