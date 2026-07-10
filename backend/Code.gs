@@ -61,7 +61,7 @@ function handleRequest_(params) {
       case 'inativarUnidade': return jsonOut_(inativarUnidade(session, params.id));
       case 'reativarUnidade': return jsonOut_(reativarUnidade(session, params.id));
 
-      // Listas Personalizadas (andamento/status por frente - Funcionalidades 3, 4, 8)
+      // Listas Personalizadas (andamento/status globais - Funcionalidades 3, 4, 8)
       case 'listarOpcoes': return jsonOut_(listarOpcoes(session, params));
       case 'criarOpcao': return jsonOut_(criarOpcao(session, params.data));
       case 'atualizarOpcao': return jsonOut_(atualizarOpcao(session, params.id, params.data));

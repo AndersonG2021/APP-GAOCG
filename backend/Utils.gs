@@ -7,6 +7,7 @@ var SHEETS = {
   UNIDADES: 'Unidades',
   LISTAS: 'ListasPersonalizadas',
   SOF: 'SOF',
+  SOF_FONTES: 'SofFontes',
   NOTAS_EMPENHO: 'NotasEmpenho',
   RECIBOS: 'Recibos',
   LOG_AUDITORIA: 'LogAuditoria',
@@ -15,28 +16,27 @@ var SHEETS = {
 };
 
 var HEADERS = {
-  Usuarios: ['id', 'nome', 'login', 'senha_hash', 'perfil', 'frente', 'ativo', 'data_criacao', 'data_inativacao'],
+  Usuarios: ['id', 'nome', 'login', 'senha_hash', 'perfil', 'ativo', 'data_criacao', 'data_inativacao'],
   Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
-  ListasPersonalizadas: ['id', 'tipo_lista', 'frente', 'valor', 'pausa_contagem_parado', 'ativo', 'criado_por', 'data_criacao'],
+  ListasPersonalizadas: ['id', 'tipo_lista', 'valor', 'pausa_contagem_parado', 'ativo', 'criado_por', 'data_criacao'],
   SOF: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
     'acao_snapshot', 'subacao_snapshot', 'gd_snapshot', 'divergente_da_unidade', 'tipo', 'sei', 'sof_numero',
     'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta', 'observacao', 'planilha_poas',
-    'parcela_mensal', 'fonte', 'ceo', 'contrato', 'total_solicitado', 'frente', 'completo', 'criado_por',
+    'ceo', 'contrato', 'completo', 'criado_por',
     'data_criacao', 'data_ultima_alteracao_andamento', 'visualizado_apos_alerta', 'possui_ne',
     'excluido', 'excluido_por', 'excluido_em'],
+  SofFontes: ['id', 'sof_id', 'fonte', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
   NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'valor', 'periodo', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
     'ordem_bancaria', 'numero_processo', 'observacao', 'status', 'rateio_grupo_id', 'percentual_rateio',
-    'alerta_divergencia_valores', 'frente', 'completo', 'origem', 'criado_por', 'data_criacao',
+    'alerta_divergencia_valores', 'completo', 'origem', 'criado_por', 'data_criacao',
     'data_ultima_alteracao_status', 'visualizado_apos_alerta'],
-  LogAuditoria: ['id', 'usuario_id', 'perfil_usuario', 'frente_usuario', 'data_hora', 'tipo_processo', 'processo_id',
-    'frente_processo', 'campo_alterado', 'valor_anterior', 'valor_novo', 'fora_da_frente', 'origem'],
+  LogAuditoria: ['id', 'usuario_id', 'perfil_usuario', 'data_hora', 'tipo_processo', 'processo_id',
+    'dono_processo', 'campo_alterado', 'valor_anterior', 'valor_novo', 'fora_do_dono', 'origem'],
   EdicoesEmAndamento: ['tipo_processo', 'processo_id', 'usuario_id', 'iniciado_em', 'ultimo_heartbeat'],
   Contadores: ['prefixo', 'proximo']
 };
-
-var FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital', 'Recibo-UPA', 'Recibo-UPAE', 'Recibo-Hospital'];
 
 /**
  * Colunas que devem permanecer com tipo numérico nativo do Sheets (usadas em
@@ -44,7 +44,7 @@ var FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital', 'Recibo-UPA', 'Recibo-UPAE
  * abaixo e aplicarFormatoTexto_/protegerFormatoLinha_.
  */
 var COLUNAS_NUMERICAS = {
-  SOF: ['parcela_mensal', 'total_solicitado'],
+  SofFontes: ['parcela_mensal', 'total_solicitado'],
   NotasEmpenho: ['valor'],
   Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_rateio'],
   Contadores: ['proximo']
@@ -64,7 +64,7 @@ var COLUNAS_BOOLEANAS = {
   ListasPersonalizadas: ['pausa_contagem_parado', 'ativo'],
   SOF: ['divergente_da_unidade', 'completo', 'visualizado_apos_alerta', 'possui_ne', 'excluido'],
   Recibos: ['divergente_da_unidade', 'alerta_divergencia_valores', 'completo', 'visualizado_apos_alerta'],
-  LogAuditoria: ['fora_da_frente']
+  LogAuditoria: ['fora_do_dono']
 };
 
 // ===================== PLANILHA =====================

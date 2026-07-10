@@ -4,7 +4,7 @@
  */
 
 const TelaSof = (function () {
-  const FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital'];
+  const OPCOES_FONTE = ['TESOURO', 'SUS', 'Outra'];
   const ETAPAS_ANDAMENTO = [
     'SES-NP_DGPO', 'SES-DGPO', 'SES', 'NAP_POAS', 'SES-GPOAS', 'SES-GORC', 'SES-GPF',
     'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
@@ -21,9 +21,6 @@ const TelaSof = (function () {
     { id: 'sofPeriodoInicio', rotulo: 'Período (início)' },
     { id: 'sofPeriodoFim', rotulo: 'Período (fim)' },
     { id: 'sofDea', rotulo: 'DEA' },
-    { id: 'sofParcelaMensal', rotulo: 'Parcela Mensal' },
-    { id: 'sofFonte', rotulo: 'Fonte' },
-    { id: 'sofTotalSolicitado', rotulo: 'Total Solicitado' },
     { id: 'sofObjeto', rotulo: 'Objeto' }
   ];
   let unidades = [];
@@ -33,6 +30,7 @@ const TelaSof = (function () {
   const TAMANHO_PAGINA = 20;
   let sofEmEdicaoId = null;
   let abrindoLinha = false;
+  let linhasFontes = [];
 
   async function render() {
     unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
@@ -54,10 +52,7 @@ const TelaSof = (function () {
             <select id="sofFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
           </div>
           <div class="campo"><label>Fonte</label>
-            <select id="sofFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
-          </div>
-          <div class="campo"><label>Frente</label>
-            <select id="sofFiltroFrente"><option value="">Todas</option>${FRENTES.map(f => `<option>${f}</option>`).join('')}</select>
+            <select id="sofFiltroFonte"><option value="">Todas</option>${OPCOES_FONTE.map(f => `<option>${f}</option>`).join('')}</select>
           </div>
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao" id="btnExportarSof">Exportar CSV</button>
@@ -88,8 +83,7 @@ const TelaSof = (function () {
       objeto: document.getElementById('sofFiltroObjeto').value.trim(),
       tipo_unidade: document.getElementById('sofFiltroTipoUnidade').value,
       dea: document.getElementById('sofFiltroDea').value,
-      fonte: document.getElementById('sofFiltroFonte').value,
-      frente: document.getElementById('sofFiltroFrente').value
+      fonte: document.getElementById('sofFiltroFonte').value
     };
   }
 
@@ -128,6 +122,9 @@ const TelaSof = (function () {
               <h3>${UI.escaparHtml(unidade ? unidade.nome : s.unidade_id)}</h3>
               <span class="cartao-sof-total">${UI.formatarMoeda(s.total_solicitado)}</span>
             </div>
+            ${(s.fontes || []).length ? `<div class="cartao-sof-fontes">${(s.fontes || []).map(f => `
+              <div class="cartao-sof-fonte-linha"><span>${UI.escaparHtml(f.fonte)}</span><span>${UI.formatarMoeda(f.total_solicitado)}</span></div>
+            `).join('')}</div>` : ''}
             <p class="cartao-sof-objeto">${UI.escaparHtml(s.objeto || '-')}</p>
             <div class="cartao-sof-meta">
               <span>Nº SOF: <strong>${UI.escaparHtml(s.sof_numero || '-')}</strong></span>
@@ -184,8 +181,13 @@ const TelaSof = (function () {
 
   async function exportarCsv() {
     const resposta = await Api.chamar('listarSof', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    const colunas = ['id', 'unidade_id', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'objeto', 'fonte', 'total_solicitado', 'frente', 'possui_ne'];
-    const linhas = [colunas.join(';')].concat(resposta.items.map(s => colunas.map(c => `"${String(s[c] === undefined ? '' : s[c]).replace(/"/g, '""')}"`).join(';')));
+    const colunas = ['id', 'unidade_id', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'objeto', 'total_solicitado', 'possui_ne'];
+    const linhas = [colunas.concat('fontes').join(';')].concat(resposta.items.map(s => {
+      const valores = colunas.map(c => `"${String(s[c] === undefined ? '' : s[c]).replace(/"/g, '""')}"`);
+      const fontesTexto = (s.fontes || []).map(f => `${f.fonte}:${Number(f.total_solicitado || 0).toFixed(2)}`).join(';');
+      valores.push(`"${fontesTexto.replace(/"/g, '""')}"`);
+      return valores.join(';');
+    }));
     baixarArquivo('sof.csv', linhas.join('\n'));
   }
 
@@ -227,7 +229,9 @@ const TelaSof = (function () {
   async function abrirFormulario(sof) {
     const editando = !!sof;
     sofEmEdicaoId = editando ? sof.id : null;
-    const usuario = Auth.usuario();
+    linhasFontes = (sof && sof.fontes && sof.fontes.length)
+      ? sof.fontes.map(f => ({ fonte: f.fonte, parcela_mensal: f.parcela_mensal, total_solicitado: f.total_solicitado }))
+      : [{ fonte: '', parcela_mensal: '', total_solicitado: '' }];
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
     const corpo = `
@@ -258,13 +262,15 @@ const TelaSof = (function () {
             </select>
           </div>
           <div class="campo"><label>T.A.</label><input id="sofTa" value="${UI.escaparHtml(sof ? sof.ta : '')}" /></div>
-          <div class="campo"><label>Parcela Mensal</label><input id="sofParcelaMensal" type="number" step="0.01" value="${sof ? sof.parcela_mensal : ''}" /></div>
-          <div class="campo"><label>Fonte</label>
-            <select id="sofFonte"><option value="">-</option>${['TESOURO', 'SUS', 'Outra'].map(f => `<option ${sof && sof.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select>
-          </div>
           <div class="campo"><label>CEO</label><input id="sofCeo" value="${UI.escaparHtml(sof ? sof.ceo : '')}" /></div>
-          <div class="campo"><label>Total Solicitado</label><input id="sofTotalSolicitado" type="number" step="0.01" value="${sof ? sof.total_solicitado : ''}" /></div>
-          ${usuario.perfil === 'gerente' && !editando ? `<div class="campo"><label>Frente</label><select id="sofFrente">${FRENTES.map(f => `<option>${f}</option>`).join('')}</select></div>` : ''}
+        </div>
+        <div class="campo">
+          <label>Fontes de recurso *</label>
+          <div id="sofFontesContainer" class="linhas-fonte"></div>
+          <div class="linhas-fonte-rodape">
+            <button type="button" class="botao" id="btnAdicionarFonte">+ Adicionar fonte</button>
+            <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
+          </div>
         </div>
         <div class="campo"><label>Objeto</label><textarea id="sofObjeto" rows="2">${UI.escaparHtml(sof ? sof.objeto : '')}</textarea></div>
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${UI.escaparHtml(sof ? sof.observacao : '')}</textarea></div>
@@ -277,6 +283,13 @@ const TelaSof = (function () {
 
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
       `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`);
+
+    renderFontesFormulario();
+    document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
+      linhasFontes = lerLinhasFontesDoDom_();
+      linhasFontes.push({ fonte: '', parcela_mensal: '', total_solicitado: '' });
+      renderFontesFormulario();
+    });
 
     document.getElementById('sofUnidade').addEventListener('change', function () {
       const unidade = unidades.find(u => u.id === this.value);
@@ -302,6 +315,63 @@ const TelaSof = (function () {
     }
   }
 
+  /** Lê as linhas de fonte direto do DOM (fonte da verdade entre re-renders). */
+  function lerLinhasFontesDoDom_() {
+    return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte')).map(linha => ({
+      fonte: linha.querySelector('.linha-fonte-select').value,
+      parcela_mensal: linha.querySelector('.linha-fonte-parcela').value,
+      total_solicitado: linha.querySelector('.linha-fonte-total').value
+    }));
+  }
+
+  function linhaFonteHtml(item, indice, podeRemover) {
+    return `
+      <div class="linha-fonte" data-indice="${indice}">
+        <div class="campo"><label>Fonte</label>
+          <select class="linha-fonte-select">
+            <option value="">-</option>
+            ${OPCOES_FONTE.map(f => `<option ${item.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela" type="number" step="0.01" value="${item.parcela_mensal || ''}" /></div>
+        <div class="campo"><label>Total Solicitado</label><input class="linha-fonte-total" type="number" step="0.01" value="${item.total_solicitado || ''}" /></div>
+        ${podeRemover ? '<button type="button" class="botao-icone linha-fonte-remover" title="Remover fonte">&times;</button>' : ''}
+      </div>`;
+  }
+
+  function atualizarTotalGeralFormulario() {
+    const totais = Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-total')).map(i => Number(i.value) || 0);
+    const soma = totais.reduce((a, b) => a + b, 0);
+    const alvo = document.getElementById('sofFontesTotalGeral');
+    if (alvo) alvo.textContent = UI.formatarMoeda(soma);
+  }
+
+  function renderFontesFormulario() {
+    const alvo = document.getElementById('sofFontesContainer');
+    alvo.innerHTML = linhasFontes.map((item, i) => linhaFonteHtml(item, i, linhasFontes.length > 1)).join('');
+
+    alvo.querySelectorAll('.linha-fonte-remover').forEach(btn => {
+      btn.addEventListener('click', () => {
+        linhasFontes = lerLinhasFontesDoDom_();
+        const indice = Number(btn.closest('.linha-fonte').dataset.indice);
+        linhasFontes.splice(indice, 1);
+        renderFontesFormulario();
+      });
+    });
+    alvo.querySelectorAll('.linha-fonte-select').forEach(select => {
+      select.addEventListener('change', function () {
+        const outras = Array.from(alvo.querySelectorAll('.linha-fonte-select')).filter(s => s !== this);
+        if (this.value && outras.some(s => s.value === this.value)) {
+          confirm('Você está escolhendo a mesma fonte que a anterior, isso está correto?');
+        }
+      });
+    });
+    alvo.querySelectorAll('.linha-fonte-total').forEach(input => {
+      input.addEventListener('input', atualizarTotalGeralFormulario);
+    });
+    atualizarTotalGeralFormulario();
+  }
+
   function coletarDadosFormulario() {
     return {
       unidade_id: document.getElementById('sofUnidade').value,
@@ -317,22 +387,18 @@ const TelaSof = (function () {
       periodo_fim: document.getElementById('sofPeriodoFim').value,
       dea: document.getElementById('sofDea').value.trim(),
       ta: document.getElementById('sofTa').value.trim(),
-      parcela_mensal: document.getElementById('sofParcelaMensal').value,
-      fonte: document.getElementById('sofFonte').value,
       ceo: document.getElementById('sofCeo').value.trim(),
-      total_solicitado: document.getElementById('sofTotalSolicitado').value,
+      fontes: lerLinhasFontesDoDom_(),
       objeto: document.getElementById('sofObjeto').value.trim(),
       observacao: document.getElementById('sofObservacao').value.trim(),
-      completo: true,
-      frente: document.getElementById('sofFrente') ? document.getElementById('sofFrente').value : undefined
+      completo: true
     };
   }
 
-  async function salvarSof(sofExistente, confirmado) {
+  async function salvarSof(sofExistente) {
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
     const dados = coletarDadosFormulario();
-    if (confirmado) dados.confirmado = true;
     if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
     const mensagemObrigatorio = validarCamposObrigatorios();
     if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
@@ -341,12 +407,6 @@ const TelaSof = (function () {
       let resposta;
       if (sofExistente) resposta = await Api.chamar('atualizarSof', { id: sofExistente.id, data: dados });
       else resposta = await Api.chamar('criarSof', { data: dados });
-
-      if (resposta.precisaConfirmacao) {
-        const confirmar = confirm('Este processo pertence à frente "' + resposta.frente_processo + '", diferente da sua. Deseja continuar com a edição?');
-        if (confirmar) await salvarSof(sofExistente, true);
-        return;
-      }
 
       UI.toast('SOF salvo com sucesso.', 'sucesso');
       if (sofExistente) {
@@ -470,6 +530,13 @@ const TelaSof = (function () {
     for (const campo of CAMPOS_OBRIGATORIOS) {
       const valor = document.getElementById(campo.id).value.trim();
       if (!valor) return 'Preencha o campo obrigatório: ' + campo.rotulo + '.';
+    }
+    const fontes = lerLinhasFontesDoDom_();
+    if (!fontes.length) return 'Informe ao menos uma fonte.';
+    for (const linha of fontes) {
+      if (!String(linha.fonte || '').trim() || !String(linha.parcela_mensal || '').trim() || !String(linha.total_solicitado || '').trim()) {
+        return 'Preencha fonte, parcela mensal e total solicitado em todas as linhas de fonte.';
+      }
     }
     return null;
   }

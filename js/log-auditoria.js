@@ -18,7 +18,7 @@ const TelaLogAuditoria = (function () {
             <select id="logTipoProcesso"><option value="">Todos</option><option>SOF</option><option>Recibo</option><option>Unidade</option><option>Usuario</option><option>NotaEmpenho</option></select>
           </div>
           <div class="campo"><label>ID do processo</label><input id="logProcessoId" /></div>
-          <label style="align-self:center;font-size:13px"><input type="checkbox" id="logForaFrente" /> Somente edições fora da frente</label>
+          <label style="align-self:center;font-size:13px"><input type="checkbox" id="logForaDono" /> Somente edições em processo de outro usuário</label>
           <button class="botao" id="btnFiltrarLog">Filtrar</button>
         </div>` : '<p class="ajuda">Você vê apenas as edições feitas por você mesmo.</p>'}
         <div id="listaLog"></div>
@@ -35,7 +35,7 @@ const TelaLogAuditoria = (function () {
     if (gerente) {
       params.tipo_processo = document.getElementById('logTipoProcesso').value;
       params.processo_id = document.getElementById('logProcessoId').value.trim();
-      params.fora_da_frente = document.getElementById('logForaFrente').checked;
+      params.fora_do_dono = document.getElementById('logForaDono').checked;
     }
     const resposta = await Api.chamar('listarLogAuditoria', params);
     renderTabela(resposta.items);
@@ -47,7 +47,7 @@ const TelaLogAuditoria = (function () {
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum registro de auditoria encontrado.</p>'; return; }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Processo</th><th>Campo</th><th>De</th><th>Para</th><th>Fora da frente</th></tr></thead>
+        <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Processo</th><th>Campo</th><th>De</th><th>Para</th><th>Editado por outro usuário</th></tr></thead>
         <tbody>${itens.map(l => `
           <tr>
             <td>${UI.formatarData(l.data_hora)}</td>
@@ -56,7 +56,7 @@ const TelaLogAuditoria = (function () {
             <td>${UI.escaparHtml(l.campo_alterado)}</td>
             <td>${UI.escaparHtml(l.valor_anterior)}</td>
             <td>${UI.escaparHtml(l.valor_novo)}</td>
-            <td>${l.fora_da_frente ? '<span class="selo amarelo">Sim</span>' : '<span class="selo cinza">Não</span>'}</td>
+            <td>${l.fora_do_dono ? '<span class="selo amarelo">Sim</span>' : '<span class="selo cinza">Não</span>'}</td>
           </tr>`).join('')}
         </tbody>
       </table>`;

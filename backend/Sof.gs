@@ -12,15 +12,6 @@ var SOF_SNAPSHOT_MAP = {
   subacao: 'subacao_snapshot',
   gd: 'gd_snapshot'
 };
-var SOF_FRENTES = ['SOF-UPA', 'SOF-UPAE', 'SOF-Hospital'];
-
-function frenteDoSof_(session, dados) {
-  if (session.perfil === 'gerente') {
-    var frente = dados && dados.frente ? dados.frente : SOF_FRENTES[0];
-    return SOF_FRENTES.indexOf(frente) !== -1 ? frente : SOF_FRENTES[0];
-  }
-  return session.frente;
-}
 
 /** Recalcula divergente_da_unidade comparando os campos snapshot atuais do SOF com o cadastro vigente da unidade. */
 function recalcularDivergenciaSof_(sof) {
@@ -50,8 +41,66 @@ function diasSemAlteracao_(dataIso) {
 
 function calcularDestaqueParadoSof_(sof) {
   var dias = diasSemAlteracao_(sof.data_ultima_alteracao_andamento || sof.data_criacao);
-  var pausado = opcaoTemPausaContagem_('ANDAMENTO_SOF', sof.frente, sof.andamento);
+  var pausado = opcaoTemPausaContagem_('ANDAMENTO_SOF', sof.andamento);
   return { dias_parado: dias, destacar_parado: dias > 5 && !pausado && !toBool_(sof.visualizado_apos_alerta) };
+}
+
+/** Todas as linhas de SofFontes, agrupadas por sof_id. Usado por listarSof/obterSof pra anexar fontes + total calculado. */
+function agruparFontesPorSof_() {
+  var linhas = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES));
+  var mapa = {};
+  linhas.forEach(function (f) {
+    delete f._row;
+    (mapa[f.sof_id] = mapa[f.sof_id] || []).push(f);
+  });
+  return mapa;
+}
+
+function listarFontesPorSof_(sofId) {
+  return sheetToObjects_(getSheet_(SHEETS.SOF_FONTES))
+    .filter(function (f) { return String(f.sof_id) === String(sofId); })
+    .map(function (f) { delete f._row; return f; });
+}
+
+function totalSolicitadoDeFontes_(fontes) {
+  return (fontes || []).reduce(function (soma, f) { return soma + toNumber_(f.total_solicitado); }, 0);
+}
+
+function validarFontes_(fontes) {
+  if (!fontes || !fontes.length) return 'Informe ao menos uma fonte.';
+  for (var i = 0; i < fontes.length; i++) {
+    var f = fontes[i] || {};
+    if (!isNonEmpty_(f.fonte) || !isNonEmpty_(f.parcela_mensal) || !isNonEmpty_(f.total_solicitado)) {
+      return 'Preencha fonte, parcela mensal e total solicitado em todas as linhas de fonte.';
+    }
+  }
+  return null;
+}
+
+/**
+ * Substitui por completo as linhas de SofFontes de um SOF (apaga as antigas e
+ * recria a partir do array enviado). Mais simples e robusto que tentar
+ * diferenciar linha a linha - não há necessidade de preservar o id de uma
+ * linha de fonte entre edições.
+ */
+function substituirFontesDoSof_(sofId, fontesArray, session) {
+  var sheet = getSheet_(SHEETS.SOF_FONTES);
+  var existentes = sheetToObjects_(sheet).filter(function (f) { return String(f.sof_id) === String(sofId); });
+  existentes
+    .sort(function (a, b) { return b._row - a._row; })
+    .forEach(function (f) { deleteRow_(sheet, f._row); });
+
+  (fontesArray || []).forEach(function (item) {
+    appendObjectRow_(sheet, {
+      id: proximoId_('SofFontes'),
+      sof_id: sofId,
+      fonte: sanitizeString_(item.fonte, 50),
+      parcela_mensal: toNumber_(item.parcela_mensal),
+      total_solicitado: toNumber_(item.total_solicitado),
+      criado_por: session.id,
+      data_criacao: nowIso_()
+    });
+  });
 }
 
 function criarSof(session, dados) {
@@ -67,6 +116,8 @@ function criarSof(session, dados) {
   if (isNonEmpty_(dados.sof_numero) && !validarSofNumero_(dados.sof_numero)) {
     return fail_('Nº SOF fora do padrão NNN/AAAA.');
   }
+  var erroFontes = validarFontes_(dados.fontes);
+  if (erroFontes) return fail_(erroFontes);
 
   var id = proximoId_('SOF');
   var novo = {
@@ -84,12 +135,8 @@ function criarSof(session, dados) {
     ta: sanitizeString_(dados.ta, 50),
     observacao: sanitizeString_(dados.observacao, 2000),
     planilha_poas: sanitizeString_(dados.planilha_poas, 200),
-    parcela_mensal: toNumber_(dados.parcela_mensal),
-    fonte: sanitizeString_(dados.fonte, 50),
     ceo: sanitizeString_(dados.ceo, 200),
     contrato: sanitizeString_(dados.contrato, 100),
-    total_solicitado: toNumber_(dados.total_solicitado),
-    frente: frenteDoSof_(session, dados),
     completo: toBool_(dados.completo),
     criado_por: session.id,
     data_criacao: nowIso_(),
@@ -109,14 +156,18 @@ function criarSof(session, dados) {
   novo.divergente_da_unidade = recalcularDivergenciaSof_(novo);
 
   appendObjectRow_(getSheet_(SHEETS.SOF), novo);
-  registrarLog_(session, 'SOF', id, novo.frente, 'CRIACAO', '', 'Processo criado');
+  substituirFontesDoSof_(id, dados.fontes, session);
+  registrarLog_(session, 'SOF', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
+
+  var fontes = listarFontesPorSof_(id);
+  novo.fontes = fontes;
+  novo.total_solicitado = totalSolicitadoDeFontes_(fontes);
   return ok_(novo);
 }
 
 /**
- * Atualiza um SOF. Se o processo pertence a outra frente e quem edita não é
- * gerente, exige dados.confirmado === true (o front já mostrou o modal de
- * confirmação da Funcionalidade 6); sem isso, retorna precisaConfirmacao.
+ * Atualiza um SOF. Qualquer analista pode editar qualquer processo (sem
+ * segmentação por frente/dono) - só gerente x analista distingue perfis.
  */
 function atualizarSof(session, id, dados) {
   dados = dados || {};
@@ -124,26 +175,24 @@ function atualizarSof(session, id, dados) {
   var existente = findById_(sheet, id);
   if (!existente) return fail_('SOF não encontrada.');
 
-  var foraDaFrente = session.perfil !== 'gerente' && session.frente !== existente.frente;
-  if (foraDaFrente && dados.confirmado !== true) {
-    return ok_({ precisaConfirmacao: true, frente_processo: existente.frente });
-  }
-
   if (isNonEmpty_(dados.sei) && !validarSei_(dados.sei)) return fail_('SEI fora do padrão NNNNNNNNNN.NNNNNN/AAAA-NN.');
   if (isNonEmpty_(dados.sof_numero) && !validarSofNumero_(dados.sof_numero)) return fail_('Nº SOF fora do padrão NNN/AAAA.');
+  if (dados.hasOwnProperty('fontes')) {
+    var erroFontes = validarFontes_(dados.fontes);
+    if (erroFontes) return fail_(erroFontes);
+  }
 
   var antigo = Object.assign({}, existente);
   var atualizado = Object.assign({}, existente);
 
   var camposEditaveis = ['tipo', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta', 'observacao',
-    'planilha_poas', 'parcela_mensal', 'fonte', 'ceo', 'contrato', 'total_solicitado', 'completo',
+    'planilha_poas', 'ceo', 'contrato', 'completo',
     'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
     'acao_snapshot', 'subacao_snapshot', 'gd_snapshot'];
 
   camposEditaveis.forEach(function (campo) {
     if (!dados.hasOwnProperty(campo)) return;
-    if (campo === 'parcela_mensal' || campo === 'total_solicitado') atualizado[campo] = toNumber_(dados[campo]);
-    else if (campo === 'completo') atualizado[campo] = toBool_(dados[campo]);
+    if (campo === 'completo') atualizado[campo] = toBool_(dados[campo]);
     else atualizado[campo] = sanitizeString_(dados[campo], 2000);
   });
 
@@ -158,7 +207,13 @@ function atualizarSof(session, id, dados) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
 
-  registrarDiferencas_(session, 'SOF', id, existente.frente, antigo, atualizado, ['_row']);
+  if (dados.hasOwnProperty('fontes')) substituirFontesDoSof_(id, dados.fontes, session);
+
+  registrarDiferencas_(session, 'SOF', id, existente.criado_por, antigo, atualizado, ['_row']);
+
+  var fontes = listarFontesPorSof_(id);
+  atualizado.fontes = fontes;
+  atualizado.total_solicitado = totalSolicitadoDeFontes_(fontes);
   return ok_(atualizado);
 }
 
@@ -176,18 +231,14 @@ function marcarSofVisualizado(session, id) {
 
 /**
  * Exclusão lógica (soft delete): mantém a linha e o histórico de auditoria,
- * apenas marca excluido = true e some da listagem padrão (listarSof). Mais
- * restrita que a edição cruzada: só gerente ou o analista da frente
- * responsável pelo processo pode excluir (não vale confirmação como na edição).
+ * apenas marca excluido = true e some da listagem padrão (listarSof).
+ * Qualquer perfil autenticado (analista ou gerente) pode excluir.
  */
 function excluirSof(session, id) {
   var sheet = getSheet_(SHEETS.SOF);
   var existente = findById_(sheet, id);
   if (!existente) return fail_('SOF não encontrada.');
   if (toBool_(existente.excluido)) return fail_('Este processo já foi excluído.');
-
-  var podeExcluir = session.perfil === 'gerente' || session.frente === existente.frente;
-  if (!podeExcluir) return fail_('Você não tem permissão para excluir este processo.');
 
   var atualizado = Object.assign({}, existente, {
     excluido: true,
@@ -198,7 +249,7 @@ function excluirSof(session, id) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
 
-  registrarLog_(session, 'SOF', id, existente.frente, 'EXCLUSAO', '', 'Processo excluído (lógico)');
+  registrarLog_(session, 'SOF', id, existente.criado_por, 'EXCLUSAO', '', 'Processo excluído (lógico)');
   return ok_({ id: id });
 }
 
@@ -206,6 +257,9 @@ function obterSof(session, id) {
   var sof = findById_(getSheet_(SHEETS.SOF), id);
   if (!sof) return fail_('SOF não encontrada.');
   delete sof._row;
+  var fontes = listarFontesPorSof_(id);
+  sof.fontes = fontes;
+  sof.total_solicitado = totalSolicitadoDeFontes_(fontes);
   Object.assign(sof, calcularDestaqueParadoSof_(sof));
   return ok_(sof);
 }
@@ -218,9 +272,12 @@ function listarSof(session, params) {
 
   rows = rows.filter(function (r) { return !toBool_(r.excluido); });
 
-  if (session.perfil !== 'gerente' && params.apenasMinhaFrente !== false) {
-    // Analista vê todas as frentes na listagem (Func 7 é transversal); apenas a permissão de edição é restrita.
-  }
+  var fontesPorSof = agruparFontesPorSof_();
+  rows.forEach(function (r) {
+    var fontes = fontesPorSof[r.id] || [];
+    r.fontes = fontes;
+    r.total_solicitado = totalSolicitadoDeFontes_(fontes);
+  });
 
   if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
   if (params.oss) {
@@ -239,8 +296,11 @@ function listarSof(session, params) {
     rows = rows.filter(function (r) { return unidadesDoTipo.indexOf(String(r.unidade_id)) !== -1; });
   }
   if (params.andamento) rows = rows.filter(function (r) { return r.andamento === params.andamento; });
-  if (params.fonte) rows = rows.filter(function (r) { return r.fonte === params.fonte; });
-  if (params.frente) rows = rows.filter(function (r) { return r.frente === params.frente; });
+  if (params.fonte) {
+    rows = rows.filter(function (r) {
+      return r.fontes.some(function (f) { return f.fonte === params.fonte; });
+    });
+  }
 
   var busca = sanitizeString_(params.busca, 200).toLowerCase();
   if (busca) {

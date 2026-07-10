@@ -129,7 +129,7 @@ const App = (function () {
     document.getElementById('appShell').classList.remove('oculto');
     document.getElementById('nomeUsuarioTopo').textContent = usuario.nome;
     document.getElementById('perfilUsuarioTopo').textContent =
-      usuario.perfil === 'gerente' ? 'Gerente' : ('Analista - ' + usuario.frente);
+      usuario.perfil === 'gerente' ? 'Gerente' : 'Analista';
     document.querySelectorAll('.somente-gerente').forEach(el => el.classList.toggle('oculto', usuario.perfil !== 'gerente'));
     navegarPara('dashboard');
   }
@@ -138,7 +138,7 @@ const App = (function () {
     const usuario = Auth.usuario();
     const corpo = `
       <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
-      <div class="campo"><label>Frente</label><input value="${UI.escaparHtml(usuario.perfil === 'gerente' ? 'Gerente' : usuario.frente)}" disabled /></div>
+      <div class="campo"><label>Perfil</label><input value="${usuario.perfil === 'gerente' ? 'Gerente' : 'Analista'}" disabled /></div>
       <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
       <h4 style="margin:0 0 8px">Alterar senha</h4>
       <form id="formTrocarSenha">

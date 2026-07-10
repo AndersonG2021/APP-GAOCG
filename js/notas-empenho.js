@@ -41,13 +41,13 @@ const TelaNotasEmpenho = (function () {
     if (!notas.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhuma Nota de Empenho encontrada.</p>'; return; }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>SOF</th><th>Unidade</th><th>Frente</th><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th></tr></thead>
+        <thead><tr><th>SOF</th><th>Unidade</th><th>Criado por</th><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th></tr></thead>
         <tbody>${notas.map(n => {
           const unidade = unidades.find(u => u.id === n.sof_unidade_id);
           return `<tr>
             <td>${UI.escaparHtml(n.sof_sei || n.sof_numero || n.sof_id)}</td>
             <td>${UI.escaparHtml(unidade ? unidade.nome : '-')}</td>
-            <td>${UI.escaparHtml(n.sof_frente)}</td>
+            <td>${UI.escaparHtml(n.sof_criado_por)}</td>
             <td>${n.tipo === 'original' ? '<span class="selo azul">Original</span>' : '<span class="selo cinza">Reforço</span>'}</td>
             <td>${UI.escaparHtml(n.numero_ne || '-')}</td>
             <td>${UI.formatarMoeda(n.valor)}</td>

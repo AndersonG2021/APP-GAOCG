@@ -4,7 +4,6 @@
  */
 
 const TelaRecibos = (function () {
-  const FRENTES = ['Recibo-UPA', 'Recibo-UPAE', 'Recibo-Hospital'];
   let unidades = [];
   let itens = [];
   let paginaAtual = 1;
@@ -27,9 +26,6 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Competência</label><select id="recFiltroCompetencia">${UI.opcoesCompetenciaHtml('', true)}</select></div>
           <div class="campo"><label>Fonte</label>
             <select id="recFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
-          </div>
-          <div class="campo"><label>Frente</label>
-            <select id="recFiltroFrente"><option value="">Todas</option>${FRENTES.map(f => `<option>${f}</option>`).join('')}</select>
           </div>
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao" id="btnExportarRec">Exportar CSV</button>
@@ -55,8 +51,7 @@ const TelaRecibos = (function () {
       busca: document.getElementById('recBusca').value.trim(),
       unidade_id: document.getElementById('recFiltroUnidade').value,
       competencia: document.getElementById('recFiltroCompetencia').value.trim(),
-      fonte: document.getElementById('recFiltroFonte').value,
-      frente: document.getElementById('recFiltroFrente').value
+      fonte: document.getElementById('recFiltroFonte').value
     };
   }
 
@@ -103,7 +98,7 @@ const TelaRecibos = (function () {
 
   async function exportarCsv() {
     const resposta = await Api.chamar('listarRecibos', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    const colunas = ['id', 'unidade_id', 'competencia', 'status', 'valor_liquidado', 'valor_pago', 'numero_processo', 'ordem_bancaria', 'rateio_grupo_id', 'percentual_rateio', 'frente', 'origem'];
+    const colunas = ['id', 'unidade_id', 'competencia', 'status', 'valor_liquidado', 'valor_pago', 'numero_processo', 'ordem_bancaria', 'rateio_grupo_id', 'percentual_rateio', 'origem'];
     const linhas = [colunas.join(';')].concat(resposta.items.map(r => colunas.map(c => `"${String(r[c] === undefined ? '' : r[c]).replace(/"/g, '""')}"`).join(';')));
     const blob = new Blob(['﻿' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -139,7 +134,6 @@ const TelaRecibos = (function () {
   // ===================== NOVO RECIBO (com ou sem rateio) =====================
 
   async function abrirFormularioNovo() {
-    const usuario = Auth.usuario();
     const statusOpcoes = await opcoesStatus(null);
     contadorLinhasRateio = 0;
 
@@ -161,7 +155,6 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Ordem Bancária</label><input id="recOrdemBancaria" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recNumeroProcesso" /></div>
           <div class="campo"><label>Status</label><select id="recStatus">${statusOpcoes}</select></div>
-          ${usuario.perfil === 'gerente' ? `<div class="campo"><label>Frente</label><select id="recFrente">${FRENTES.map(f => `<option>${f}</option>`).join('')}</select></div>` : ''}
         </div>
         <div class="campo"><label>Observação</label><textarea id="recObservacao" rows="2"></textarea></div>
         <div class="campo"><label><input type="checkbox" id="recTemRateio" /> Este pagamento é feito por rateio (2+ parcelas)</label></div>
@@ -268,8 +261,7 @@ const TelaRecibos = (function () {
       numero_processo: document.getElementById('recNumeroProcesso').value.trim(),
       status: document.getElementById('recStatus').value,
       observacao: document.getElementById('recObservacao').value.trim(),
-      completo: document.getElementById('recCompleto').checked,
-      frente: document.getElementById('recFrente') ? document.getElementById('recFrente').value : undefined
+      completo: document.getElementById('recCompleto').checked
     };
 
     try {
@@ -335,7 +327,7 @@ const TelaRecibos = (function () {
     document.getElementById('btnSalvarRecEd').addEventListener('click', () => salvarReciboEdicao(recibo));
   }
 
-  async function salvarReciboEdicao(recibo, confirmado) {
+  async function salvarReciboEdicao(recibo) {
     const erroEl = document.getElementById('recEdErro');
     erroEl.classList.add('oculto');
     const dados = {
@@ -356,15 +348,9 @@ const TelaRecibos = (function () {
       observacao: document.getElementById('recEdObservacao').value.trim(),
       completo: document.getElementById('recEdCompleto').checked
     };
-    if (confirmado) dados.confirmado = true;
 
     try {
-      const resposta = await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
-      if (resposta.precisaConfirmacao) {
-        const confirmar = confirm('Este processo pertence à frente "' + resposta.frente_processo + '", diferente da sua. Deseja continuar com a edição?');
-        if (confirmar) await salvarReciboEdicao(recibo, true);
-        return;
-      }
+      await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
       await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
       UI.fecharModal();

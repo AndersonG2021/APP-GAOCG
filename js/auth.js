@@ -48,10 +48,5 @@ const Auth = (function () {
     return !!usuarioAtual && usuarioAtual.perfil === 'gerente';
   }
 
-  /** Frentes de SOF/Recibo visíveis para escrita: gerente = todas; analista = só a própria. */
-  function frenteDoUsuario() {
-    return usuarioAtual ? usuarioAtual.frente : null;
-  }
-
-  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, frenteDoUsuario };
+  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente };
 })();
