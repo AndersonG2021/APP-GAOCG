@@ -1,24 +1,30 @@
 /**
- * GAOCG App - Listagem própria de Notas de Empenho (Funcionalidade 5, item 4
- * - Should), filtrável por unidade e período. O cadastro de novas NEs
- * continua sendo feito dentro da tela de SOF (produto final do processo);
- * esta tela é só para acompanhamento/consulta transversal.
+ * GAOCG App - Acompanhamento de Notas de Empenho (Funcionalidade 5, item 4).
+ * O cadastro de novas NEs continua sendo feito dentro da tela de SOF (produto
+ * final do processo); esta tela é o acompanhamento transversal dos valores:
+ * um card por número de NE (original + reforços somados), com o valor atual
+ * (bruto - liquidado nos Recibos vinculados) em destaque, e alerta quando
+ * esse valor fica abaixo da parcela mensal da fonte correspondente.
  */
 
 const TelaNotasEmpenho = (function () {
+  const OPCOES_FONTE = ['TESOURO', 'SUS', 'Outra'];
   let unidades = [];
+  let grupos = [];
 
   async function render() {
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true });
+    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Notas de Empenho</h2>
       <div class="painel">
-        <p class="ajuda">A NE é o produto final do processo de SOF: a primeira Nota de Empenho original emitida "resolve" a pendência daquele SOF; reforços entram depois, ao longo do tempo, sem alterar essa marcação.</p>
+        <p class="ajuda">Cada card agrupa a Nota de Empenho original e seus reforços pelo número. O valor atual já desconta o que foi liquidado nos Recibos vinculados a essa NE.</p>
         <div class="barra-filtros">
           <div class="campo"><label>Unidade</label>
             <select id="neFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
           </div>
-          <div class="campo"><label>Período</label><input id="neFiltroPeriodo" placeholder="ex.: 2026" /></div>
+          <div class="campo"><label>Fonte</label>
+            <select id="neFiltroFonte"><option value="">Todas</option>${OPCOES_FONTE.map(f => `<option>${f}</option>`).join('')}</select>
+          </div>
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
         </div>
         <div id="listaNe"></div>
@@ -30,31 +36,80 @@ const TelaNotasEmpenho = (function () {
   async function carregar() {
     const params = {
       unidade_id: document.getElementById('neFiltroUnidade').value,
-      periodo: document.getElementById('neFiltroPeriodo').value.trim()
+      fonte: document.getElementById('neFiltroFonte').value
     };
-    const notas = await Api.chamar('listarNotasEmpenho', params);
-    renderTabela(notas);
+    grupos = await Api.chamar('listarNotasEmpenho', params);
+    renderCards();
   }
 
-  function renderTabela(notas) {
+  function renderCards() {
     const alvo = document.getElementById('listaNe');
-    if (!notas.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhuma Nota de Empenho encontrada.</p>'; return; }
-    alvo.innerHTML = `
-      <table class="tabela">
-        <thead><tr><th>SOF</th><th>Unidade</th><th>Criado por</th><th>Tipo</th><th>Número</th><th>Valor</th><th>Período</th></tr></thead>
-        <tbody>${notas.map(n => {
-          const unidade = unidades.find(u => u.id === n.sof_unidade_id);
-          return `<tr>
-            <td>${UI.escaparHtml(n.sof_sei || n.sof_numero || n.sof_id)}</td>
-            <td>${UI.escaparHtml(unidade ? unidade.nome : '-')}</td>
-            <td>${UI.escaparHtml(n.sof_criado_por)}</td>
-            <td>${n.tipo === 'original' ? '<span class="selo azul">Original</span>' : '<span class="selo cinza">Reforço</span>'}</td>
-            <td>${UI.escaparHtml(n.numero_ne || '-')}</td>
-            <td>${UI.formatarMoeda(n.valor)}</td>
-            <td>${UI.escaparHtml(n.periodo)}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
+    if (!grupos.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhuma Nota de Empenho encontrada.</p>'; return; }
+    alvo.innerHTML = `<div class="grade-cards-sof">${grupos.map(g => {
+      const unidade = unidades.find(u => u.id === g.sof_unidade_id);
+      return `
+        <div class="cartao-ne ${g.alerta ? 'alerta' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
+          <div class="cartao-sof-cabecalho">
+            <h3>NE ${UI.escaparHtml(g.numero_ne)}</h3>
+            <span class="cartao-ne-valor ${g.alerta ? 'vermelho' : ''}">${UI.formatarMoeda(g.valor_atual)}</span>
+          </div>
+          <div class="cartao-sof-meta">
+            <span>${UI.escaparHtml(unidade ? unidade.nome : '-')}</span>
+            <span class="selo azul">${UI.escaparHtml(g.fonte || '-')}</span>
+            ${g.alerta ? '<span class="selo vermelho">Abaixo da parcela mensal</span>' : ''}
+          </div>
+          <p class="cartao-sof-objeto">${UI.escaparHtml(g.sof_objeto || '-')}</p>
+          <p class="cartao-ne-detalhe">Bruto: ${UI.formatarMoeda(g.valor_bruto)} &minus; Liquidado: ${UI.formatarMoeda(g.valor_liquidado)}</p>
+          <div class="cartao-ne-rodape">
+            ${(g.arquivos || []).map((a, i) => `<a href="${UI.escaparHtml(a.url)}" target="_blank" rel="noopener">Ver arquivo ${i + 1}</a>`).join(' · ') || '<span class="ajuda">Sem arquivos</span>'}
+            <button type="button" class="botao sucesso" data-acao="reforco">+ Reforço</button>
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    alvo.querySelectorAll('.cartao-ne').forEach(cartao => {
+      const grupo = grupos.find(g => g.numero_ne === cartao.dataset.numero);
+      cartao.querySelector('[data-acao="reforco"]').addEventListener('click', () => abrirModalReforco(grupo));
+    });
+  }
+
+  function abrirModalReforco(grupo) {
+    const corpo = `
+      <form id="formReforcoNe">
+        <p class="ajuda">Reforço para a NE ${UI.escaparHtml(grupo.numero_ne)} (fonte ${UI.escaparHtml(grupo.fonte)}).</p>
+        <div class="campo"><label>Valor do reforço *</label><input id="reforcoValor" type="number" step="0.01" required /></div>
+        <div class="campo"><label>Arquivo *</label><input type="file" id="reforcoArquivo" accept=".pdf,image/*" required /></div>
+        <p id="reforcoErro" class="erro-campo oculto"></p>
+      </form>`;
+    UI.abrirModal('Adicionar reforço', corpo,
+      `<button class="botao" id="btnCancelarReforco">Cancelar</button><button class="botao primario" id="btnSalvarReforco">Salvar</button>`,
+      { pequeno: true });
+
+    document.getElementById('btnCancelarReforco').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnSalvarReforco').addEventListener('click', async () => {
+      const erroEl = document.getElementById('reforcoErro');
+      erroEl.classList.add('oculto');
+      const valor = document.getElementById('reforcoValor').value;
+      const arquivo = document.getElementById('reforcoArquivo').files[0];
+      if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
+      if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo do reforço.'); return; }
+      if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
+
+      try {
+        const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
+        await Api.chamar('criarNotaEmpenho', {
+          data: {
+            sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor,
+            arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
+          }
+        });
+        UI.toast('Reforço adicionado.', 'sucesso');
+        UI.fecharModal();
+        await carregar();
+      } catch (err) {
+        UI.mostrarErro(erroEl, err.message);
+      }
+    });
   }
 
   return { render };
