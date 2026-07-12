@@ -191,8 +191,96 @@ Do pedido original do usuário:
 
 **Fora do escopo desta fase (adiado, ver decisão 9):** card "total a pagar" — depende de uma tabela futura de valores mensais recebidos por unidade (NEs recorrentes que não geram Termo Aditivo, reforçadas todo início de ano) ainda não implementada.
 
+## Melhorias fora da sequência de fases (sessão 2026-07-12)
+
+### Recibos — reordenação da tabela
+Pedido do usuário: tabela de Recibos não deveria mostrar mais o campo Origem;
+no lugar, Nº Processo e Valor Liquidado, na ordem Unidade, Nº Processo,
+Competência, Valor Liquidado, Valor Pago, Ordem Bancária, Status.
+`renderTabela` em `js/recibos.js` ajustada (só frontend, sem mudança de
+backend — os campos já existiam). O selo de "Parcela dividida" que antes tinha
+coluna própria saiu da tabela (não fazia parte da lista pedida); o dado
+continua existindo no backend, só não é mais mostrado ali.
+
+### Unidades — Valor do C.G. + Termos Aditivos = "Parcela mensal" (CÓDIGO CONCLUÍDO, aguardando usuário colar/implantar e ajustar a planilha)
+
+Redesenho pedido pelo usuário: cada unidade passa a ter um **Valor do C.G.**
+(campo numérico único, ao lado do `contrato_gestao` de texto que já existia) e
+uma lista de **Termos Aditivos (T.A.)** — cada um com Objeto do T.A., Nº do
+T.A. (texto livre, ex. "1º") e Valor do T.A. A listagem deixa de mostrar o
+campo Ativo e passa a mostrar **"Parcela mensal"** = Valor do C.G. + soma de
+todos os T.A.s cadastrados. Essa é a base de dados que faltava pro indicador
+"total a pagar" que ficou adiado na Fase 5 de Recibos (ver decisão 9 acima) —
+**não foi ligado a nenhum indicador ainda**, só a base de dados/UI de cadastro.
+
+Decisões tomadas com o usuário antes de implementar:
+1. Valor do C.G. é único por unidade (não repetido por T.A.) — mora no
+   cadastro principal.
+2. O botão "+ Adicionar parcela mensal" adiciona só T.A.s (Objeto/Nº/Valor),
+   numa lista repetível — mesmo padrão de "Fontes" do SOF (`js/sof.js`).
+3. Exclusão de unidade reaproveita o `ativo`/`inativarUnidade` que já
+   existia — sem campo novo de exclusão lógica. Só muda a confirmação
+   (mensagem grande em destaque) e a UI (ícone de lixeira no cartão em vez do
+   botão dentro do modal).
+
+**`backend/Unidades.gs` nunca tinha sido coletado neste repositório** — o
+usuário colou o conteúdo atual nesta sessão, que virou a base da reescrita e
+já está salvo em `/backend/Unidades.gs`.
+
+**Backend (`backend/Unidades.gs` reescrito, `backend/Utils.gs` ajustado):**
+- Novo `SHEETS.UNIDADES_TA`/`HEADERS.UnidadesTA`/`COLUNAS_NUMERICAS.UnidadesTA`
+  (`Utils.gs`); `HEADERS.Unidades`/`COLUNAS_NUMERICAS.Unidades` ganham
+  `valor_contrato_gestao`.
+- Mesmo padrão de SOF↔SofFontes (`agruparFontesPorSof_`/`substituirFontesDoSof_`
+  em `backend/Sof.gs`): novos helpers `listarTasPorUnidade_`,
+  `agruparTasPorUnidade_` (leitura em lote pra `listarUnidades`, evita N+1),
+  `parcelaMensalTotal_`, `substituirTasDaUnidade_`. T.A.s viajam dentro de
+  `dados.tas` em `criarUnidade`/`atualizarUnidade` — sem endpoint novo, sem
+  `case` novo em `Code.gs`. Diferença do SOF: T.A.s são **opcionais** (lista
+  pode ficar vazia), Fontes do SOF são obrigatórias.
+- `inativarUnidade`/`reativarUnidade` **sem mudança nenhuma** — só passaram a
+  ser chamadas de um lugar novo no frontend (ícone de lixeira/restaurar).
+
+**Frontend (`js/unidades.js` reescrito, `css/style.css` com bloco novo
+`.cartao-unidade`/`.grade-cards-unidade`/`.aviso-exclusao`):**
+- Listagem virou cartões (mesmo padrão visual de `.cartao-sof`): ícones de
+  editar (lápis) e excluir/restaurar (lixeira quando ativa, ícone de restaurar
+  quando inativa) à esquerda; corpo clicável mostra Nome/Tipo/OSS/CNPJ e o
+  selo "Parcela mensal: R$ X".
+- Clicar no corpo do cartão expande um bloco (sem chamada de rede, dado já
+  carregado) com "Valor do C.G." + a lista de T.A.s, somente leitura.
+- Editar (lápis) abre o modal de sempre, agora com o campo "Valor do C.G." e
+  uma seção "Termos Aditivos" com lista repetível (reaproveita as classes CSS
+  `.linhas-fonte`/`.linha-fonte`/`.linha-fonte-remover` já existentes do SOF,
+  sem CSS novo pra isso) e botão "**+ Adicionar parcela mensal**" (nome exato
+  pedido pelo usuário, mesmo a ação sendo adicionar um T.A.).
+- Excluir (lixeira) abre um modal com o aviso grande e em destaque pedido
+  ("TEM CERTEZA QUE QUER EXCLUIR ESSA UNIDADE E TODOS OS SEUS DADOS?..."),
+  classe CSS nova `.aviso-exclusao` (texto grande, vermelho, negrito) — não é
+  o `confirm()` nativo do navegador. Confirmar chama `inativarUnidade`
+  (existente); a unidade some da listagem padrão ("Somente ativas") mas
+  continua no banco.
+
+**Passos manuais pendentes do usuário antes de testar:**
+1. Na planilha: criar a coluna `valor_contrato_gestao` na aba **Unidades**;
+   criar a aba nova **UnidadesTA** com cabeçalho
+   `id, unidade_id, objeto_ta, numero_ta, valor_ta, criado_por, data_criacao`.
+2. No editor do Apps Script, adicionar `UnidadesTA: 'UTA'` ao mapa
+   `PREFIXOS_ID` dentro de `Contadores.gs` (mesma pendência que já existia
+   pra `SofFontes: 'SFT'` na Fase 3.2 — `Contadores.gs` continua fora deste
+   repositório). Sem isso, `proximoId_('UnidadesTA')` (usado em
+   `substituirTasDaUnidade_`) lança erro "Prefixo de ID não definido".
+3. Colar `backend/Unidades.gs` e `backend/Utils.gs` atualizados no editor do
+   Apps Script e reimplantar.
+
+**Ainda não testado:** criar unidade com Valor do C.G. + 2 T.A.s e conferir a
+"Parcela mensal" no cartão; expandir/recolher o cartão; editar pra
+adicionar/remover T.A.; excluir com o aviso grande e conferir que some/reaparece
+junto com "Somente ativas"; conferir que `criarSof`/`criarRecibo` (que dependem
+de `listarUnidades`) continuam funcionando depois da mudança de schema.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados nesta sessão - ver pendências da Fase 3.2/Performance). Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados nesta sessão - ver pendências da Fase 3.2/Performance/Unidades). Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
