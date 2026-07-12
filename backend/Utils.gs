@@ -8,6 +8,7 @@ var SHEETS = {
   LISTAS: 'ListasPersonalizadas',
   SOF: 'SOF',
   SOF_FONTES: 'SofFontes',
+  UNIDADES_TA: 'UnidadesTA',
   NOTAS_EMPENHO: 'NotasEmpenho',
   RECIBOS: 'Recibos',
   LOG_AUDITORIA: 'LogAuditoria',
@@ -17,7 +18,7 @@ var SHEETS = {
 
 var HEADERS = {
   Usuarios: ['id', 'nome', 'login', 'senha_hash', 'perfil', 'ativo', 'data_criacao', 'data_inativacao'],
-  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
+  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'valor_contrato_gestao', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
   ListasPersonalizadas: ['id', 'tipo_lista', 'valor', 'pausa_contagem_parado', 'ativo', 'criado_por', 'data_criacao'],
   SOF: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
     'acao_snapshot', 'subacao_snapshot', 'gd_snapshot', 'divergente_da_unidade', 'tipo', 'sei', 'sof_numero',
@@ -26,6 +27,7 @@ var HEADERS = {
     'data_criacao', 'data_ultima_alteracao_andamento', 'visualizado_apos_alerta', 'possui_ne',
     'excluido', 'excluido_por', 'excluido_em'],
   SofFontes: ['id', 'sof_id', 'fonte', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
+  UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'criado_por', 'data_criacao'],
   NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'valor', 'periodo', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
@@ -45,7 +47,9 @@ var HEADERS = {
  * abaixo e aplicarFormatoTexto_/protegerFormatoLinha_.
  */
 var COLUNAS_NUMERICAS = {
+  Unidades: ['valor_contrato_gestao'],
   SofFontes: ['parcela_mensal', 'total_solicitado'],
+  UnidadesTA: ['valor_ta'],
   NotasEmpenho: ['valor'],
   Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_parcela_dividida'],
   Contadores: ['proximo']

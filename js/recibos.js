@@ -96,16 +96,17 @@ const TelaRecibos = (function () {
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum recibo encontrado.</p>'; return; }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Unidade</th><th>Competência</th><th>Status</th><th>Valor Pago</th><th>Parcela dividida</th><th>Origem</th></tr></thead>
+        <thead><tr><th>Unidade</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
         <tbody>${itens.map(r => {
           const unidade = unidades.find(u => u.id === r.unidade_id);
           return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
             <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
+            <td>${UI.escaparHtml(r.numero_processo)}</td>
             <td>${UI.escaparHtml(r.competencia)}</td>
-            <td>${UI.escaparHtml(r.status)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+            <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
             <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
-            <td>${r.parcela_dividida_grupo_id ? `<span class="selo azul">${r.percentual_parcela_dividida || ''}%</span>` : '-'}</td>
-            <td>${r.origem === 'importacao_inicial' ? '<span class="selo cinza">Importado</span>' : '<span class="selo verde">Manual</span>'}</td>
+            <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
+            <td>${UI.escaparHtml(r.status)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
