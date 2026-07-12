@@ -5,7 +5,7 @@
 /**
  * Recibo: indicadores do período selecionado (padrão mês atual, via
  * competencia). Soma valor_pago/valor_liquidado linha a linha (nunca sobre
- * parcela_contratual, que se repete em cada linha de um mesmo rateio).
+ * parcela_contratual, que se repete em cada linha de uma mesma parcela dividida).
  */
 function dashboardRecibos_(session, competencia) {
   var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));

@@ -81,8 +81,9 @@ function handleRequest_(params) {
 
       // Recibos (Funcionalidade 4)
       case 'listarRecibos': return jsonOut_(listarRecibos(session, params));
+      case 'indicadoresRecibos': return jsonOut_(indicadoresRecibos(session, params));
       case 'criarRecibo': return jsonOut_(criarRecibo(session, params.data));
-      case 'criarGrupoRateioRecibo': return jsonOut_(criarGrupoRateioRecibo(session, params.dadosBase, params.parcelas));
+      case 'criarGrupoParcelaDivididaRecibo': return jsonOut_(criarGrupoParcelaDivididaRecibo(session, params.dadosBase, params.parcelas));
       case 'atualizarRecibo': return jsonOut_(atualizarRecibo(session, params.id, params.data));
       case 'marcarReciboVisualizado': return jsonOut_(marcarReciboVisualizado(session, params.id));
       case 'migrarRecibosHistorico': return jsonOut_(migrarRecibosHistorico(session, params.linhas));

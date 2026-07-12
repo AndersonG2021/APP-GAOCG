@@ -1,8 +1,11 @@
 /**
  * GAOCG App - Gestão de Processos de Recibo (Funcionalidade 4, Anexo II),
- * incluindo rateio e a migração do histórico (executada uma única vez, no
- * lançamento do sistema).
+ * incluindo parcela dividida e a migração do histórico (executada uma única
+ * vez, no lançamento do sistema).
  */
+
+var PASTA_NOTA_LIQUIDACAO_ID = '1szdIJMxBvIL5BU-ZbTWJh6AAN_tjxTyl';
+var PASTA_ORDEM_BANCARIA_ID = '1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN';
 
 function diasSemAlteracaoRecibo_(dataIso) {
   return diasSemAlteracao_(dataIso);
@@ -17,15 +20,16 @@ function calcularDestaqueParadoRecibo_(recibo, listasCarregadas) {
 
 /**
  * Recalcula alerta_divergencia_valores para todas as linhas de um grupo de
- * rateio (ou para uma única linha avulsa, se rateioGrupoId for vazio).
- * Regras: (a) valor_liquidado != valor_pago da própria linha; ou (b) soma dos
- * valor_pago do grupo != parcela_contratual. Ambos são apenas informativos.
+ * parcela dividida (ou para uma única linha avulsa, se parcelaDivididaGrupoId
+ * for vazio). Regras: (a) valor_liquidado != valor_pago da própria linha; ou
+ * (b) soma dos valor_pago do grupo != parcela_contratual. Ambos são apenas
+ * informativos.
  */
-function recalcularAlertaRecibo_(rateioGrupoId, unidadeId) {
+function recalcularAlertaRecibo_(parcelaDivididaGrupoId, unidadeId) {
   var sheet = getSheet_(SHEETS.RECIBOS);
   var todos = sheetToObjects_(sheet);
-  var linhas = rateioGrupoId
-    ? todos.filter(function (r) { return String(r.rateio_grupo_id) === String(rateioGrupoId); })
+  var linhas = parcelaDivididaGrupoId
+    ? todos.filter(function (r) { return String(r.parcela_dividida_grupo_id) === String(parcelaDivididaGrupoId); })
     : [];
 
   if (!linhas.length) return;
@@ -46,6 +50,14 @@ function recalcularAlertaRecibo_(rateioGrupoId, unidadeId) {
   });
 }
 
+/** Sobe um arquivo (Nota de Liquidação ou Ordem Bancária) pra pasta do Drive e devolve id/url. */
+function anexarArquivoRecibo_(folderId, base64, nome, tipo) {
+  var pasta = DriveApp.getFolderById(folderId);
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), tipo || 'application/pdf', nome);
+  var arquivo = pasta.createFile(blob);
+  return { driveId: arquivo.getId(), url: arquivo.getUrl() };
+}
+
 function montarLinhaRecibo_(session, dados, unidade) {
   return {
     unidade_id: dados.unidade_id,
@@ -64,13 +76,13 @@ function montarLinhaRecibo_(session, dados, unidade) {
     numero_processo: sanitizeString_(dados.numero_processo, 50),
     observacao: sanitizeString_(dados.observacao, 2000),
     status: sanitizeString_(dados.status, 200),
-    rateio_grupo_id: sanitizeString_(dados.rateio_grupo_id, 50),
-    percentual_rateio: dados.percentual_rateio === undefined || dados.percentual_rateio === '' ? '' : toNumber_(dados.percentual_rateio),
+    parcela_dividida_grupo_id: sanitizeString_(dados.parcela_dividida_grupo_id, 50),
+    percentual_parcela_dividida: dados.percentual_parcela_dividida === undefined || dados.percentual_parcela_dividida === '' ? '' : toNumber_(dados.percentual_parcela_dividida),
     completo: toBool_(dados.completo)
   };
 }
 
-/** Cria um único recibo (sem rateio, ou uma linha adicional de um rateio_grupo_id já existente). */
+/** Cria um único recibo (sem parcela dividida, ou uma linha adicional de um parcela_dividida_grupo_id já existente). */
 function criarRecibo(session, dados) {
   dados = dados || {};
   if (!dados.unidade_id) return fail_('Selecione a unidade.');
@@ -90,28 +102,41 @@ function criarRecibo(session, dados) {
   });
   novo.divergente_da_unidade = String(novo.oss_snapshot) !== String(unidade.oss) || String(novo.cnpj_snapshot) !== String(unidade.cnpj);
 
+  if (dados.notaLiquidacaoArquivoBase64 && dados.notaLiquidacaoArquivoNome) {
+    var nl = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, dados.notaLiquidacaoArquivoBase64, dados.notaLiquidacaoArquivoNome, dados.notaLiquidacaoArquivoTipo);
+    novo.nota_liquidacao_drive_id = nl.driveId;
+    novo.nota_liquidacao_url = nl.url;
+  }
+  if (dados.ordemBancariaArquivoBase64 && dados.ordemBancariaArquivoNome) {
+    var ob = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, dados.ordemBancariaArquivoBase64, dados.ordemBancariaArquivoNome, dados.ordemBancariaArquivoTipo);
+    novo.ordem_bancaria_arquivo_drive_id = ob.driveId;
+    novo.ordem_bancaria_arquivo_url = ob.url;
+  }
+
   appendObjectRow_(getSheet_(SHEETS.RECIBOS), novo);
   registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
-  if (novo.rateio_grupo_id) recalcularAlertaRecibo_(novo.rateio_grupo_id);
+  if (novo.parcela_dividida_grupo_id) recalcularAlertaRecibo_(novo.parcela_dividida_grupo_id);
   return ok_(novo);
 }
 
 /**
- * Cria um grupo de rateio completo de uma vez (duas ou mais parcelas
- * vinculadas ao mesmo rateio_grupo_id). Não exige que a soma dos percentuais
- * feche 100% - é informativo.
+ * Cria um grupo de parcela dividida completo de uma vez (duas ou mais
+ * parcelas vinculadas ao mesmo parcela_dividida_grupo_id). Não exige que a
+ * soma dos percentuais feche 100% - é informativo. Cada parcela pode trazer
+ * sua própria Nota de Liquidação/Ordem Bancária (documentos diferentes por
+ * parcela, mesmo processo).
  */
-function criarGrupoRateioRecibo(session, dadosBase, parcelas) {
-  if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas para o rateio.');
+function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
+  if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas.');
   var unidade = findById_(getSheet_(SHEETS.UNIDADES), dadosBase.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
-  var rateioGrupoId = proximoId_('Recibos') + '-RT';
+  var parcelaDivididaGrupoId = proximoId_('Recibos') + '-PD';
   var criados = [];
   var sheet = getSheet_(SHEETS.RECIBOS);
 
   parcelas.forEach(function (parcela) {
-    var combinado = Object.assign({}, dadosBase, parcela, { rateio_grupo_id: rateioGrupoId });
+    var combinado = Object.assign({}, dadosBase, parcela, { parcela_dividida_grupo_id: parcelaDivididaGrupoId });
     var linha = montarLinhaRecibo_(session, combinado, unidade);
     var id = proximoId_('Recibos');
     var novo = Object.assign({ id: id }, linha, {
@@ -123,12 +148,24 @@ function criarGrupoRateioRecibo(session, dadosBase, parcelas) {
       data_ultima_alteracao_status: nowIso_(),
       visualizado_apos_alerta: true
     });
+
+    if (combinado.notaLiquidacaoArquivoBase64 && combinado.notaLiquidacaoArquivoNome) {
+      var nl = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, combinado.notaLiquidacaoArquivoBase64, combinado.notaLiquidacaoArquivoNome, combinado.notaLiquidacaoArquivoTipo);
+      novo.nota_liquidacao_drive_id = nl.driveId;
+      novo.nota_liquidacao_url = nl.url;
+    }
+    if (combinado.ordemBancariaArquivoBase64 && combinado.ordemBancariaArquivoNome) {
+      var ob = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, combinado.ordemBancariaArquivoBase64, combinado.ordemBancariaArquivoNome, combinado.ordemBancariaArquivoTipo);
+      novo.ordem_bancaria_arquivo_drive_id = ob.driveId;
+      novo.ordem_bancaria_arquivo_url = ob.url;
+    }
+
     appendObjectRow_(sheet, novo);
-    registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Parcela de rateio criada (grupo ' + rateioGrupoId + ')');
+    registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Parcela criada (grupo ' + parcelaDivididaGrupoId + ')');
     criados.push(novo);
   });
 
-  recalcularAlertaRecibo_(rateioGrupoId);
+  recalcularAlertaRecibo_(parcelaDivididaGrupoId);
   return ok_(criados);
 }
 
@@ -147,10 +184,21 @@ function atualizarRecibo(session, id, dados) {
   camposTexto.forEach(function (campo) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = sanitizeString_(dados[campo], 2000);
   });
-  ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_rateio'].forEach(function (campo) {
+  ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_parcela_dividida'].forEach(function (campo) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = toNumber_(dados[campo]);
   });
   if (dados.hasOwnProperty('completo')) atualizado.completo = toBool_(dados.completo);
+
+  if (dados.notaLiquidacaoArquivoBase64 && dados.notaLiquidacaoArquivoNome) {
+    var nl = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, dados.notaLiquidacaoArquivoBase64, dados.notaLiquidacaoArquivoNome, dados.notaLiquidacaoArquivoTipo);
+    atualizado.nota_liquidacao_drive_id = nl.driveId;
+    atualizado.nota_liquidacao_url = nl.url;
+  }
+  if (dados.ordemBancariaArquivoBase64 && dados.ordemBancariaArquivoNome) {
+    var ob = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, dados.ordemBancariaArquivoBase64, dados.ordemBancariaArquivoNome, dados.ordemBancariaArquivoTipo);
+    atualizado.ordem_bancaria_arquivo_drive_id = ob.driveId;
+    atualizado.ordem_bancaria_arquivo_url = ob.url;
+  }
 
   if (atualizado.status !== existente.status) {
     atualizado.data_ultima_alteracao_status = nowIso_();
@@ -169,12 +217,13 @@ function atualizarRecibo(session, id, dados) {
 
   registrarDiferencas_(session, 'Recibo', id, existente.criado_por, antigo, atualizado, ['_row']);
 
-  if (atualizado.rateio_grupo_id) recalcularAlertaRecibo_(atualizado.rateio_grupo_id);
+  if (atualizado.parcela_dividida_grupo_id) recalcularAlertaRecibo_(atualizado.parcela_dividida_grupo_id);
   else recalcularAlertaRecibo_(null);
 
-  // Para linha avulsa (sem rateio), o alerta de liquidado x pago é recalculado direto aqui,
-  // já que recalcularAlertaRecibo_ só age sobre grupos com rateio_grupo_id preenchido.
-  if (!atualizado.rateio_grupo_id) {
+  // Para linha avulsa (sem parcela dividida), o alerta de liquidado x pago é
+  // recalculado direto aqui, já que recalcularAlertaRecibo_ só age sobre
+  // grupos com parcela_dividida_grupo_id preenchido.
+  if (!atualizado.parcela_dividida_grupo_id) {
     var alerta = Math.abs(toNumber_(atualizado.valor_liquidado) - toNumber_(atualizado.valor_pago)) > 0.01;
     if (toBool_(atualizado.alerta_divergencia_valores) !== alerta) {
       atualizado.alerta_divergencia_valores = alerta;
@@ -196,16 +245,20 @@ function marcarReciboVisualizado(session, id) {
   return ok_({ id: id });
 }
 
-function listarRecibos(session, params) {
-  params = params || {};
-  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
-  rows.forEach(function (r) { delete r._row; });
-
+/** Filtros compartilhados por listarRecibos e indicadoresRecibos (mesma lista visível = mesmos indicadores). */
+function filtrarLinhasRecibos_(rows, params) {
   if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
   if (params.oss) rows = rows.filter(function (r) { return String(r.oss_snapshot).toLowerCase() === String(params.oss).toLowerCase(); });
   if (params.status) rows = rows.filter(function (r) { return r.status === params.status; });
   if (params.competencia) rows = rows.filter(function (r) { return r.competencia === params.competencia; });
   if (params.fonte) rows = rows.filter(function (r) { return r.fonte === params.fonte; });
+
+  ['objeto', 'instrumento', 'nota_empenho', 'numero_processo'].forEach(function (campo) {
+    if (params[campo]) {
+      var termo = String(params[campo]).toLowerCase();
+      rows = rows.filter(function (r) { return String(r[campo] || '').toLowerCase().indexOf(termo) !== -1; });
+    }
+  });
 
   var busca = sanitizeString_(params.busca, 200).toLowerCase();
   if (busca) {
@@ -217,6 +270,14 @@ function listarRecibos(session, params) {
       });
     });
   }
+  return rows;
+}
+
+function listarRecibos(session, params) {
+  params = params || {};
+  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
+  rows.forEach(function (r) { delete r._row; });
+  rows = filtrarLinhasRecibos_(rows, params);
 
   rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
 
@@ -232,6 +293,30 @@ function listarRecibos(session, params) {
   pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas)); });
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
+}
+
+/**
+ * Indicadores da tela de Recibos, calculados sobre as mesmas linhas
+ * filtradas de listarRecibos (sem paginação) - refletem os filtros ativos.
+ * "total_a_pagar" fica de fora por enquanto: depende de uma tabela futura de
+ * valores mensais recebidos por unidade, ainda não implementada (ver
+ * PROGRESS.md, Fase 5).
+ */
+function indicadoresRecibos(session, params) {
+  params = params || {};
+  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
+  rows.forEach(function (r) { delete r._row; });
+  rows = filtrarLinhasRecibos_(rows, params);
+
+  var anoAtual = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yy');
+  var pendentes = 0;
+  var totalPagoAno = 0;
+  rows.forEach(function (r) {
+    if (r.status !== 'PAGO') pendentes++;
+    if (String(r.competencia || '').slice(-2) === anoAtual) totalPagoAno += toNumber_(r.valor_pago);
+  });
+
+  return ok_({ pendentes: pendentes, total_pago_ano: totalPagoAno });
 }
 
 /**
@@ -264,7 +349,7 @@ function migrarRecibosHistorico(session, linhas) {
     });
     appendObjectRow_(sheet, novo);
     criados.push(novo);
-    if (novo.rateio_grupo_id) grupos[novo.rateio_grupo_id] = true;
+    if (novo.parcela_dividida_grupo_id) grupos[novo.parcela_dividida_grupo_id] = true;
   });
 
   Object.keys(grupos).forEach(function (grupoId) { recalcularAlertaRecibo_(grupoId); });

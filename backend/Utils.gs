@@ -29,8 +29,9 @@ var HEADERS = {
   NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'valor', 'periodo', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
-    'ordem_bancaria', 'numero_processo', 'observacao', 'status', 'rateio_grupo_id', 'percentual_rateio',
-    'alerta_divergencia_valores', 'completo', 'origem', 'criado_por', 'data_criacao',
+    'nota_liquidacao_drive_id', 'nota_liquidacao_url', 'ordem_bancaria', 'ordem_bancaria_arquivo_drive_id',
+    'ordem_bancaria_arquivo_url', 'numero_processo', 'observacao', 'status', 'parcela_dividida_grupo_id',
+    'percentual_parcela_dividida', 'alerta_divergencia_valores', 'completo', 'origem', 'criado_por', 'data_criacao',
     'data_ultima_alteracao_status', 'visualizado_apos_alerta'],
   LogAuditoria: ['id', 'usuario_id', 'perfil_usuario', 'data_hora', 'tipo_processo', 'processo_id',
     'dono_processo', 'campo_alterado', 'valor_anterior', 'valor_novo', 'fora_do_dono', 'origem'],
@@ -46,7 +47,7 @@ var HEADERS = {
 var COLUNAS_NUMERICAS = {
   SofFontes: ['parcela_mensal', 'total_solicitado'],
   NotasEmpenho: ['valor'],
-  Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_rateio'],
+  Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_parcela_dividida'],
   Contadores: ['proximo']
 };
 

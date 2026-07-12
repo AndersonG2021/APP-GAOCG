@@ -142,7 +142,7 @@ Decisões tomadas antes de implementar (a Fase 3.2 tinha mudado o SOF pra múlti
 
 **Testado e confirmado pelo usuário:** NE original com fonte → reforço (seleção do número) → card com valor bruto certo → Recibo com `nota_empenho`/`valor_liquidado` reduzindo o valor atual do card → alerta vermelho + destaque no topo quando abaixo da parcela mensal → botão "+ Reforço" direto pelo card.
 
-## Fase 5 — Recibos (PLANEJAMENTO EM ANDAMENTO, sessão 2026-07-10 — interrompida antes de fechar as decisões)
+## Fase 5 — Recibos (CÓDIGO CONCLUÍDO, sessão 2026-07-12, aguardando o usuário colar/implantar e ajustar a planilha)
 
 Do pedido original do usuário:
 - Filtros para todos os campos + cards de indicadores (pendentes, total pago no ano, total a pagar).
@@ -160,7 +160,36 @@ Do pedido original do usuário:
 - Campos/estrutura atual de Recibo (`backend/Recibos.gs`, `montarLinhaRecibo_`): `unidade_id, oss_snapshot, cnpj_snapshot, tipo_unidade, objeto, instrumento, parcela_contratual, fonte, nota_empenho, competencia, valor_liquidado, valor_pago, ordem_bancaria (texto livre, só o número), numero_processo, observacao, status, rateio_grupo_id, percentual_rateio, completo`. Sem coluna de frente (já removida na Fase 3.2). Pastas do Drive já reservadas (ver seção de referências): Notas de Liquidação e Ordens Bancárias.
 - Rateio: `criarGrupoRateioRecibo`/`recalcularAlertaRecibo_` já existem e funcionam por `rateio_grupo_id`; o botão de remover linha é só frontend (`adicionarLinhaRateio` em `js/recibos.js`), sem mudança de backend necessária pra isso.
 
-**Próximo passo ao retomar:** fazer as 4 perguntas de decisão acima ao usuário (estavam prontas mas a resposta foi interrompida), aí montar o plano formal (plan mode) igual às fases anteriores antes de implementar.
+**Decisões tomadas com o usuário (sessão 2026-07-12):**
+1. **Status NÃO vira fluxo fixo no código** — continua vindo de Listas Personalizadas (`STATUS_RECIBO`), só que as opções disponíveis passam a refletir o novo fluxo ramificado por fonte (ENVIADO DE VOLTA A UNIDADE PARA CORREÇÃO → AGUARDANDO ASSINATURA DO ATESTO → AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO CLSUS/CLTESOURO → AGUARDANDO ASSINATURA DA LIQUIDAÇÃO → ENVIADO AO SETOR DE PAGAMENTO CPAG_TESOURO/CPAG_SUS → PAGO), cadastradas como valores de lista, não hardcoded.
+2. **Fonte "Outra"/vazia:** usa o ramo TESOURO como padrão nas etapas que dependem da fonte (CLTESOURO/CPAG_TESOURO), em vez de bloquear ou usar rótulo genérico.
+3. **Mantém `valor_liquidado`/`valor_pago` numéricos** lado a lado com os novos anexos (Nota de Liquidação / Ordem Bancária) — mesmo princípio da Fase 4, não remove os campos numéricos do pedido original.
+4. **"Total pago no ano"/"total a pagar" nos cards de indicador: por competência** (campo `competencia` já existente), não por data real de pagamento.
+
+**Decisões adicionais tomadas durante o refinamento do plano (sessão 2026-07-12):**
+5. **Renomear "rateio" → "parcela dividida" em tudo** (rótulos visíveis E nomes internos: coluna da planilha, funções do backend, IDs do frontend) — "Rateio" já é o nome de outro objeto no domínio do sistema, então manter o termo aqui causaria ambiguidade permanente.
+6. **Anexo por parcela, não por grupo:** quando um pagamento é dividido em parcelas, cada parcela tem sua própria Nota de Liquidação e sua própria Ordem Bancária (mesmo processo, documentos diferentes por parcela).
+7. **Anexos opcionais**, sem trava no backend (Recibo é criado antes desses documentos existirem; anexo entra depois, na edição).
+8. **Cards de indicador reativos aos filtros** da tela de Recibos (mesmos parâmetros de `listarRecibos`).
+9. **Card "total a pagar" adiado** — depende de uma feature futura (tabela de valores mensais recebidos por unidade, pra calcular o total dos 12 meses de NEs recorrentes que não geram Termo Aditivo) fora do escopo desta fase. Só entraram nesta fase os cards "pendentes" e "total pago no ano".
+
+**Implementado nesta sessão (frontend `js/recibos.js` reescrito; backend `backend/Recibos.gs` reescrito, `backend/Utils.gs`/`backend/Code.gs`/`backend/Dashboard.gs` ajustados):**
+- Rename completo de "rateio" → "parcela dividida": coluna da planilha `rateio_grupo_id`→`parcela_dividida_grupo_id` e `percentual_rateio`→`percentual_parcela_dividida`; função `criarGrupoRateioRecibo`→`criarGrupoParcelaDivididaRecibo` (e o `case` correspondente em `Code.gs`); IDs/classes do frontend (`recTemParcelaDividida`, `blocoParcelaUnica`/`blocoComParcelaDividida`, `linhasParcelaDividida`, `.linha-parcela-dividida`); coluna da tabela "Rateio"→"Parcela dividida"; checkbox com o novo texto "Este pagamento é feito por mais de uma parcela?".
+- Filtros novos na tela de Recibos: Status, Objeto, Instrumento, Nota de Empenho, Nº Processo (o filtro de Status já tinha suporte no backend, só faltava a UI). Backend: `listarRecibos` ganhou filtros por `objeto`/`instrumento`/`nota_empenho`/`numero_processo` (substring, mesmo padrão do SOF), extraídos pra um helper compartilhado `filtrarLinhasRecibos_`.
+- Fluxo de Status ramificado por fonte: `opcoesStatus(statusAtual, fonte)` em `js/recibos.js` esconde as opções que mencionam SUS/TESOURO conforme a fonte escolhida (regex com word-boundary, pra não colidir com um status futuro tipo "SUSPENSO"); fonte "Outra"/vazia mostra o ramo TESOURO (D2). Reavaliado sempre que o campo Fonte muda (criação e edição) ou quando o autopreenchimento por Objeto define a fonte. O filtro da barra de busca (`opcoesStatusFiltro`) não aplica esse recorte — lista qualquer status já salvo.
+- Anexos de Nota de Liquidação / Ordem Bancária: 4 colunas novas (`nota_liquidacao_drive_id`, `nota_liquidacao_url`, `ordem_bancaria_arquivo_drive_id`, `ordem_bancaria_arquivo_url`), upload em base64 igual ao padrão das Notas de Empenho (`anexarArquivoRecibo_` em `backend/Recibos.gs`, pastas do Drive já reservadas desde a Fase 3), campos de arquivo opcionais no formulário de criar (parcela única e cada linha de parcela dividida) e no de editar (com link "Ver arquivo atual"). O campo de texto livre `ordem_bancaria` (número da OB) continua existindo, sem conflito de nome com o anexo.
+- Cards de indicador "Pendentes" (status ≠ PAGO) e "Total pago no ano" (soma de `valor_pago` das linhas cuja `competencia` cai no ano atual), reativos aos filtros ativos — nova função `indicadoresRecibos` em `backend/Recibos.gs` (`case` novo em `Code.gs`), chamada em paralelo com `listarRecibos`.
+- Botão de remover parcela extra (`.linha-parcela-dividida-remover`, mesmo padrão visual do `.linha-fonte-remover` do SOF) — só aparece quando há mais de 2 parcelas, já que `criarGrupoParcelaDivididaRecibo` exige no mínimo 2.
+
+**Passos manuais pendentes do usuário antes de testar:**
+1. Na aba **Recibos** da planilha: renomear os cabeçalhos `rateio_grupo_id`→`parcela_dividida_grupo_id` e `percentual_rateio`→`percentual_parcela_dividida` (só o texto do cabeçalho, os dados nas células não mudam); adicionar as 4 colunas novas de anexo (`nota_liquidacao_drive_id`, `nota_liquidacao_url`, `ordem_bancaria_arquivo_drive_id`, `ordem_bancaria_arquivo_url`) — a posição não importa, o backend lê por nome de cabeçalho, não por posição.
+2. Confirmar que a conta que implanta o Apps Script tem acesso de escrita às pastas do Drive de Notas de Liquidação (`1szdIJMxBvIL5BU-ZbTWJh6AAN_tjxTyl`) e Ordens Bancárias (`1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN`).
+3. Em **Listas Personalizadas → Status (Recibo)**, cadastrar os 8 valores novos do fluxo ramificado: `ENVIADO DE VOLTA A UNIDADE PARA CORREÇÃO`, `AGUARDANDO ASSINATURA DO ATESTO`, `AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO CLSUS`, `AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO CLTESOURO`, `AGUARDANDO ASSINATURA DA LIQUIDAÇÃO`, `ENVIADO AO SETOR DE PAGAMENTO CPAG_SUS`, `ENVIADO AO SETOR DE PAGAMENTO CPAG_TESOURO`, `PAGO` (a filtragem por fonte no dropdown depende do texto exato "SUS"/"TESOURO" aparecer nesses valores).
+4. Colar `backend/Recibos.gs`, `backend/Utils.gs`, `backend/Code.gs`, `backend/Dashboard.gs` (só um comentário mudou nesse último) no editor do Apps Script e reimplantar (Implantar → Gerenciar implantações → editar → Nova versão).
+
+**Ainda não testado:** criação de Recibo com parcela dividida (2+ parcelas, cada uma com seu próprio anexo); edição de Recibo pra adicionar anexo depois da criação sem apagar um anexo já existente; dropdown de Status oferecendo só o ramo certo por fonte; `valorLiquidadoPorNe_` (Fase 4) continuando a somar certo depois do rename; cards "Pendentes"/"Total pago no ano" batendo com os dados reais; botão de remover parcela extra ponta a ponta.
+
+**Fora do escopo desta fase (adiado, ver decisão 9):** card "total a pagar" — depende de uma tabela futura de valores mensais recebidos por unidade (NEs recorrentes que não geram Termo Aditivo, reforçadas todo início de ano) ainda não implementada.
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
