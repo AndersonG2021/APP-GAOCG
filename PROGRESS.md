@@ -271,7 +271,7 @@ do navegador, não problema de deploy — resolvido com hard refresh
 (Ctrl+Shift+R) / aba anônima. Se isso se repetir em sessões futuras, checar o
 deploy direto (`curl` nos arquivos publicados) antes de investigar código.
 
-## Leitura automática (OCR) de Nota de Liquidação / Ordem Bancária no Recibo (CÓDIGO CONCLUÍDO, sessão 2026-07-13, aguardando o usuário ativar o serviço do Drive, colar/implantar e testar)
+## Leitura automática (OCR) de Nota de Liquidação / Ordem Bancária no Recibo (LEITURA BÁSICA CONFIRMADA, sessão 2026-07-13 - faltam testar os cenários de borda)
 
 Pedido do usuário: ao anexar uma Nota de Liquidação ou Ordem Bancária no
 Recibo (documentos oficiais do e-fisco/PE, formato fixo), ler o documento via
@@ -319,19 +319,32 @@ submit.
 anexado/validado um documento não reavalia automaticamente - precisa remover
 e reanexar. Fora de escopo desta primeira versão.
 
-**Passos manuais pendentes do usuário antes de testar:**
-1. No editor do Apps Script: `Serviços (+)` → adicionar **Drive API**
-   (Advanced Drive Service). Se der erro de API não habilitada em tempo de
-   execução, habilitar "Google Drive API" no Google Cloud Console do projeto
-   vinculado.
-2. Colar `backend/Utils.gs`, `backend/Recibos.gs`, `backend/Code.gs`
-   atualizados e reimplantar.
+**Passos manuais concluídos pelo usuário (sessão 2026-07-13):**
+1. Ativou o Advanced Drive Service (`Serviços (+)` → Drive API).
+2. Colou `backend/Utils.gs`, `backend/Recibos.gs`, `backend/Code.gs` e
+   reimplantou (nova versão).
+3. **Autorização OAuth (bloqueio real encontrado):** a autorização do projeto
+   (concedida em 7 de julho, antes desta funcionalidade existir) cobria só
+   Planilhas e Drive - faltava o escopo de Google Docs
+   (`https://www.googleapis.com/auth/documents`), exigido por
+   `DocumentApp.openById` em `extrairTextoOcr_`. Rodar uma função no editor não
+   disparava a tela de autorização sozinho (a autorização parcial já existente
+   parece ter impedido o fluxo incremental de pedir só o escopo que faltava).
+   **Fix:** o usuário removeu todo o acesso do projeto em
+   [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
+   e autorizou de novo do zero (rodando uma função no editor), dessa vez
+   incluindo Google Docs no consentimento.
 
-**Ainda não testado:** leitura da Nota de Liquidação/Ordem Bancária de
-exemplo (valores batendo, NE batendo); bloqueio ao anexar documento de NE
-diferente; travar/destravar (Remover anexo) tanto num Recibo novo quanto
+**CONFIRMADO (sessão 2026-07-13):** anexou um documento de exemplo e o valor
+foi lido/preenchido corretamente - leitura básica de OCR funcionando de
+ponta a ponta (upload → conversão → extração de NE/valor → preenchimento do
+campo).
+
+**Ainda não testado:** bloqueio ao anexar documento de NE diferente da do
+Recibo; travar/destravar (link "Remover anexo") tanto num Recibo novo quanto
 numa edição com anexo pré-existente; o mesmo fluxo dentro de uma linha de
-parcela dividida.
+parcela dividida; leitura do segundo tipo de documento (só um dos dois -
+Nota de Liquidação ou Ordem Bancária - foi testado até agora).
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
