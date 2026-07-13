@@ -142,7 +142,7 @@ Decisões tomadas antes de implementar (a Fase 3.2 tinha mudado o SOF pra múlti
 
 **Testado e confirmado pelo usuário:** NE original com fonte → reforço (seleção do número) → card com valor bruto certo → Recibo com `nota_empenho`/`valor_liquidado` reduzindo o valor atual do card → alerta vermelho + destaque no topo quando abaixo da parcela mensal → botão "+ Reforço" direto pelo card.
 
-## Fase 5 — Recibos (CÓDIGO CONCLUÍDO, sessão 2026-07-12, aguardando o usuário colar/implantar e ajustar a planilha)
+## Fase 5 — Recibos (CONCLUÍDA, implantada e testada pelo usuário — sessão 2026-07-13)
 
 Do pedido original do usuário:
 - Filtros para todos os campos + cards de indicadores (pendentes, total pago no ano, total a pagar).
@@ -181,13 +181,7 @@ Do pedido original do usuário:
 - Cards de indicador "Pendentes" (status ≠ PAGO) e "Total pago no ano" (soma de `valor_pago` das linhas cuja `competencia` cai no ano atual), reativos aos filtros ativos — nova função `indicadoresRecibos` em `backend/Recibos.gs` (`case` novo em `Code.gs`), chamada em paralelo com `listarRecibos`.
 - Botão de remover parcela extra (`.linha-parcela-dividida-remover`, mesmo padrão visual do `.linha-fonte-remover` do SOF) — só aparece quando há mais de 2 parcelas, já que `criarGrupoParcelaDivididaRecibo` exige no mínimo 2.
 
-**Passos manuais pendentes do usuário antes de testar:**
-1. Na aba **Recibos** da planilha: renomear os cabeçalhos `rateio_grupo_id`→`parcela_dividida_grupo_id` e `percentual_rateio`→`percentual_parcela_dividida` (só o texto do cabeçalho, os dados nas células não mudam); adicionar as 4 colunas novas de anexo (`nota_liquidacao_drive_id`, `nota_liquidacao_url`, `ordem_bancaria_arquivo_drive_id`, `ordem_bancaria_arquivo_url`) — a posição não importa, o backend lê por nome de cabeçalho, não por posição.
-2. Confirmar que a conta que implanta o Apps Script tem acesso de escrita às pastas do Drive de Notas de Liquidação (`1szdIJMxBvIL5BU-ZbTWJh6AAN_tjxTyl`) e Ordens Bancárias (`1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN`).
-3. Em **Listas Personalizadas → Status (Recibo)**, cadastrar os 8 valores novos do fluxo ramificado: `ENVIADO DE VOLTA A UNIDADE PARA CORREÇÃO`, `AGUARDANDO ASSINATURA DO ATESTO`, `AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO CLSUS`, `AGUARDANDO LIBERAÇÃO LIQUIDAÇÃO CLTESOURO`, `AGUARDANDO ASSINATURA DA LIQUIDAÇÃO`, `ENVIADO AO SETOR DE PAGAMENTO CPAG_SUS`, `ENVIADO AO SETOR DE PAGAMENTO CPAG_TESOURO`, `PAGO` (a filtragem por fonte no dropdown depende do texto exato "SUS"/"TESOURO" aparecer nesses valores).
-4. Colar `backend/Recibos.gs`, `backend/Utils.gs`, `backend/Code.gs`, `backend/Dashboard.gs` (só um comentário mudou nesse último) no editor do Apps Script e reimplantar (Implantar → Gerenciar implantações → editar → Nova versão).
-
-**Ainda não testado:** criação de Recibo com parcela dividida (2+ parcelas, cada uma com seu próprio anexo); edição de Recibo pra adicionar anexo depois da criação sem apagar um anexo já existente; dropdown de Status oferecendo só o ramo certo por fonte; `valorLiquidadoPorNe_` (Fase 4) continuando a somar certo depois do rename; cards "Pendentes"/"Total pago no ano" batendo com os dados reais; botão de remover parcela extra ponta a ponta.
+**CONFIRMADO (sessão 2026-07-13):** usuário concluiu os 4 passos manuais (renomear colunas `rateio_grupo_id`/`percentual_rateio`, criar as 4 colunas de anexo, confirmar acesso de escrita do Drive, cadastrar os 8 valores novos de Status) e colou/reimplantou `Recibos.gs`, `Utils.gs`, `Code.gs`, `Dashboard.gs`. Testado e funcionando: criação de Recibo com parcela dividida (2+ parcelas, cada uma com seu próprio anexo); edição de Recibo adicionando anexo sem apagar um já existente; dropdown de Status oferecendo só o ramo certo por fonte; `valorLiquidadoPorNe_` (Fase 4) continuando a somar certo depois do rename; cards "Pendentes"/"Total pago no ano"; botão de remover parcela extra.
 
 **Fora do escopo desta fase (adiado, ver decisão 9):** card "total a pagar" — depende de uma tabela futura de valores mensais recebidos por unidade (NEs recorrentes que não geram Termo Aditivo, reforçadas todo início de ano) ainda não implementada.
 
@@ -202,7 +196,7 @@ backend — os campos já existiam). O selo de "Parcela dividida" que antes tinh
 coluna própria saiu da tabela (não fazia parte da lista pedida); o dado
 continua existindo no backend, só não é mais mostrado ali.
 
-### Unidades — Valor do C.G. + Termos Aditivos = "Parcela mensal" (CÓDIGO CONCLUÍDO, aguardando usuário colar/implantar e ajustar a planilha)
+### Unidades — Valor do C.G. + Termos Aditivos = "Parcela mensal" (CONCLUÍDA, implantada e testada pelo usuário — sessão 2026-07-13)
 
 Redesenho pedido pelo usuário: cada unidade passa a ter um **Valor do C.G.**
 (campo numérico único, ao lado do `contrato_gestao` de texto que já existia) e
@@ -261,23 +255,13 @@ já está salvo em `/backend/Unidades.gs`.
   (existente); a unidade some da listagem padrão ("Somente ativas") mas
   continua no banco.
 
-**Passos manuais pendentes do usuário antes de testar:**
-1. Na planilha: criar a coluna `valor_contrato_gestao` na aba **Unidades**;
-   criar a aba nova **UnidadesTA** com cabeçalho
-   `id, unidade_id, objeto_ta, numero_ta, valor_ta, criado_por, data_criacao`.
-2. No editor do Apps Script, adicionar `UnidadesTA: 'UTA'` ao mapa
-   `PREFIXOS_ID` dentro de `Contadores.gs` (mesma pendência que já existia
-   pra `SofFontes: 'SFT'` na Fase 3.2 — `Contadores.gs` continua fora deste
-   repositório). Sem isso, `proximoId_('UnidadesTA')` (usado em
-   `substituirTasDaUnidade_`) lança erro "Prefixo de ID não definido".
-3. Colar `backend/Unidades.gs` e `backend/Utils.gs` atualizados no editor do
-   Apps Script e reimplantar.
-
-**Ainda não testado:** criar unidade com Valor do C.G. + 2 T.A.s e conferir a
-"Parcela mensal" no cartão; expandir/recolher o cartão; editar pra
-adicionar/remover T.A.; excluir com o aviso grande e conferir que some/reaparece
-junto com "Somente ativas"; conferir que `criarSof`/`criarRecibo` (que dependem
-de `listarUnidades`) continuam funcionando depois da mudança de schema.
+**CONFIRMADO (sessão 2026-07-13):** usuário criou a coluna `valor_contrato_gestao`
+e a aba **UnidadesTA** na planilha, adicionou `UnidadesTA: 'UTA'` ao mapa
+`PREFIXOS_ID` em `Contadores.gs`, colou `backend/Unidades.gs`/`backend/Utils.gs`
+atualizados e reimplantou. Testado e funcionando: criar unidade com Valor do
+C.G. + 2 T.A.s e conferir a "Parcela mensal" no cartão; expandir/recolher o
+cartão; editar pra adicionar/remover T.A.; excluir com o aviso grande;
+`criarSof`/`criarRecibo` continuam funcionando depois da mudança de schema.
 
 **Nota de deploy (sessão 2026-07-12):** o usuário reportou "nada mudou no
 visual" depois do push — verificado via `curl` direto no GitHub Pages que
@@ -291,4 +275,4 @@ deploy direto (`curl` nos arquivos publicados) antes de investigar código.
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados nesta sessão - ver pendências da Fase 3.2/Performance/Unidades). Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados neste repositório). `Contadores.gs` já tem `SofFontes: 'SFT'` e `UnidadesTA: 'UTA'` no mapa `PREFIXOS_ID` (confirmado, sessão 2026-07-13) — só o conteúdo completo do arquivo continua fora deste repo. Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
