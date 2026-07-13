@@ -208,9 +208,76 @@ const TelaRecibos = (function () {
   async function lerAnexoDoInput_(input) {
     const arquivo = input && input.files[0];
     if (!arquivo) return null;
+    // Se o anexo já foi lido/validado por OCR no momento em que foi escolhido
+    // (ver ligarAnexoComOcr_), reaproveita em vez de reler o arquivo.
+    if (input._anexoValidado) return input._anexoValidado;
     if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
     const base64 = await UI.lerArquivoBase64(arquivo);
     return { base64, nome: arquivo.name, tipo: arquivo.type };
+  }
+
+  /**
+   * Liga um <input type="file"> de anexo (Nota de Liquidação/Ordem Bancária)
+   * à leitura automática por OCR (backend `lerAnexoRecibo`): ao escolher o
+   * arquivo, lê o valor e confere a Nota de Empenho do documento contra
+   * obterNotaEmpenho(). Se bater, trava valorInputEl (somente leitura) com o
+   * valor extraído e mostra um link "Remover anexo"; se não bater (ou der
+   * erro), limpa o input e avisa, sem travar nada. Reaproveitado nos 3
+   * contextos do formulário (novo/parcela dividida/edição).
+   *
+   * Quando o usuário remove um anexo que já existia salvo no Recibo (edição),
+   * marca `inputEl.dataset.removerExistente = '1'` - salvarReciboEdicao lê essa
+   * flag pra sinalizar ao backend que deve desanexar
+   * (`removerNotaLiquidacaoArquivo`/`removerOrdemBancariaArquivo`). Nos
+   * formulários de Recibo novo essa flag simplesmente não é lida por ninguém.
+   */
+  function ligarAnexoComOcr_({ inputEl, tipo, obterNotaEmpenho, valorInputEl }) {
+    const statusEl = document.createElement('p');
+    statusEl.className = 'ajuda anexo-ocr-status oculto';
+    inputEl.insertAdjacentElement('afterend', statusEl);
+
+    function travar(valor, existente) {
+      valorInputEl.value = valor;
+      valorInputEl.readOnly = true;
+      statusEl.classList.remove('oculto');
+      statusEl.innerHTML = '🔒 Valor lido do documento. <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
+      statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', function (e) {
+        e.preventDefault();
+        valorInputEl.readOnly = false;
+        valorInputEl.value = '';
+        inputEl.value = '';
+        inputEl._anexoValidado = null;
+        inputEl.dataset.removerExistente = existente ? '1' : '';
+        statusEl.classList.add('oculto');
+      });
+    }
+
+    inputEl.addEventListener('change', async function () {
+      const arquivo = inputEl.files[0];
+      if (!arquivo) return;
+      const notaEmpenho = (obterNotaEmpenho() || '').trim();
+      if (!notaEmpenho) {
+        UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro');
+        inputEl.value = '';
+        return;
+      }
+      try {
+        if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        const resultado = await Api.chamar('lerAnexoRecibo', {
+          tipo, arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
+        });
+        inputEl._anexoValidado = { base64, nome: arquivo.name, tipo: arquivo.type };
+        inputEl.dataset.removerExistente = '';
+        travar(resultado.valor, false);
+      } catch (err) {
+        inputEl.value = '';
+        inputEl._anexoValidado = null;
+        UI.toast(err.message, 'erro');
+      }
+    });
+
+    return { travar };
   }
 
   // ===================== NOVO RECIBO (com ou sem parcela dividida) =====================
@@ -314,6 +381,16 @@ const TelaRecibos = (function () {
     document.getElementById('btnAddParcelaDividida').addEventListener('click', adicionarLinhaParcelaDividida);
     document.getElementById('btnCancelarRec').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRec').addEventListener('click', salvarReciboNovo);
+
+    const obterNotaEmpenhoNovo_ = () => document.getElementById('recNotaEmpenho').value;
+    ligarAnexoComOcr_({
+      inputEl: document.getElementById('recNotaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
+      obterNotaEmpenho: obterNotaEmpenhoNovo_, valorInputEl: document.getElementById('recValorLiquidado')
+    });
+    ligarAnexoComOcr_({
+      inputEl: document.getElementById('recOrdemBancariaArquivo'), tipo: 'ordem_bancaria',
+      obterNotaEmpenho: obterNotaEmpenhoNovo_, valorInputEl: document.getElementById('recValorPago')
+    });
   }
 
   function adicionarLinhaParcelaDividida() {
@@ -341,6 +418,16 @@ const TelaRecibos = (function () {
       atualizarBotoesRemoverParcelaDividida_();
     });
     atualizarBotoesRemoverParcelaDividida_();
+
+    const obterNotaEmpenhoPd_ = () => document.getElementById('recNotaEmpenho').value;
+    ligarAnexoComOcr_({
+      inputEl: div.querySelector('.pd-notaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
+      obterNotaEmpenho: obterNotaEmpenhoPd_, valorInputEl: div.querySelector('.pd-liquidado')
+    });
+    ligarAnexoComOcr_({
+      inputEl: div.querySelector('.pd-ordemBancariaArquivo'), tipo: 'ordem_bancaria',
+      obterNotaEmpenho: obterNotaEmpenhoPd_, valorInputEl: div.querySelector('.pd-pago')
+    });
   }
 
   /** criarGrupoParcelaDivididaRecibo exige no mínimo 2 parcelas - esconde o botão de remover quando restam só 2. */
@@ -449,6 +536,18 @@ const TelaRecibos = (function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);
     });
 
+    const obterNotaEmpenhoEd_ = () => document.getElementById('recEdNotaEmpenho').value;
+    const anexoNl = ligarAnexoComOcr_({
+      inputEl: document.getElementById('recEdNotaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
+      obterNotaEmpenho: obterNotaEmpenhoEd_, valorInputEl: document.getElementById('recEdValorLiquidado')
+    });
+    if (recibo.nota_liquidacao_url) anexoNl.travar(recibo.valor_liquidado, true);
+    const anexoOb = ligarAnexoComOcr_({
+      inputEl: document.getElementById('recEdOrdemBancariaArquivo'), tipo: 'ordem_bancaria',
+      obterNotaEmpenho: obterNotaEmpenhoEd_, valorInputEl: document.getElementById('recEdValorPago')
+    });
+    if (recibo.ordem_bancaria_arquivo_url) anexoOb.travar(recibo.valor_pago, true);
+
     document.getElementById('btnCancelarRecEd').addEventListener('click', async () => {
       await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
       UI.fecharModal();
@@ -479,9 +578,14 @@ const TelaRecibos = (function () {
     };
 
     try {
-      const nl = await lerAnexoDoInput_(document.getElementById('recEdNotaLiquidacaoArquivo'));
+      const inputNl = document.getElementById('recEdNotaLiquidacaoArquivo');
+      const inputOb = document.getElementById('recEdOrdemBancariaArquivo');
+      if (inputNl.dataset.removerExistente === '1') dados.removerNotaLiquidacaoArquivo = true;
+      if (inputOb.dataset.removerExistente === '1') dados.removerOrdemBancariaArquivo = true;
+
+      const nl = await lerAnexoDoInput_(inputNl);
       if (nl) Object.assign(dados, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-      const ob = await lerAnexoDoInput_(document.getElementById('recEdOrdemBancariaArquivo'));
+      const ob = await lerAnexoDoInput_(inputOb);
       if (ob) Object.assign(dados, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
 
       await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
