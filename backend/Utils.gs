@@ -319,10 +319,14 @@ function toNumber_(value) {
  * como um Google Doc convertido com OCR, lê o texto do Doc gerado e descarta
  * o Doc (lixeira). Requer o Advanced Drive Service ("Drive API") ativado no
  * projeto do Apps Script (Serviços (+) → Drive API).
+ *
+ * Sintaxe da Drive API v3 (o `Drive.Files.create` com `resource.name` e
+ * `ocrLanguage` no lugar de `Drive.Files.insert`/`resource.title`/`ocr:true`
+ * da v2 - a versão que o Serviços (+) do editor adiciona hoje em dia é a v3).
  */
 function extrairTextoOcr_(base64, nome, mimeType) {
   var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType || 'application/pdf', nome);
-  var arquivoTemp = Drive.Files.insert({ title: nome, mimeType: MimeType.GOOGLE_DOCS }, blob, { ocr: true, ocrLanguage: 'pt' });
+  var arquivoTemp = Drive.Files.create({ name: nome, mimeType: MimeType.GOOGLE_DOCS }, blob, { ocrLanguage: 'pt' });
   try {
     return DocumentApp.openById(arquivoTemp.id).getBody().getText();
   } finally {
