@@ -279,6 +279,14 @@ adicionar/remover T.A.; excluir com o aviso grande e conferir que some/reaparece
 junto com "Somente ativas"; conferir que `criarSof`/`criarRecibo` (que dependem
 de `listarUnidades`) continuam funcionando depois da mudança de schema.
 
+**Nota de deploy (sessão 2026-07-12):** o usuário reportou "nada mudou no
+visual" depois do push — verificado via `curl` direto no GitHub Pages que
+`js/unidades.js`, `js/recibos.js` e `css/style.css` publicados **já eram os
+novos** (conteúdo confirmado, headers `Cache-Control: max-age=600`). Era cache
+do navegador, não problema de deploy — resolvido com hard refresh
+(Ctrl+Shift+R) / aba anônima. Se isso se repetir em sessões futuras, checar o
+deploy direto (`curl` nos arquivos publicados) antes de investigar código.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
