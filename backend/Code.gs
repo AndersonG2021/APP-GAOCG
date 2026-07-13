@@ -87,6 +87,7 @@ function handleRequest_(params) {
       case 'atualizarRecibo': return jsonOut_(atualizarRecibo(session, params.id, params.data));
       case 'marcarReciboVisualizado': return jsonOut_(marcarReciboVisualizado(session, params.id));
       case 'migrarRecibosHistorico': return jsonOut_(migrarRecibosHistorico(session, params.linhas));
+      case 'lerAnexoRecibo': return jsonOut_(lerAnexoRecibo(session, params));
 
       // Log de Auditoria (Funcionalidade 6)
       case 'listarLogAuditoria': return jsonOut_(listarLogAuditoria(session, params));

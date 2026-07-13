@@ -311,3 +311,31 @@ function toNumber_(value) {
   var n = Number(String(value).replace(',', '.'));
   return isNaN(n) ? 0 : n;
 }
+
+// ===================== OCR (leitura de anexos) =====================
+
+/**
+ * Converte um anexo (PDF ou imagem) em texto via OCR do Google Drive: sobe
+ * como um Google Doc convertido com OCR, lê o texto do Doc gerado e descarta
+ * o Doc (lixeira). Requer o Advanced Drive Service ("Drive API") ativado no
+ * projeto do Apps Script (Serviços (+) → Drive API).
+ */
+function extrairTextoOcr_(base64, nome, mimeType) {
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType || 'application/pdf', nome);
+  var arquivoTemp = Drive.Files.insert({ title: nome, mimeType: MimeType.GOOGLE_DOCS }, blob, { ocr: true, ocrLanguage: 'pt' });
+  try {
+    return DocumentApp.openById(arquivoTemp.id).getBody().getText();
+  } finally {
+    DriveApp.getFileById(arquivoTemp.id).setTrashed(true);
+  }
+}
+
+/**
+ * Converte valor monetário no formato BR ("1.053.812,42") pra número.
+ * toNumber_ não serve aqui: ele só troca vírgula por ponto, sem remover o
+ * separador de milhar.
+ */
+function normalizarValorMonetarioBr_(texto) {
+  var n = Number(String(texto || '').replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
+}

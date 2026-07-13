@@ -7,6 +7,54 @@
 var PASTA_NOTA_LIQUIDACAO_ID = '1szdIJMxBvIL5BU-ZbTWJh6AAN_tjxTyl';
 var PASTA_ORDEM_BANCARIA_ID = '1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN';
 
+/**
+ * Padrão da Nota de Empenho nos documentos oficiais do e-fisco/PE (ex:
+ * "2026NE000418"). Usado em vez de amarrar a extração ao rótulo que a
+ * precede ("EMPENHO:"), porque esse rótulo também aparece dentro de
+ * "DATA DO EMPENHO:" nos mesmos documentos - o formato do próprio número é
+ * um jeito mais robusto de achar o valor certo independente de layout.
+ */
+var REGEX_NUMERO_NE_DOCUMENTO = /\b(\d{4}NE\d{6})\b/i;
+var REGEX_VALOR_LIQUIDADO_DOCUMENTO = /VALOR\s+LIQUIDADO\s*:?\s*([\d.,]+)/i;
+var REGEX_VALOR_LIQUIDO_OB_DOCUMENTO = /VALOR\s+L[ÍI]QUIDO\s*:?\s*([\d.,]+)/i;
+
+/**
+ * Lê (via OCR) uma Nota de Liquidação ou Ordem Bancária recém escolhida no
+ * formulário - antes de salvar o Recibo - e extrai o valor correspondente
+ * (Valor Liquidado / Valor Líquido), validando que a Nota de Empenho citada
+ * no documento é a mesma do Recibo em edição. Chamada pelo frontend assim
+ * que o usuário anexa o arquivo (ver ligarAnexoComOcr_ em js/recibos.js).
+ */
+function lerAnexoRecibo(session, params) {
+  params = params || {};
+  var tipo = params.tipo === 'ordem_bancaria' ? 'ordem_bancaria' : 'nota_liquidacao';
+  var notaEmpenhoEsperada = sanitizeString_(params.notaEmpenhoEsperada, 50);
+  if (!isNonEmpty_(notaEmpenhoEsperada)) return fail_('Preencha a Nota de Empenho antes de anexar este documento.');
+  if (!params.arquivoBase64) return fail_('Nenhum arquivo enviado.');
+
+  var texto;
+  try {
+    texto = extrairTextoOcr_(params.arquivoBase64, params.arquivoNome, params.arquivoTipo);
+  } catch (e) {
+    return fail_('Não foi possível ler o documento: ' + e.message);
+  }
+
+  var matchNe = texto.match(REGEX_NUMERO_NE_DOCUMENTO);
+  if (!matchNe) return fail_('Não foi possível identificar a Nota de Empenho no documento anexado.');
+  var neDocumento = matchNe[1].toUpperCase();
+  if (neDocumento !== notaEmpenhoEsperada.toUpperCase()) {
+    return fail_('A Nota de Empenho do documento (' + neDocumento + ') não corresponde à Nota de Empenho do Recibo (' + notaEmpenhoEsperada + ').');
+  }
+
+  var regexValor = tipo === 'ordem_bancaria' ? REGEX_VALOR_LIQUIDO_OB_DOCUMENTO : REGEX_VALOR_LIQUIDADO_DOCUMENTO;
+  var matchValor = texto.match(regexValor);
+  if (!matchValor) return fail_('Não foi possível identificar o valor no documento anexado.');
+  var valor = normalizarValorMonetarioBr_(matchValor[1]);
+  if (valor === null) return fail_('Valor identificado no documento é inválido.');
+
+  return ok_({ valor: valor, numero_ne: neDocumento });
+}
+
 function diasSemAlteracaoRecibo_(dataIso) {
   return diasSemAlteracao_(dataIso);
 }
@@ -188,6 +236,18 @@ function atualizarRecibo(session, id, dados) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = toNumber_(dados[campo]);
   });
   if (dados.hasOwnProperty('completo')) atualizado.completo = toBool_(dados.completo);
+
+  // Desanexa (só a referência - o arquivo em si continua no Drive, não é
+  // apagado) antes de eventualmente anexar um novo, pra permitir remover e
+  // reanexar na mesma edição.
+  if (dados.removerNotaLiquidacaoArquivo) {
+    atualizado.nota_liquidacao_drive_id = '';
+    atualizado.nota_liquidacao_url = '';
+  }
+  if (dados.removerOrdemBancariaArquivo) {
+    atualizado.ordem_bancaria_arquivo_drive_id = '';
+    atualizado.ordem_bancaria_arquivo_url = '';
+  }
 
   if (dados.notaLiquidacaoArquivoBase64 && dados.notaLiquidacaoArquivoNome) {
     var nl = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, dados.notaLiquidacaoArquivoBase64, dados.notaLiquidacaoArquivoNome, dados.notaLiquidacaoArquivoTipo);

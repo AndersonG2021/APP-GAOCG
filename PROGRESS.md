@@ -271,6 +271,62 @@ do navegador, não problema de deploy — resolvido com hard refresh
 (Ctrl+Shift+R) / aba anônima. Se isso se repetir em sessões futuras, checar o
 deploy direto (`curl` nos arquivos publicados) antes de investigar código.
 
+## Leitura automática (OCR) de Nota de Liquidação / Ordem Bancária no Recibo (CÓDIGO CONCLUÍDO, sessão 2026-07-13, aguardando o usuário ativar o serviço do Drive, colar/implantar e testar)
+
+Pedido do usuário: ao anexar uma Nota de Liquidação ou Ordem Bancária no
+Recibo (documentos oficiais do e-fisco/PE, formato fixo), ler o documento via
+OCR e preencher automaticamente `valor_liquidado`/`valor_pago`, validando que
+a Nota de Empenho citada no documento é a mesma do Recibo.
+
+Decisões tomadas com o usuário antes de implementar:
+1. A leitura acontece **ao anexar o arquivo** (não só ao salvar o Recibo).
+2. Se a NE do documento não bater com a NE do Recibo, o sistema **bloqueia**
+   (nem preenche, nem deixa o anexo "pegar").
+3. Depois de lido, o campo de valor **trava (somente leitura)** - só o
+   documento manda no valor - com um link **"Remover anexo"** que libera o
+   campo de novo (e desanexa, sem apagar o arquivo do Drive).
+
+**Backend:**
+- `backend/Utils.gs`: `extrairTextoOcr_` (sobe o anexo como Google Doc
+  convertido com OCR via Advanced Drive Service, lê o texto, descarta o Doc) e
+  `normalizarValorMonetarioBr_` (converte "1.053.812,42" pra número - `toNumber_`
+  existente não serve, não remove separador de milhar).
+- `backend/Recibos.gs`: nova `lerAnexoRecibo(session, params)` - extrai a NE do
+  documento pelo próprio formato (`\d{4}NE\d{6}`, ex: "2026NE000418" - mais
+  robusto que amarrar ao rótulo "EMPENHO:", que também aparece dentro de
+  "DATA DO EMPENHO:" nos mesmos documentos), compara com a NE do Recibo, e
+  extrai o valor pelo rótulo certo ("VALOR LIQUIDADO:" ou "VALOR LÍQUIDO:").
+  `atualizarRecibo` ganhou suporte a `removerNotaLiquidacaoArquivo`/
+  `removerOrdemBancariaArquivo` (zera só a referência, não apaga do Drive).
+- `backend/Code.gs`: novo `case 'lerAnexoRecibo'`.
+
+**Frontend (`js/recibos.js`):** novo helper `ligarAnexoComOcr_` (liga um
+`<input type="file">` de anexo à leitura automática, trava/destrava o campo
+de valor correspondente, mostra o link de remover) aplicado nos 3 contextos:
+Recibo novo (parcela única), cada linha de parcela dividida, e edição de
+Recibo existente (nesse último, se já havia um anexo salvo, o campo já nasce
+travado ao abrir o formulário). `lerAnexoDoInput_` passou a reaproveitar o
+`{base64,nome,tipo}` já validado no momento do anexo, sem reler o arquivo no
+submit.
+
+**Limitação conhecida:** trocar a Nota de Empenho *depois* de já ter
+anexado/validado um documento não reavalia automaticamente - precisa remover
+e reanexar. Fora de escopo desta primeira versão.
+
+**Passos manuais pendentes do usuário antes de testar:**
+1. No editor do Apps Script: `Serviços (+)` → adicionar **Drive API**
+   (Advanced Drive Service). Se der erro de API não habilitada em tempo de
+   execução, habilitar "Google Drive API" no Google Cloud Console do projeto
+   vinculado.
+2. Colar `backend/Utils.gs`, `backend/Recibos.gs`, `backend/Code.gs`
+   atualizados e reimplantar.
+
+**Ainda não testado:** leitura da Nota de Liquidação/Ordem Bancária de
+exemplo (valores batendo, NE batendo); bloqueio ao anexar documento de NE
+diferente; travar/destravar (Remover anexo) tanto num Recibo novo quanto
+numa edição com anexo pré-existente; o mesmo fluxo dentro de uma linha de
+parcela dividida.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
