@@ -291,6 +291,12 @@ Decisões tomadas com o usuário antes de implementar:
   convertido com OCR via Advanced Drive Service, lê o texto, descarta o Doc) e
   `normalizarValorMonetarioBr_` (converte "1.053.812,42" pra número - `toNumber_`
   existente não serve, não remove separador de milhar).
+  **Bug corrigido (sessão 2026-07-13):** primeira versão usava a sintaxe da
+  Drive API v2 (`Drive.Files.insert`, `resource.title`, `ocr:true`), mas o
+  "Serviços (+)" do editor do Apps Script hoje adiciona a **v3** por padrão,
+  cujo método é `Drive.Files.create` (`resource.name` no lugar de `title`,
+  `ocrLanguage` sem o `ocr:true` separado) - erro em produção:
+  `Drive.Files.insert is not a function`. Corrigido para a sintaxe v3.
 - `backend/Recibos.gs`: nova `lerAnexoRecibo(session, params)` - extrai a NE do
   documento pelo próprio formato (`\d{4}NE\d{6}`, ex: "2026NE000418" - mais
   robusto que amarrar ao rótulo "EMPENHO:", que também aparece dentro de
