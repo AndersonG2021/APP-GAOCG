@@ -384,6 +384,14 @@ Decisões tomadas com o usuário antes de implementar:
 
 **Testado e confirmado pelo usuário:** listas OSS/Objeto semeadas corretamente; filtros novos funcionando nas 3 telas (SOF, Notas de Empenho, Recibos); seleção de Objeto na criação/edição com autopreenchimento preservado.
 
+## Nome exibido editável pelo próprio usuário (CONCLUÍDO, sessão 2026-07-14)
+Cada usuário agora pode editar como o próprio nome aparece na aplicação (não o login), pelo modal "Minha conta" (clicar no nome/perfil no canto superior direito). Backend: nova `alterarMeuNome(session, novoNome)` em `Auth.gs` (mesmo padrão de `alterarMinhaSenha`) + `case 'alterarMeuNome'` em `Code.gs`. Frontend: campo + botão "Salvar nome" em `abrirModalPerfil` (`js/app.js`); `Auth.atualizarNomeLocal(novoNome)` (`js/auth.js`) atualiza a sessão em memória/`sessionStorage` na hora, sem exigir novo login. Testado e confirmado.
+
+## Fechar modal de edição (X/clique fora) libera a trava de edição simultânea (CONCLUÍDO, sessão 2026-07-14)
+Bug encontrado: nos formulários de edição de SOF e Recibo, só o botão "Cancelar" liberava a trava de edição simultânea (`EdicaoSimultanea.sairDaEdicao`, Funcionalidade 10) — fechar pelo X ou clicando fora do modal deixava a trava presa (sem expiração automática por tempo), fazendo outros usuários continuarem vendo "está sendo editado por você" indefinidamente. Só frontend, sem mudança de backend.
+
+Fix: novo mecanismo `UI.aoFecharModal(callback)` em `js/app.js` — registra uma função a ser chamada sempre que `UI.fecharModal()` rodar, por qualquer caminho (Cancelar, X, clique fora, ou fechamento programático após salvar); zerado a cada `abrirModal()` e após disparar uma vez. `js/sof.js`/`js/recibos.js` passaram a registrar `sairDaEdicao` uma única vez ao abrir a edição, em vez de duplicar a chamada manualmente no Cancelar e no sucesso do Salvar. Testado e confirmado pelo usuário.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
