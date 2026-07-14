@@ -3,7 +3,7 @@
  * (Funcionalidades 3, 4 e 8).
  */
 
-var TIPOS_LISTA = ['ANDAMENTO_SOF', 'STATUS_RECIBO'];
+var TIPOS_LISTA = ['ANDAMENTO_SOF', 'STATUS_RECIBO', 'OSS', 'OBJETO'];
 
 /**
  * Lê a aba ListasPersonalizadas inteira, com cache de 30s. Sem isso,
@@ -85,6 +85,30 @@ function atualizarOpcao(session, id, dados) {
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheListas_();
   return ok_(atualizado);
+}
+
+/** Carga única (rodar manualmente no editor): popula a lista OSS a partir dos valores já cadastrados em Unidades. */
+function semearListaOSS() {
+  var existentes = todasOpcoesComCache_().filter(function (l) { return l.tipo_lista === 'OSS'; }).map(function (l) { return l.valor; });
+  var valores = Array.from(new Set(sheetToObjects_(getSheet_(SHEETS.UNIDADES)).map(function (u) { return sanitizeString_(u.oss, 200); }).filter(isNonEmpty_)));
+  var sheet = getSheet_(SHEETS.LISTAS);
+  valores.filter(function (v) { return existentes.indexOf(v) === -1; }).forEach(function (v) {
+    appendObjectRow_(sheet, { id: proximoId_('ListasPersonalizadas'), tipo_lista: 'OSS', valor: v, pausa_contagem_parado: false, ativo: true, criado_por: 'rotina_semeadura', data_criacao: nowIso_() });
+  });
+  invalidarCacheListas_();
+}
+
+/** Carga única (rodar manualmente no editor): popula a lista OBJETO a partir dos valores já usados em SOF e Recibos. */
+function semearListaObjetos() {
+  var existentes = todasOpcoesComCache_().filter(function (l) { return l.tipo_lista === 'OBJETO'; }).map(function (l) { return l.valor; });
+  var doSof = sheetToObjects_(getSheet_(SHEETS.SOF)).map(function (s) { return sanitizeString_(s.objeto, 500); });
+  var doRecibo = sheetToObjects_(getSheet_(SHEETS.RECIBOS)).map(function (r) { return sanitizeString_(r.objeto, 500); });
+  var valores = Array.from(new Set(doSof.concat(doRecibo).filter(isNonEmpty_)));
+  var sheet = getSheet_(SHEETS.LISTAS);
+  valores.filter(function (v) { return existentes.indexOf(v) === -1; }).forEach(function (v) {
+    appendObjectRow_(sheet, { id: proximoId_('ListasPersonalizadas'), tipo_lista: 'OBJETO', valor: v, pausa_contagem_parado: false, ativo: true, criado_por: 'rotina_semeadura', data_criacao: nowIso_() });
+  });
+  invalidarCacheListas_();
 }
 
 /**
