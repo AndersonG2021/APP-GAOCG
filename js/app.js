@@ -146,8 +146,13 @@ const App = (function () {
   function abrirModalPerfil() {
     const usuario = Auth.usuario();
     const corpo = `
+      <form id="formMeuNome">
+        <div class="campo"><label>Nome exibido na aplicação *</label><input id="meuNome" value="${UI.escaparHtml(usuario.nome)}" required /></div>
+        <p id="nomeErro" class="erro-campo oculto"></p>
+      </form>
       <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
       <div class="campo"><label>Perfil</label><input value="${usuario.perfil === 'gerente' ? 'Gerente' : 'Analista'}" disabled /></div>
+      <button type="button" class="botao" id="btnSalvarNome">Salvar nome</button>
       <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
       <h4 style="margin:0 0 8px">Alterar senha</h4>
       <form id="formTrocarSenha">
@@ -162,6 +167,23 @@ const App = (function () {
       { pequeno: true });
 
     document.getElementById('btnFecharPerfil').addEventListener('click', UI.fecharModal);
+
+    document.getElementById('btnSalvarNome').addEventListener('click', async () => {
+      const erroEl = document.getElementById('nomeErro');
+      erroEl.classList.add('oculto');
+      const novoNome = document.getElementById('meuNome').value.trim();
+      if (!novoNome) { UI.mostrarErro(erroEl, 'Informe o nome.'); return; }
+
+      try {
+        await Api.chamar('alterarMeuNome', { novoNome });
+        Auth.atualizarNomeLocal(novoNome);
+        document.getElementById('nomeUsuarioTopo').textContent = novoNome;
+        UI.toast('Nome atualizado com sucesso.', 'sucesso');
+      } catch (err) {
+        UI.mostrarErro(erroEl, err.message);
+      }
+    });
+
     document.getElementById('btnSalvarSenha').addEventListener('click', async () => {
       const erroEl = document.getElementById('perfilErro');
       erroEl.classList.add('oculto');

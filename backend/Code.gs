@@ -52,6 +52,7 @@ function handleRequest_(params) {
       case 'inativarUsuario': return jsonOut_(inativarUsuario(session, params.id));
       case 'redefinirSenha': return jsonOut_(redefinirSenha(session, params.id, params.novaSenha));
       case 'alterarMinhaSenha': return jsonOut_(alterarMinhaSenha(session, params.senhaAtual, params.novaSenha));
+      case 'alterarMeuNome': return jsonOut_(alterarMeuNome(session, params.novoNome));
 
 
       // Unidades (Funcionalidade 2)

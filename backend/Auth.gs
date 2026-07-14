@@ -141,6 +141,23 @@ function login_(loginInformado, senhaInformada) {
   });
 }
 
+/** Cada usuário pode editar como o próprio nome aparece na aplicação (não o login). */
+function alterarMeuNome(session, novoNome) {
+  var nome = sanitizeString_(novoNome, 200);
+  if (!isNonEmpty_(nome)) return fail_('Informe o nome.');
+
+  var sheet = getSheet_(SHEETS.USUARIOS);
+  var usuario = findById_(sheet, session.id);
+  if (!usuario) return fail_('Usuário não encontrado.');
+
+  var atualizado = Object.assign({}, usuario, { nome: nome });
+  var rowIndex = usuario._row;
+  delete atualizado._row;
+  updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(session.id);
+  return ok_({ nome: nome });
+}
+
 function alterarMinhaSenha(session, senhaAtual, novaSenha) {
   if (!isNonEmpty_(senhaAtual) || !isNonEmpty_(novaSenha)) return fail_('Informe a senha atual e a nova senha.');
   if (String(novaSenha).length < 6) return fail_('A nova senha deve ter pelo menos 6 caracteres.');
