@@ -194,10 +194,21 @@ const App = (function () {
     TELAS[tela]();
   }
 
+  function fecharMenuMobile() {
+    document.getElementById('barraLateral').classList.remove('aberta');
+    document.getElementById('fundoMenuMobile').classList.add('oculto');
+  }
+
   function init() {
     document.querySelectorAll('#barraLateral nav button').forEach(btn => {
-      btn.addEventListener('click', () => navegarPara(btn.dataset.tela));
+      btn.addEventListener('click', () => { navegarPara(btn.dataset.tela); fecharMenuMobile(); });
     });
+
+    document.getElementById('btnMenuMobile').addEventListener('click', () => {
+      document.getElementById('barraLateral').classList.add('aberta');
+      document.getElementById('fundoMenuMobile').classList.remove('oculto');
+    });
+    document.getElementById('fundoMenuMobile').addEventListener('click', fecharMenuMobile);
 
     document.getElementById('btnSair').addEventListener('click', () => {
       Auth.encerrarSessaoLocal();
