@@ -309,6 +309,7 @@ const TelaSof = (function () {
 
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
       `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`);
+    if (editando) UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('SOF', sof.id));
 
     renderFontesFormulario();
     document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
@@ -328,10 +329,7 @@ const TelaSof = (function () {
       document.getElementById('sofGd').value = preenchido.gd_snapshot;
     });
 
-    document.getElementById('btnCancelarSof').addEventListener('click', async () => {
-      if (editando) await EdicaoSimultanea.sairDaEdicao('SOF', sof.id);
-      UI.fecharModal();
-    });
+    document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
 
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof));
 
@@ -436,7 +434,6 @@ const TelaSof = (function () {
 
       UI.toast('SOF salvo com sucesso.', 'sucesso');
       if (sofExistente) {
-        await EdicaoSimultanea.sairDaEdicao('SOF', sofExistente.id);
         UI.fecharModal();
         await carregar();
       } else {

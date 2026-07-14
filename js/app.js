@@ -27,7 +27,10 @@ const UI = (function () {
     setTimeout(() => el.remove(), 4500);
   }
 
+  let callbackFecharModal = null;
+
   function abrirModal(titulo, corpoHtml, rodapeHtml, opcoes) {
+    callbackFecharModal = null;
     document.getElementById('modalTitulo').textContent = titulo;
     document.getElementById('modalCorpo').innerHTML = corpoHtml;
     document.getElementById('modalRodape').innerHTML = rodapeHtml || '';
@@ -36,8 +39,24 @@ const UI = (function () {
     document.getElementById('sobreposicaoModal').classList.remove('oculto');
   }
 
+  /**
+   * Registra uma função a ser chamada sempre que o modal atual fechar, seja
+   * por qual caminho for (botão Cancelar, X, clique fora, ou fechamento
+   * programático após salvar) - garante que uma limpeza (ex.: liberar a trava
+   * de edição simultânea) aconteça em qualquer um desses casos, não só num
+   * botão específico. É zerado a cada abrirModal() e após disparar uma vez.
+   */
+  function aoFecharModal(callback) {
+    callbackFecharModal = callback;
+  }
+
   function fecharModal() {
     document.getElementById('sobreposicaoModal').classList.add('oculto');
+    if (callbackFecharModal) {
+      const callback = callbackFecharModal;
+      callbackFecharModal = null;
+      callback();
+    }
   }
 
   /**
@@ -110,7 +129,7 @@ const UI = (function () {
   });
 
   return {
-    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, mostrarErro, lerArquivoBase64,
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
   };
 })();

@@ -543,6 +543,7 @@ const TelaRecibos = (function () {
 
     UI.abrirModal('Editar Recibo', corpo,
       `<button class="botao" id="btnCancelarRecEd">Cancelar</button><button class="botao primario" id="btnSalvarRecEd">Salvar</button>`);
+    UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
 
     document.getElementById('recEdFonte').addEventListener('change', async function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);
@@ -560,10 +561,7 @@ const TelaRecibos = (function () {
     });
     if (recibo.ordem_bancaria_arquivo_url) anexoOb.travar(recibo.valor_pago, true);
 
-    document.getElementById('btnCancelarRecEd').addEventListener('click', async () => {
-      await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
-      UI.fecharModal();
-    });
+    document.getElementById('btnCancelarRecEd').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRecEd').addEventListener('click', () => salvarReciboEdicao(recibo));
   }
 
@@ -602,7 +600,6 @@ const TelaRecibos = (function () {
 
       await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
-      await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
       UI.fecharModal();
       await carregar();
     } catch (err) {
