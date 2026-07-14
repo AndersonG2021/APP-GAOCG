@@ -346,6 +346,19 @@ numa edição com anexo pré-existente; o mesmo fluxo dentro de uma linha de
 parcela dividida; leitura do segundo tipo de documento (só um dos dois -
 Nota de Liquidação ou Ordem Bancária - foi testado até agora).
 
+## Layout responsivo (CONCLUÍDO, testado e confirmado pelo usuário — sessão 2026-07-14)
+
+Pedido do usuário: o site precisava funcionar bem em qualquer tamanho de tela, de celular a monitor ultrawide. Mudança só de frontend (`index.html`, `js/app.js`, `css/style.css`), sem tocar em backend.
+
+- **Menu lateral retrátil no mobile** (abaixo de 860px): `#barraLateral` vira uma gaveta off-canvas (`transform: translateX(-100%)` / `.aberta`), aberta por um botão hambúrguer novo (`#btnMenuMobile`) em `#barraTopo`, com um fundo escurecido (`#fundoMenuMobile`) que fecha ao clicar fora; fecha também ao navegar pra qualquer tela. Lógica em `js/app.js` (`fecharMenuMobile()` + listeners em `init()`).
+- **Grids de formulário empilham** (abaixo de 640px): `.grade-2`/`.grade-3`/`.linha-fonte` viram 1 coluna; `.linha-parcela-dividida` empilha; padding de `#conteudo`/`.painel`/`.modal-corpo` reduz.
+- **Cards nunca estouram a largura:** `.grade-cards-sof`/`.grade-cards-unidade`/`.grade-indicadores` usam `minmax(min(Npx, 100%), 1fr)` (CSS moderno, sem precisar de media query dedicada).
+- **Tabelas com rolagem própria:** `.painel { overflow-x: auto }` + `table.tabela th/td { white-space: nowrap }` — sem isso as células só espremiam/quebravam o texto de forma feia em vez de rolar (bug encontrado no primeiro teste do usuário, corrigido na mesma sessão).
+- **Ultrawide:** `#conteudo { max-width: 1600px; margin: 0 auto }` — centraliza o conteúdo em telas muito largas em vez de esticar tabelas/formulários de ponta a ponta.
+- Ajustes pontuais: `#containerToasts` com `width: min(320px, calc(100vw - 32px))`; `.cartao-login` com padding reduzido abaixo de 400px; `.modal-rodape` com `flex-wrap: wrap` (corrigido também no primeiro teste — o botão "Inativar" do modal de Usuário estava sendo cortado da tela em vez de quebrar linha).
+
+**Nota sobre o teste do usuário:** o dropdown nativo de `<select>` (ex.: Status do Recibo) apareceu "vazando" da tela no modo responsivo do DevTools do Chrome desktop — isso é uma limitação da simulação (o Chrome desktop não reproduz o seletor nativo de verdade), não um bug do CSS. Num celular real, esse campo abre o picker nativo do sistema operacional. Vale confirmar em um aparelho de verdade se possível, mas não é motivo de preocupação.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
