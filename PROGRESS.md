@@ -359,6 +359,31 @@ Pedido do usuário: o site precisava funcionar bem em qualquer tamanho de tela, 
 
 **Nota sobre o teste do usuário:** o dropdown nativo de `<select>` (ex.: Status do Recibo) apareceu "vazando" da tela no modo responsivo do DevTools do Chrome desktop — isso é uma limitação da simulação (o Chrome desktop não reproduz o seletor nativo de verdade), não um bug do CSS. Num celular real, esse campo abre o picker nativo do sistema operacional. Vale confirmar em um aparelho de verdade se possível, mas não é motivo de preocupação.
 
+## Listas de OSS/Objeto + filtros consistentes (CONCLUÍDO, testado e confirmado pelo usuário — sessão 2026-07-14)
+
+Pedido do usuário: os filtros de OSS e Objeto (texto livre) deviam virar dropdowns alimentados por listas cadastradas, com uma nova categoria "Objeto" em Listas Personalizadas; o mesmo padrão nos campos Objeto de criação (mantendo o autopreenchimento já existente); e o conjunto completo de filtros do SOF (Busca livre, Unidade, OSS, Objeto, Tipo de unidade, DEA, Fonte) replicado em Notas de Empenho e Recibos.
+
+Decisões tomadas com o usuário antes de implementar:
+1. **OSS** virou lista gerenciada em Listas Personalizadas — categoria própria (`OSS`), separada do campo OSS já existente em Unidades.
+2. **Objeto** virou lista fechada (categoria `OBJETO`): só aceita valores já cadastrados — criar um SOF/Recibo com um Objeto novo exige cadastrá-lo em Listas Personalizadas primeiro (sem auto-cadastro on-the-fly).
+3. Nos formulários de criação/edição de SOF e Recibo, Objeto virou `<select>` (SOF era `<textarea>`; Recibo era `<input>` com `datalist`), mantendo o autopreenchimento por unidade+objeto que já existia no Recibo.
+4. **DEA em Notas de Empenho e Recibos não ganhou coluna própria** — o usuário esclareceu que é um atributo que se propaga do SOF (`sof.dea`) para a NE (via `sof_id`) e desta para o Recibo (via `nota_empenho` = `numero_ne`); o filtro resolve isso via join, sem duplicar dado.
+
+**Backend:**
+- `ListasPersonalizadas.gs`: `TIPOS_LISTA` ganhou `'OSS'`/`'OBJETO'` (toda a infraestrutura de `listarOpcoes`/`criarOpcao`/`atualizarOpcao` já era genérica). Duas funções de carga única (mesmo padrão de `corrigirFormatoTexto()`): `semearListaOSS()` (a partir dos valores já cadastrados em Unidades) e `semearListaObjetos()` (a partir dos valores já usados em SOF e Recibos) — necessárias porque as listas nasceram vazias.
+- `NotasEmpenho.gs` (`listarNotasEmpenho`): passou a juntar Unidades também (além de SOF), anexando `sof_oss`/`sof_dea`/`sof_tipo_unidade` a cada card agrupado; novos filtros `oss`/`objeto`/`tipo_unidade`/`dea`/`busca`.
+- `Recibos.gs` (`filtrarLinhasRecibos_`): novo filtro `tipo_unidade` (campo já existia em Recibo); novo filtro `dea` via `mapaDeaPorNumeroNe_()` (join `nota_empenho` → NE → SOF, só executado quando o filtro é realmente usado).
+
+**Frontend:**
+- `js/listas.js`: 4 abas (Andamento, Status, OSS, Objeto); o conceito de "pausa contagem parado" (checkbox + coluna) só aparece pras duas primeiras.
+- `js/sof.js`: filtros OSS/Objeto viraram `<select>`; campo Objeto na criação/edição virou `<select>` obrigatório (era textarea livre).
+- `js/recibos.js`: filtros novos (OSS, Tipo de unidade, DEA); Objeto (filtro e criação/edição) virou `<select>` a partir da lista global — a lógica de autopreenchimento por `historicoRecibosUnidade` (parcela contratual/fonte/NE do último lançamento) continua igual.
+- `js/notas-empenho.js`: ganhou os 7 filtros completos (Busca livre, Unidade, OSS, Objeto, Tipo de unidade, DEA, Fonte — antes só tinha Unidade/Fonte).
+
+**Nota operacional importante:** essa mudança é mais bloqueante que as anteriores — até o backend estar implantado e as duas funções de semeadura rodadas, o campo Objeto (obrigatório) aparece vazio nos formulários de SOF/Recibo, impedindo criar processos novos. Por isso o push do frontend foi segurado até o usuário confirmar os 4 passos manuais (colar os 3 `.gs`, reimplantar, rodar `semearListaOSS()`/`semearListaObjetos()`, conferir as listas na planilha).
+
+**Testado e confirmado pelo usuário:** listas OSS/Objeto semeadas corretamente; filtros novos funcionando nas 3 telas (SOF, Notas de Empenho, Recibos); seleção de Objeto na criação/edição com autopreenchimento preservado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
