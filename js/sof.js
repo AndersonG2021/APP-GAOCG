@@ -33,7 +33,12 @@ const TelaSof = (function () {
   let linhasFontes = [];
 
   async function render() {
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
+    const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
+      Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
+      TelaListas.obterOpcoes('OSS'),
+      TelaListas.obterOpcoes('OBJETO')
+    ]);
+    unidades = unidadesCarregadas;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">SOF</h2>
@@ -43,8 +48,12 @@ const TelaSof = (function () {
           <div class="campo"><label>Unidade</label>
             <select id="sofFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
           </div>
-          <div class="campo"><label>OSS</label><input id="sofFiltroOss" placeholder="OSS" /></div>
-          <div class="campo"><label>Objeto</label><input id="sofFiltroObjeto" placeholder="Objeto" /></div>
+          <div class="campo"><label>OSS</label>
+            <select id="sofFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Objeto</label>
+            <select id="sofFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
           <div class="campo"><label>Tipo de unidade</label>
             <select id="sofFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
           </div>
@@ -64,9 +73,7 @@ const TelaSof = (function () {
       </div>`;
 
     document.getElementById('btnFiltrarSof').addEventListener('click', () => { paginaAtual = 1; carregar(); });
-    ['sofBusca', 'sofFiltroOss', 'sofFiltroObjeto'].forEach(id => {
-      document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
-    });
+    document.getElementById('sofBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovoSof').addEventListener('click', async function () {
       this.disabled = true;
       try { await abrirFormulario(); } finally { this.disabled = false; }
@@ -247,6 +254,7 @@ const TelaSof = (function () {
       : [{ fonte: '', parcela_mensal: '', total_solicitado: '' }];
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
+    const opcoesObjeto = await TelaListas.obterOpcoes('OBJETO');
     const corpo = `
       <form id="formSof">
         <div class="campo"><label>Unidade *</label>
@@ -285,7 +293,12 @@ const TelaSof = (function () {
             <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
           </div>
         </div>
-        <div class="campo"><label>Objeto</label><textarea id="sofObjeto" rows="2">${UI.escaparHtml(sof ? sof.objeto : '')}</textarea></div>
+        <div class="campo"><label>Objeto *</label>
+          <select id="sofObjeto">
+            <option value="">Selecione...</option>
+            ${opcoesObjeto.map(o => `<option ${sof && sof.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
+          </select>
+        </div>
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${UI.escaparHtml(sof ? sof.observacao : '')}</textarea></div>
         <div class="campo"><label>Andamento</label>
           <div id="stepperAndamento">${editando ? '' : '<p class="ajuda">Disponível depois que o processo for salvo.</p>'}</div>

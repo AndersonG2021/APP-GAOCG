@@ -7,21 +7,31 @@ const TelaListas = (function () {
   let tipoAtual = 'ANDAMENTO_SOF';
   let opcoes = [];
 
+  const ABAS = [
+    { tipo: 'ANDAMENTO_SOF', id: 'tabAndamento', rotulo: 'Andamento (SOF)' },
+    { tipo: 'STATUS_RECIBO', id: 'tabStatus', rotulo: 'Status (Recibo)' },
+    { tipo: 'OSS', id: 'tabOss', rotulo: 'OSS' },
+    { tipo: 'OBJETO', id: 'tabObjeto', rotulo: 'Objeto' }
+  ];
+
+  /** OSS e Objeto não têm o conceito de "pausa contagem parado" (exclusivo de Andamento/Status). */
+  function temPausa() {
+    return tipoAtual === 'ANDAMENTO_SOF' || tipoAtual === 'STATUS_RECIBO';
+  }
+
   async function render() {
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Listas Personalizadas</h2>
       <div class="painel">
         <div class="barra-filtros">
-          <button class="botao" id="tabAndamento">Andamento (SOF)</button>
-          <button class="botao" id="tabStatus">Status (Recibo)</button>
+          ${ABAS.map(a => `<button class="botao" id="${a.id}">${a.rotulo}</button>`).join('')}
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovaOpcao">+ Nova opção</button>
         </div>
         <div id="listaOpcoes"></div>
       </div>`;
 
-    document.getElementById('tabAndamento').addEventListener('click', () => { tipoAtual = 'ANDAMENTO_SOF'; carregar(); });
-    document.getElementById('tabStatus').addEventListener('click', () => { tipoAtual = 'STATUS_RECIBO'; carregar(); });
+    ABAS.forEach(a => document.getElementById(a.id).addEventListener('click', () => { tipoAtual = a.tipo; carregar(); }));
     document.getElementById('btnNovaOpcao').addEventListener('click', abrirFormulario);
     await carregar();
   }
@@ -33,8 +43,7 @@ const TelaListas = (function () {
   }
 
   function marcarTabAtiva() {
-    document.getElementById('tabAndamento').classList.toggle('primario', tipoAtual === 'ANDAMENTO_SOF');
-    document.getElementById('tabStatus').classList.toggle('primario', tipoAtual === 'STATUS_RECIBO');
+    ABAS.forEach(a => document.getElementById(a.id).classList.toggle('primario', tipoAtual === a.tipo));
   }
 
   function renderTabela() {
@@ -44,15 +53,16 @@ const TelaListas = (function () {
       return;
     }
     const gerente = Auth.ehGerente();
+    const pausa = temPausa();
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Valor</th><th>Pausa contagem "parado"</th><th>Ativa</th>${gerente ? '<th>Ações</th>' : ''}</tr></thead>
+        <thead><tr><th>Valor</th>${pausa ? '<th>Pausa contagem "parado"</th>' : ''}<th>Ativa</th>${gerente ? '<th>Ações</th>' : ''}</tr></thead>
         <tbody>${opcoes.map(o => `
           <tr>
             <td>${UI.escaparHtml(o.valor)}</td>
-            <td>${o.pausa_contagem_parado ? '<span class="selo amarelo">Sim - espera externa</span>' : '<span class="selo cinza">Não</span>'}</td>
+            ${pausa ? `<td>${o.pausa_contagem_parado ? '<span class="selo amarelo">Sim - espera externa</span>' : '<span class="selo cinza">Não</span>'}</td>` : ''}
             <td>${o.ativo ? '<span class="selo verde">Ativa</span>' : '<span class="selo cinza">Inativa</span>'}</td>
-            ${gerente ? `<td><button class="botao" data-toggle-pausa="${o.id}">Alternar pausa</button> <button class="botao" data-toggle-ativo="${o.id}">Alternar ativa</button></td>` : ''}
+            ${gerente ? `<td>${pausa ? `<button class="botao" data-toggle-pausa="${o.id}">Alternar pausa</button> ` : ''}<button class="botao" data-toggle-ativo="${o.id}">Alternar ativa</button></td>` : ''}
           </tr>`).join('')}
         </tbody>
       </table>`;
@@ -76,16 +86,17 @@ const TelaListas = (function () {
   }
 
   function abrirFormulario() {
+    const pausa = temPausa();
     const corpo = `
       <form id="formOpcao">
         <div class="campo"><label>Texto da opção *</label><input id="opValor" required /></div>
-        <div class="campo">
+        ${pausa ? `<div class="campo">
           <label><input type="checkbox" id="opPausa" /> Representa espera externa conhecida (pausa a contagem de "parado")</label>
           <p class="ajuda">Ex.: "AGUARDANDO AUTORIZAÇÃO CPF", "AGUARDANDO DISPONIBILIDADE ORÇAMENTÁRIA".</p>
-        </div>
+        </div>` : ''}
         <p id="opErro" class="erro-campo oculto"></p>
       </form>`;
-    UI.abrirModal('Nova opção - ' + (tipoAtual === 'ANDAMENTO_SOF' ? 'Andamento (SOF)' : 'Status (Recibo)'), corpo,
+    UI.abrirModal('Nova opção - ' + (ABAS.find(a => a.tipo === tipoAtual) || {}).rotulo, corpo,
       `<button class="botao" id="btnCancelarOpcao">Cancelar</button><button class="botao primario" id="btnSalvarOpcao">Salvar</button>`);
 
     document.getElementById('btnCancelarOpcao').addEventListener('click', UI.fecharModal);
@@ -99,7 +110,7 @@ const TelaListas = (function () {
           data: {
             tipo_lista: tipoAtual,
             valor,
-            pausa_contagem_parado: document.getElementById('opPausa').checked
+            pausa_contagem_parado: document.getElementById('opPausa') ? document.getElementById('opPausa').checked : false
           }
         });
         Api.invalidarCache('listarOpcoes');
