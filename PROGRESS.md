@@ -482,6 +482,13 @@ Dashboard) depois das mudanças de leitura; conferir que a invalidação de
 cache funciona (ex.: criar uma Nota de Empenho e ver se o card de SOF já
 reflete na hora, sem esperar os 30s).
 
+**Complemento (mesma sessão, depois do merge com o trabalho de OSS/Objeto):**
+o merge trouxe duas leituras novas que também liam abas sem usar o cache já
+criado - corrigidas: `listarNotasEmpenho` (`unidadesPorId`, em
+`NotasEmpenho.gs`) e `mapaDeaPorNumeroNe_` (em `Recibos.gs`, usado pelo
+filtro DEA de Recibos) agora usam `todasUnidadesComCache_()`/
+`todasNotasEmpenhoComCache_()` em vez de reler a aba direto.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
