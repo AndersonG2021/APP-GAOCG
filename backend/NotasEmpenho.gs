@@ -130,7 +130,7 @@ function listarNotasEmpenho(session, params) {
   sofs.forEach(function (s) { sofsPorId[s.id] = s; });
 
   var unidadesPorId = {};
-  sheetToObjects_(getSheet_(SHEETS.UNIDADES)).forEach(function (u) { unidadesPorId[u.id] = u; });
+  todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
 
   var fontesPorSof = agruparFontesPorSof_();
   var valorLiquidadoPorNe = valorLiquidadoAgrupadoPorNe_();

@@ -310,7 +310,7 @@ function mapaDeaPorNumeroNe_() {
   var sofsPorId = {};
   sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) { sofsPorId[s.id] = s.dea; });
   var mapa = {};
-  sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).forEach(function (n) { mapa[n.numero_ne] = sofsPorId[n.sof_id] || ''; });
+  todasNotasEmpenhoComCache_().forEach(function (n) { mapa[n.numero_ne] = sofsPorId[n.sof_id] || ''; });
   return mapa;
 }
 
