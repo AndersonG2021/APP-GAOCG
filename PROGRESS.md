@@ -489,8 +489,74 @@ criado - corrigidas: `listarNotasEmpenho` (`unidadesPorId`, em
 filtro DEA de Recibos) agora usam `todasUnidadesComCache_()`/
 `todasNotasEmpenhoComCache_()` em vez de reler a aba direto.
 
+### Complemento 2 — números reais do usuário revelam 3 problemas a mais (sessão 2026-07-17)
+
+Usuário testou e relatou números concretos: troca de aba 2-3s (igual, sem
+mudança perceptível), **abrir edição de SOF 6-7s**, **trocar andamento 4-5s**,
+**fechar edição 4-5s**. Isso levou a coletar `backend/EdicoesEmAndamento.gs`
+(nunca estava neste repositório - agora está, ver seção de Referências) pra
+investigar, e a achar 3 problemas novos, dois deles fora do que já tinha sido
+mapeado:
+
+1. **`findById_(getSheet_(SHEETS.UNIDADES), id)` nos caminhos de escrita** -
+   a rodada anterior deixou esses `findById_` avulsos de propósito fora do
+   cache (risco vs. ganho), mas isso explicava sozinho boa parte dos 4-5s de
+   "trocar andamento": toda chamada de `atualizarSof` faz
+   `recalcularDivergenciaSof_`, que lia a aba **Unidades inteira** de novo, além
+   da leitura/escrita da própria SOF. **Corrigido:** nova
+   `buscarUnidadePorId_(id)` (`backend/Unidades.gs`) usa o cache de 30s já
+   existente; troca aplicada nos 5 pontos que faziam esse lookup somente-leitura
+   (`Sof.gs`: `recalcularDivergenciaSof_`, `criarSof`; `Recibos.gs`: `criarRecibo`,
+   `criarGrupoParcelaDivididaRecibo`, `atualizarRecibo`).
+2. **`obterSof` era uma requisição redundante** - `listarSof` já calcula fontes,
+   total e destaque de "parado" pra montar cada card (os mesmos dados que
+   `obterSof` busca de novo). `js/sof.js` (`abrirSofExistente`) passou a
+   reaproveitar `itens.find(s => s.id === id)`, mesmo padrão que
+   `abrirReciboExistente` já usava (`itens.find`, sem `obterRecibo`). Isso
+   elimina uma requisição inteira do caminho de abrir a edição de SOF -
+   provavelmente a explicação principal pros 6-7s (2 chamadas sequenciais em
+   vez de 1, cada uma com um piso de latência considerável do Apps Script Web
+   App).
+3. **Achado mais importante: o spinner global bloqueava a tela em chamadas que
+   o código já tratava como "fire and forget".** `Api.chamar` (`js/api.js`)
+   sempre mostrava/escondia o spinner (`UI.mostrarCarregando`/`esconderCarregando`),
+   **mesmo quando o chamador não esperava (`await`) a resposta** - então
+   `marcarSofVisualizado`/`marcarReciboVisualizado` (já "fire and forget" desde
+   a rodada anterior) e a limpeza de `liberarEdicao` ao fechar um modal (que já
+   tinha sumido da tela) travavam a interface do mesmo jeito, pelo tempo que a
+   requisição levasse - isso era a causa direta dos "fechar edição: 4-5s"
+   relatados (o modal já tinha fechado, mas o spinner global ficava por cima
+   até `liberarEdicao` terminar).
+   **Corrigido:** `UI.mostrarCarregando`/`esconderCarregando` (`js/app.js`)
+   viraram um contador em vez de um toggle simples (pra chamadas concorrentes
+   não se atropelarem escondendo o spinner uma da outra); `Api.chamar` ganhou
+   `opcoes.silencioso` pra pular o spinner por completo - aplicado em
+   `sairDaEdicao` (`js/edicao-simultanea.js`, usado tanto por SOF quanto
+   Recibo) e nos dois `marcarXVisualizado`.
+
+**Isso também revela algo mais amplo:** o piso de latência de uma chamada ao
+Apps Script Web App hoje parece estar mais perto de **4-5s** do que os 1-3s
+estimados no relatório original (`RELATORIO_LENTIDAO_SOF.md`) - mesmo
+`liberarEdicao`, que só lê/escreve uma aba pequena de 5 colunas, levava esse
+tempo. Com esse piso mais alto, a alavanca que mais importa é **reduzir a
+quantidade de requisições por ação** (itens 2 e 3 acima), já que otimizar o
+conteúdo de uma chamada individual (item 1, cache) ajuda menos proporcionalmente
+do que cortar uma chamada inteira.
+
+**Passos manuais do usuário antes de testar:** colar `backend/Sof.gs`,
+`backend/Recibos.gs`, `backend/Unidades.gs` atualizados (mudou de novo depois
+do complemento 1) e reimplantar. Frontend (`js/sof.js`, `js/recibos.js`,
+`js/api.js`, `js/app.js`, `js/edicao-simultanea.js`) só precisa do push
+(GitHub Pages).
+
+**Ainda não testado:** medir os 4 tempos de novo (troca de aba, abrir edição
+de SOF, trocar andamento, fechar edição) depois de colar/reimplantar e do
+GitHub Pages atualizar; confirmar que `buscarUnidadePorId_` não quebrou
+nenhuma validação de divergência/snapshot; confirmar que abrir um SOF pela
+lista continua mostrando os dados certos sem o `obterSof`.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Faltam** `Contadores.gs` e `EdicoesEmAndamento.gs` (nunca coletados neste repositório). `Contadores.gs` já tem `SofFontes: 'SFT'` e `UnidadesTA: 'UTA'` no mapa `PREFIXOS_ID` (confirmado, sessão 2026-07-13) — só o conteúdo completo do arquivo continua fora deste repo. Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Falta** `Contadores.gs` (nunca coletado neste repositório). Já tem `SofFontes: 'SFT'` e `UnidadesTA: 'UTA'` no mapa `PREFIXOS_ID` (confirmado, sessão 2026-07-13) — só o conteúdo completo do arquivo continua fora deste repo. Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).

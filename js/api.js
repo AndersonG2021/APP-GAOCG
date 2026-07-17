@@ -30,14 +30,24 @@ const Api = (function () {
     });
   }
 
+  /**
+   * opcoes.silencioso: pra chamadas de limpeza/"fire and forget" que o
+   * usuário não precisa esperar (ex.: liberar a trava de edição simultânea ao
+   * fechar um modal que já sumiu da tela, marcar um card como visualizado).
+   * Sem isso, toda chamada trava a tela inteira com o spinner global até a
+   * requisição terminar - mesmo quando não há nada visível esperando por ela,
+   * o que é sentido como lentidão mesmo já sendo uma chamada não bloqueante
+   * no código (ver PROGRESS.md, seção de Performance).
+   */
   async function chamar(action, payload, opcoes) {
     const usarCache = !!(opcoes && opcoes.cache);
     const chave = usarCache ? chaveCache(action, payload) : null;
     if (usarCache && cache.has(chave)) return cache.get(chave);
 
     const corpo = Object.assign({ action, token }, payload || {});
+    const silencioso = !!(opcoes && opcoes.silencioso);
 
-    UI.mostrarCarregando();
+    if (!silencioso) UI.mostrarCarregando();
     try {
       const resposta = await fetch(API_URL, {
         method: 'POST',
@@ -60,7 +70,7 @@ const Api = (function () {
       if (usarCache) cache.set(chave, json.data);
       return json.data;
     } finally {
-      UI.esconderCarregando();
+      if (!silencioso) UI.esconderCarregando();
     }
   }
 

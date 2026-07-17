@@ -32,8 +32,13 @@ const EdicaoSimultanea = (function () {
     });
   }
 
+  /**
+   * Chamada de limpeza pura (libera a trava pra outros usuários) - o modal já
+   * fechou da tela antes disso rodar, então não há por que travar a interface
+   * com o spinner global esperando essa resposta (ver Api.chamar/silencioso).
+   */
   function sairDaEdicao(tipoProcesso, processoId) {
-    return Api.chamar('liberarEdicao', { tipoProcesso, processoId }).catch(() => {});
+    return Api.chamar('liberarEdicao', { tipoProcesso, processoId }, { silencioso: true }).catch(() => {});
   }
 
   return { entrarEmEdicao, sairDaEdicao };
