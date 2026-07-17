@@ -27,7 +27,10 @@ const UI = (function () {
     setTimeout(() => el.remove(), 4500);
   }
 
+  let callbackFecharModal = null;
+
   function abrirModal(titulo, corpoHtml, rodapeHtml, opcoes) {
+    callbackFecharModal = null;
     document.getElementById('modalTitulo').textContent = titulo;
     document.getElementById('modalCorpo').innerHTML = corpoHtml;
     document.getElementById('modalRodape').innerHTML = rodapeHtml || '';
@@ -36,8 +39,24 @@ const UI = (function () {
     document.getElementById('sobreposicaoModal').classList.remove('oculto');
   }
 
+  /**
+   * Registra uma função a ser chamada sempre que o modal atual fechar, seja
+   * por qual caminho for (botão Cancelar, X, clique fora, ou fechamento
+   * programático após salvar) - garante que uma limpeza (ex.: liberar a trava
+   * de edição simultânea) aconteça em qualquer um desses casos, não só num
+   * botão específico. É zerado a cada abrirModal() e após disparar uma vez.
+   */
+  function aoFecharModal(callback) {
+    callbackFecharModal = callback;
+  }
+
   function fecharModal() {
     document.getElementById('sobreposicaoModal').classList.add('oculto');
+    if (callbackFecharModal) {
+      const callback = callbackFecharModal;
+      callbackFecharModal = null;
+      callback();
+    }
   }
 
   /**
@@ -110,7 +129,7 @@ const UI = (function () {
   });
 
   return {
-    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, mostrarErro, lerArquivoBase64,
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
   };
 })();
@@ -146,8 +165,13 @@ const App = (function () {
   function abrirModalPerfil() {
     const usuario = Auth.usuario();
     const corpo = `
+      <form id="formMeuNome">
+        <div class="campo"><label>Nome exibido na aplicação *</label><input id="meuNome" value="${UI.escaparHtml(usuario.nome)}" required /></div>
+        <p id="nomeErro" class="erro-campo oculto"></p>
+      </form>
       <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
       <div class="campo"><label>Perfil</label><input value="${usuario.perfil === 'gerente' ? 'Gerente' : 'Analista'}" disabled /></div>
+      <button type="button" class="botao" id="btnSalvarNome">Salvar nome</button>
       <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
       <h4 style="margin:0 0 8px">Alterar senha</h4>
       <form id="formTrocarSenha">
@@ -162,6 +186,23 @@ const App = (function () {
       { pequeno: true });
 
     document.getElementById('btnFecharPerfil').addEventListener('click', UI.fecharModal);
+
+    document.getElementById('btnSalvarNome').addEventListener('click', async () => {
+      const erroEl = document.getElementById('nomeErro');
+      erroEl.classList.add('oculto');
+      const novoNome = document.getElementById('meuNome').value.trim();
+      if (!novoNome) { UI.mostrarErro(erroEl, 'Informe o nome.'); return; }
+
+      try {
+        await Api.chamar('alterarMeuNome', { novoNome });
+        Auth.atualizarNomeLocal(novoNome);
+        document.getElementById('nomeUsuarioTopo').textContent = novoNome;
+        UI.toast('Nome atualizado com sucesso.', 'sucesso');
+      } catch (err) {
+        UI.mostrarErro(erroEl, err.message);
+      }
+    });
+
     document.getElementById('btnSalvarSenha').addEventListener('click', async () => {
       const erroEl = document.getElementById('perfilErro');
       erroEl.classList.add('oculto');
@@ -194,10 +235,21 @@ const App = (function () {
     TELAS[tela]();
   }
 
+  function fecharMenuMobile() {
+    document.getElementById('barraLateral').classList.remove('aberta');
+    document.getElementById('fundoMenuMobile').classList.add('oculto');
+  }
+
   function init() {
     document.querySelectorAll('#barraLateral nav button').forEach(btn => {
-      btn.addEventListener('click', () => navegarPara(btn.dataset.tela));
+      btn.addEventListener('click', () => { navegarPara(btn.dataset.tela); fecharMenuMobile(); });
     });
+
+    document.getElementById('btnMenuMobile').addEventListener('click', () => {
+      document.getElementById('barraLateral').classList.add('aberta');
+      document.getElementById('fundoMenuMobile').classList.remove('oculto');
+    });
+    document.getElementById('fundoMenuMobile').addEventListener('click', fecharMenuMobile);
 
     document.getElementById('btnSair').addEventListener('click', () => {
       Auth.encerrarSessaoLocal();

@@ -13,14 +13,33 @@ const TelaNotasEmpenho = (function () {
   let grupos = [];
 
   async function render() {
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true });
+    const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
+      Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
+      TelaListas.obterOpcoes('OSS'),
+      TelaListas.obterOpcoes('OBJETO')
+    ]);
+    unidades = unidadesCarregadas;
+    const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Notas de Empenho</h2>
       <div class="painel">
         <p class="ajuda">Cada card agrupa a Nota de Empenho original e seus reforços pelo número. O valor atual já desconta o que foi liquidado nos Recibos vinculados a essa NE.</p>
         <div class="barra-filtros">
+          <div class="campo"><label>Busca livre</label><input id="neBusca" placeholder="número, SEI, valor..." /></div>
           <div class="campo"><label>Unidade</label>
             <select id="neFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>OSS</label>
+            <select id="neFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Objeto</label>
+            <select id="neFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Tipo de unidade</label>
+            <select id="neFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>DEA</label>
+            <select id="neFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
           </div>
           <div class="campo"><label>Fonte</label>
             <select id="neFiltroFonte"><option value="">Todas</option>${OPCOES_FONTE.map(f => `<option>${f}</option>`).join('')}</select>
@@ -30,12 +49,18 @@ const TelaNotasEmpenho = (function () {
         <div id="listaNe"></div>
       </div>`;
     document.getElementById('btnFiltrarNe').addEventListener('click', carregar);
+    document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
     await carregar();
   }
 
   async function carregar() {
     const params = {
+      busca: document.getElementById('neBusca').value.trim(),
       unidade_id: document.getElementById('neFiltroUnidade').value,
+      oss: document.getElementById('neFiltroOss').value,
+      objeto: document.getElementById('neFiltroObjeto').value,
+      tipo_unidade: document.getElementById('neFiltroTipoUnidade').value,
+      dea: document.getElementById('neFiltroDea').value,
       fonte: document.getElementById('neFiltroFonte').value
     };
     grupos = await Api.chamar('listarNotasEmpenho', params);
