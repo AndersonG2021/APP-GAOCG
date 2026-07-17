@@ -158,13 +158,17 @@ const TelaRecibos = (function () {
     abrindoLinha = true;
     marcarLinhaCarregando(id, true);
     try {
-      const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('Recibo', id);
-      if (!podeAbrir) return;
       const recibo = itens.find(r => r.id === id);
+      if (!recibo) return;
+      // Abre o formulário na hora, com dado local (zero espera de rede), e
+      // checa conflito de edição simultânea em paralelo - ver
+      // EdicaoSimultanea/PROGRESS.md (seção de Performance).
+      const edicaoPromise = EdicaoSimultanea.iniciarEdicao('Recibo', id);
       // marcarReciboVisualizado é só informativo (tira o destaque de "parado")
       // e não precisa bloquear a abertura do formulário - ver RELATORIO_LENTIDAO_SOF.md.
       Api.chamar('marcarReciboVisualizado', { id }, { silencioso: true }).catch(() => {});
       await abrirFormularioEdicao(recibo);
+      EdicaoSimultanea.tratarConflito(edicaoPromise, 'Recibo', id);
     } finally {
       abrindoLinha = false;
       marcarLinhaCarregando(id, false);

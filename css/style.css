@@ -189,6 +189,14 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .aviso-divergencia { color: var(--amarelo); font-size: 12px; margin-top: 2px; }
 .estado-vazio { text-align: center; color: var(--cinza-500); padding: 40px 0; }
 
+/* Aviso de edição simultânea, injetado no topo do formulário já aberto (ver js/edicao-simultanea.js) */
+.aviso-edicao-simultanea {
+  background: var(--amarelo-claro); border: 1px solid var(--amarelo); border-radius: var(--raio);
+  padding: 12px; margin-bottom: 16px; font-size: 13px;
+}
+.aviso-edicao-simultanea p { margin: 0 0 6px; }
+.aviso-edicao-simultanea-botoes { display: flex; gap: 8px; margin-top: 8px; }
+
 /* ===== Stepper de Andamento (SOF) ===== */
 .stepper { display: flex; align-items: flex-start; overflow-x: auto; padding: 8px 4px 12px; }
 .stepper-no { display: flex; flex-direction: column; align-items: center; flex: 0 0 84px; position: relative; }

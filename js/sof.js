@@ -211,21 +211,20 @@ const TelaSof = (function () {
     abrindoLinha = true;
     marcarCartaoCarregando(id, true);
     try {
-      const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('SOF', id);
-      if (!podeAbrir) return;
       // O card já tem tudo que obterSof devolveria (fontes, total, destaque de
       // "parado" - listarSof calcula os 3 pra montar o próprio card), então
       // reaproveita "itens" em vez de pedir de novo ao backend - mesmo padrão
-      // já usado em abrirReciboExistente (js/recibos.js). Isso elimina uma
-      // requisição inteira do caminho crítico de abrir a edição (cada
-      // requisição ao Apps Script Web App tem um piso de latência considerável,
-      // então menos requisições por ação pesa mais que otimizar o que cada uma
-      // faz por dentro - ver PROGRESS.md, seção de Performance).
-      // marcarSofVisualizado é só informativo e não precisa bloquear a abertura.
+      // já usado em abrirReciboExistente (js/recibos.js).
       const sof = itens.find(s => s.id === id);
+      if (!sof) return;
+      // Abre o formulário na hora, com dado local (zero espera de rede), e
+      // checa conflito de edição simultânea em paralelo - ver
+      // EdicaoSimultanea/PROGRESS.md (seção de Performance).
+      const edicaoPromise = EdicaoSimultanea.iniciarEdicao('SOF', id);
       Api.chamar('marcarSofVisualizado', { id }, { silencioso: true }).catch(() => {});
       const notasPromise = Api.chamar('listarNotasEmpenhoPorSof', { sofId: id }).catch(() => []);
       await abrirFormulario(sof, notasPromise);
+      EdicaoSimultanea.tratarConflito(edicaoPromise, 'SOF', id);
     } finally {
       abrindoLinha = false;
       marcarCartaoCarregando(id, false);

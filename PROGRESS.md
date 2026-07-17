@@ -555,6 +555,53 @@ GitHub Pages atualizar; confirmar que `buscarUnidadePorId_` não quebrou
 nenhuma validação de divergência/snapshot; confirmar que abrir um SOF pela
 lista continua mostrando os dados certos sem o `obterSof`.
 
+### Complemento 3 — abrir edição vira otimista, sem esperar a checagem de conflito (sessão 2026-07-17)
+
+Depois do complemento 2, sobrou só uma chamada bloqueante no caminho de abrir
+uma edição: `abrirEdicao` (checagem de conflito de edição simultânea). Ela é
+leve (lê/escreve uma aba de 5 colunas), então o tempo que ainda levava era o
+piso de latência do Apps Script Web App em si - não dava mais pra cortar via
+cache. A solução foi arquitetural, não de otimização de conteúdo:
+
+**Antes:** espera `abrirEdicao` responder → só depois mostra o formulário (ou
+o aviso de conflito).
+**Agora:** mostra o formulário **na hora** (dado já local, via `itens.find` -
+zero espera de rede) e roda `abrirEdicao` **em paralelo**, em segundo plano.
+Se vier conflito, um aviso aparece alguns instantes depois, **dentro do
+formulário já aberto** (não substitui o modal) - o usuário decide "Sair" ou
+"Continuar mesmo assim", igual já funcionava antes, só que sem bloquear a
+abertura no caso comum (ninguém mais editando).
+
+- `js/edicao-simultanea.js`: reescrito. `entrarEmEdicao` (bloqueante, com seu
+  próprio modal interno) virou duas funções: `iniciarEdicao` (dispara
+  `abrirEdicao` e devolve a promise crua, sem esperar) e `tratarConflito`
+  (chamada depois que o formulário já abriu; se a promise voltar com
+  conflito, injeta um aviso - `.aviso-edicao-simultanea`, novo em
+  `css/style.css` - no topo do `#modalCorpo` já visível, com os botões
+  Sair/Continuar).
+- **Cuidado de correção que essa mudança exigiu:** no clique de "Sair", o
+  código zera o callback de `UI.aoFecharModal` antes de fechar (`UI.aoFecharModal(() => {})`).
+  Motivo: esse callback já tinha sido registrado ao abrir o formulário
+  (assumindo que a edição seria nossa), mas em caso de conflito a trava
+  nunca chegou a ser assumida por nós (`abrirEdicao` não sobrescreve a linha
+  quando detecta que é de outro usuário) - sem esse cuidado, fechar chamaria
+  `liberarEdicao` e apagaria a trava de edição **de outra pessoa**, que
+  continua editando de verdade.
+- `js/sof.js` (`abrirSofExistente`) e `js/recibos.js` (`abrirReciboExistente`):
+  passam a chamar `EdicaoSimultanea.iniciarEdicao(...)` sem `await` antes de
+  abrir o formulário, e `EdicaoSimultanea.tratarConflito(...)` (também sem
+  `await`) depois - o formulário abre imediatamente com o dado de `itens`.
+
+**Passos manuais do usuário antes de testar:** nenhum novo no backend (só
+frontend: `js/edicao-simultanea.js`, `js/sof.js`, `js/recibos.js`,
+`css/style.css` - GitHub Pages).
+
+**Ainda não testado:** abrir uma edição e sentir se ficou instantâneo;
+simular o conflito de verdade (dois logins/abas editando o mesmo SOF ou
+Recibo) e conferir que o aviso aparece corretamente dentro do formulário já
+aberto, que "Continuar mesmo assim" assume a trava e some com o aviso, e que
+"Sair" fecha sem apagar a trava do outro usuário.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
