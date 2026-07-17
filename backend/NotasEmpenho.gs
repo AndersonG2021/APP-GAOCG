@@ -3,11 +3,33 @@
  * Sempre vinculada a um único SOF (1:N a partir do SOF).
  */
 
+/**
+ * Lê a aba NotasEmpenho inteira, com cache de 30s (mesmo padrão de
+ * todasOpcoesComCache_ em ListasPersonalizadas.gs / todasFontesComCache_ em
+ * Sof.gs). Reaproveitada por listarSof (números de NE nos cards), listarNotasEmpenho,
+ * listarNotasEmpenhoPorSof e totalEmpenhadoSof_ - antes cada uma relia essa
+ * aba do zero.
+ */
+function todasNotasEmpenhoComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'notas_empenho';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO));
+  rows.forEach(function (n) { delete n._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheNotasEmpenho_() {
+  CacheService.getScriptCache().remove('notas_empenho');
+}
+
 function listarNotasEmpenhoPorSof(session, sofId) {
-  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).filter(function (n) {
+  var rows = todasNotasEmpenhoComCache_().filter(function (n) {
     return String(n.sof_id) === String(sofId);
   });
-  rows.forEach(function (n) { delete n._row; });
   rows.sort(function (a, b) { return a.data_criacao < b.data_criacao ? -1 : 1; });
   return ok_(rows);
 }
@@ -30,8 +52,7 @@ function criarNotaEmpenho(session, dados) {
   if (!isNonEmpty_(dados.fonte)) return fail_('Selecione a fonte da Nota de Empenho.');
 
   if (tipo === 'reforco') {
-    var neSheetCheck = getSheet_(SHEETS.NOTAS_EMPENHO);
-    var existeOriginal = sheetToObjects_(neSheetCheck).some(function (n) {
+    var existeOriginal = todasNotasEmpenhoComCache_().some(function (n) {
       return String(n.sof_id) === String(dados.sof_id) && n.tipo === 'original' && n.numero_ne === numeroNe;
     });
     if (!existeOriginal) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
@@ -63,6 +84,7 @@ function criarNotaEmpenho(session, dados) {
     data_criacao: nowIso_()
   };
   appendObjectRow_(neSheet, nova);
+  invalidarCacheNotasEmpenho_();
   registrarLog_(session, 'NotaEmpenho', id, sof.criado_por, 'CRIACAO', '', tipo + ' - valor ' + valor);
 
   if (tipo === 'original' && !toBool_(sof.possui_ne)) {
@@ -77,12 +99,22 @@ function criarNotaEmpenho(session, dados) {
 }
 
 
-/** Soma valor_liquidado de todas as linhas de Recibos vinculadas a essa NE por número (mesma convenção de texto livre já usada no autopreenchimento do Recibo). */
-function valorLiquidadoPorNe_(numeroNe) {
-  var recibos = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
-  return recibos
-    .filter(function (r) { return r.nota_empenho === numeroNe; })
-    .reduce(function (soma, r) { return soma + toNumber_(r.valor_liquidado); }, 0);
+/**
+ * Soma valor_liquidado de Recibos agrupado por nota_empenho (mesma convenção
+ * de texto livre já usada no autopreenchimento do Recibo), numa única
+ * leitura da aba Recibos. Antes, listarNotasEmpenho chamava o equivalente de
+ * "valorLiquidadoPorNe_(numeroNe)" uma vez por número de NE - um N+1 clássico
+ * (mesmo padrão já corrigido pra opcaoTemPausaContagem_ em ListasPersonalizadas.gs,
+ * ver RELATORIO_LENTIDAO_SOF.md item 2.5): com 10 NEs cadastradas, isso lia a
+ * aba Recibos inteira 10 vezes numa chamada só.
+ */
+function valorLiquidadoAgrupadoPorNe_() {
+  var mapa = {};
+  sheetToObjects_(getSheet_(SHEETS.RECIBOS)).forEach(function (r) {
+    if (!r.nota_empenho) return;
+    mapa[r.nota_empenho] = (mapa[r.nota_empenho] || 0) + toNumber_(r.valor_liquidado);
+  });
+  return mapa;
 }
 
 /**
@@ -98,11 +130,8 @@ function listarNotasEmpenho(session, params) {
   sofs.forEach(function (s) { sofsPorId[s.id] = s; });
 
   var fontesPorSof = agruparFontesPorSof_();
-
-  var linhas = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).map(function (n) {
-    delete n._row;
-    return n;
-  });
+  var valorLiquidadoPorNe = valorLiquidadoAgrupadoPorNe_();
+  var linhas = todasNotasEmpenhoComCache_();
 
   var grupos = {};
   linhas.forEach(function (n) {
@@ -120,7 +149,7 @@ function listarNotasEmpenho(session, params) {
     var parcelaMensalRef = fontesDoSof
       .filter(function (f) { return f.fonte === grupo.fonte; })
       .reduce(function (soma, f) { return soma + toNumber_(f.parcela_mensal); }, 0);
-    var valorLiquidado = valorLiquidadoPorNe_(numeroNe);
+    var valorLiquidado = valorLiquidadoPorNe[numeroNe] || 0;
     var valorAtual = grupo.valor - valorLiquidado;
 
     return {
@@ -151,7 +180,7 @@ function listarNotasEmpenho(session, params) {
 }
 
 function totalEmpenhadoSof_(sofId) {
-  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).filter(function (n) {
+  var rows = todasNotasEmpenhoComCache_().filter(function (n) {
     return String(n.sof_id) === String(sofId);
   });
   return rows.reduce(function (soma, n) { return soma + toNumber_(n.valor); }, 0);

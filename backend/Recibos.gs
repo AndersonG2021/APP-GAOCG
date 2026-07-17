@@ -333,11 +333,37 @@ function filtrarLinhasRecibos_(rows, params) {
   return rows;
 }
 
+/**
+ * Indicadores da tela de Recibos, calculados sobre as linhas já filtradas
+ * (sem paginação) - refletem os filtros ativos. "total_a_pagar" fica de fora
+ * por enquanto: depende de uma tabela futura de valores mensais recebidos
+ * por unidade, ainda não implementada (ver PROGRESS.md, Fase 5).
+ */
+function calcularIndicadoresRecibos_(rowsFiltradas) {
+  var anoAtual = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yy');
+  var pendentes = 0;
+  var totalPagoAno = 0;
+  rowsFiltradas.forEach(function (r) {
+    if (r.status !== 'PAGO') pendentes++;
+    if (String(r.competencia || '').slice(-2) === anoAtual) totalPagoAno += toNumber_(r.valor_pago);
+  });
+  return { pendentes: pendentes, total_pago_ano: totalPagoAno };
+}
+
+/**
+ * listarRecibos já retorna os indicadores (campo `indicadores`) calculados
+ * sobre a mesma leitura/filtro - a tela de Recibos parava de fazer 2
+ * requisições (listarRecibos + indicadoresRecibos, cada uma relendo a aba
+ * Recibos inteira) pra fazer só 1. `indicadoresRecibos` continua existindo
+ * como ação separada por compatibilidade, caso algo mais precise só dele.
+ */
 function listarRecibos(session, params) {
   params = params || {};
   var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
   rows.forEach(function (r) { delete r._row; });
   rows = filtrarLinhasRecibos_(rows, params);
+
+  var indicadores = calcularIndicadoresRecibos_(rows);
 
   rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
 
@@ -352,31 +378,16 @@ function listarRecibos(session, params) {
   var listasCarregadas = todasOpcoesComCache_();
   pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas)); });
 
-  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, indicadores: indicadores });
 }
 
-/**
- * Indicadores da tela de Recibos, calculados sobre as mesmas linhas
- * filtradas de listarRecibos (sem paginação) - refletem os filtros ativos.
- * "total_a_pagar" fica de fora por enquanto: depende de uma tabela futura de
- * valores mensais recebidos por unidade, ainda não implementada (ver
- * PROGRESS.md, Fase 5).
- */
 function indicadoresRecibos(session, params) {
   params = params || {};
   var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
   rows.forEach(function (r) { delete r._row; });
   rows = filtrarLinhasRecibos_(rows, params);
 
-  var anoAtual = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yy');
-  var pendentes = 0;
-  var totalPagoAno = 0;
-  rows.forEach(function (r) {
-    if (r.status !== 'PAGO') pendentes++;
-    if (String(r.competencia || '').slice(-2) === anoAtual) totalPagoAno += toNumber_(r.valor_pago);
-  });
-
-  return ok_({ pendentes: pendentes, total_pago_ano: totalPagoAno });
+  return ok_(calcularIndicadoresRecibos_(rows));
 }
 
 /**

@@ -74,15 +74,14 @@ const TelaRecibos = (function () {
 
   async function carregar() {
     const filtros = filtrosAtuais();
-    const [resposta, indicadores] = await Promise.all([
-      Api.chamar('listarRecibos', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros)),
-      Api.chamar('indicadoresRecibos', filtros)
-    ]);
+    // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
+    // (evita reler a aba Recibos inteira duas vezes numa única troca de aba).
+    const resposta = await Api.chamar('listarRecibos', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
     itens = resposta.items;
     totalRegistros = resposta.total;
     renderTabela();
     renderPaginacao();
-    renderIndicadores(indicadores);
+    renderIndicadores(resposta.indicadores);
   }
 
   function renderIndicadores(indicadores) {

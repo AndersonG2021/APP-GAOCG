@@ -346,6 +346,96 @@ numa edição com anexo pré-existente; o mesmo fluxo dentro de uma linha de
 parcela dividida; leitura do segundo tipo de documento (só um dos dois -
 Nota de Liquidação ou Ordem Bancária - foi testado até agora).
 
+## Performance — lentidão ao trocar de aba (sessão 2026-07-17)
+
+Usuário relatou 2-3s de atraso ao trocar de aba, mais perceptível em **SOF**
+e depois **Recibos**. Revisão completa do roteamento (`js/app.js`) e das 8
+telas + todo o backend de leitura. O "1-3s inerente ao Apps Script Web App"
+(já documentado desde a Fase 1) continua existindo e não é eliminável, mas a
+revisão achou gordura real e específica em cima desse piso, explicando por
+que SOF/Recibos pioram mais que as outras telas:
+
+- **SOF era a pior porque `listarSof` fazia 3 leituras completas de abas
+  diferentes numa chamada só:** SOF + **SofFontes** (`agruparFontesPorSof_`)
+  + **NotasEmpenho** (números de NE nos cards). As outras telas simples
+  fazem só 1 leitura.
+- **Recibos era a 2ª pior porque a tela disparava 2 requisições HTTP
+  separadas** (`listarRecibos` + `indicadoresRecibos`), **cada uma lendo a
+  aba Recibos inteira de novo** - a mesma aba lida duas vezes, em duas
+  execuções completas do Apps Script.
+- **Achado extra (não citado pelo usuário, mas real):** `listarNotasEmpenho`
+  tinha um **N+1** - pra cada número de NE distinto, chamava
+  `valorLiquidadoPorNe_()`, que lia a aba **Recibos inteira** de novo. Com N
+  NEs cadastradas, isso lia Recibos N vezes numa chamada só - piora sozinho
+  conforme mais NEs são cadastradas (mesma classe de bug já corrigida pra
+  `opcaoTemPausaContagem_` na Fase de Performance anterior, ver
+  `RELATORIO_LENTIDAO_SOF.md` item 2.5).
+- **Achado extra no Dashboard:** `obterDashboard` lia a aba **SOF duas vezes**
+  (`dashboardSofPendenteNe_` + `dashboardParados_`) e a aba **Recibos duas
+  vezes** (`dashboardRecibos_` + `dashboardParados_`) numa única chamada.
+
+**Correções aplicadas (mesmo padrão de cache de 30s via `CacheService` já
+usado em `Usuarios`/`ListasPersonalizadas`, invalidado na escrita - nenhuma
+coluna nova, nenhuma mudança visual, nenhuma mudança de contrato dos dados
+já entregues ao frontend):**
+- `backend/Sof.gs`: nova `todasFontesComCache_()` (30s), invalidada em
+  `substituirFontesDoSof_`. `agruparFontesPorSof_`/`listarFontesPorSof_` usam
+  o cache em vez de reler a aba.
+- `backend/NotasEmpenho.gs`: nova `todasNotasEmpenhoComCache_()` (30s),
+  invalidada em `criarNotaEmpenho`. Usada por `listarSof` (números de NE),
+  `listarNotasEmpenhoPorSof`, `listarNotasEmpenho` e `totalEmpenhadoSof_`.
+  N+1 corrigido: nova `valorLiquidadoAgrupadoPorNe_()` agrupa Recibos por
+  `nota_empenho` numa única leitura, substituindo as N chamadas de
+  `valorLiquidadoPorNe_(numeroNe)` (função removida, só era usada ali).
+- `backend/Recibos.gs`: `listarRecibos` agora calcula e devolve os
+  indicadores (`indicadores: { pendentes, total_pago_ano }`) na mesma
+  resposta, reaproveitando a mesma leitura/filtro (`calcularIndicadoresRecibos_`,
+  extraída como helper compartilhado). `indicadoresRecibos` continua
+  existindo como ação separada (não foi removida do `Code.gs`), só deixou de
+  ser chamada em conjunto pela tela de Recibos.
+- `js/recibos.js`: `carregar()` faz 1 chamada (`listarRecibos`) em vez de 2
+  (`Promise.all` com `indicadoresRecibos`), lendo `resposta.indicadores` em
+  vez de uma segunda resposta.
+- `backend/Dashboard.gs`: `obterDashboard` lê SOF e Recibos **uma vez cada**
+  e repassa pros 3 indicadores (`dashboardRecibos_`/`dashboardSofPendenteNe_`/
+  `dashboardParados_`, todos com um novo parâmetro opcional de linhas
+  pré-carregadas, mesmo princípio do `listasCarregadas` já usado em
+  `listarSof`/`listarRecibos`).
+- `backend/Unidades.gs`: novas `todasUnidadesComCache_()`/`todasTasComCache_()`
+  (30s cada), invalidadas em `criarUnidade`/`atualizarUnidade`/
+  `inativarUnidade`/`reativarUnidade` (Unidades) e em `substituirTasDaUnidade_`
+  (UnidadesTA). Item que já estava pendente desde o relatório de performance
+  anterior ("cache de leitura pra aba Unidades" - RELATORIO_LENTIDAO_SOF.md,
+  seção 5).
+
+**Escopo do que NÃO foi mexido, de propósito:** os `findById_` avulsos que
+buscam uma única Unidade/SOF/Recibo por id (usados em `criarSof`, `criarRecibo`,
+etc.) continuam lendo a aba direto, sem cache - mudar isso exigiria alterar
+o helper genérico `findById_` (usado por praticamente todo o backend), risco
+maior pra um ganho que não afeta diretamente a troca de aba (o problema
+relatado). `Contadores.gs`/`EdicoesEmAndamento.gs` seguem fora deste
+repositório, não mexidos.
+
+**Risco a observar conforme a planilha cresce:** `CacheService` tem limite de
+~100KB por chave. Com o volume atual de dados (app no ar há poucos dias)
+isso não deve ser problema, mas se `SofFontes`/`NotasEmpenho`/`Unidades`
+crescerem muito, o cache dessas abas pode passar do limite e silenciosamente
+parar de funcionar (a chamada simplesmente volta a ler a aba direto - sem
+erro, só sem o ganho). Se a lentidão voltar mais pra frente, checar isso
+primeiro.
+
+**Passos manuais do usuário antes de testar:** colar `backend/Sof.gs`,
+`backend/NotasEmpenho.gs`, `backend/Recibos.gs`, `backend/Dashboard.gs`,
+`backend/Unidades.gs` atualizados no editor do Apps Script e reimplantar.
+Nenhuma coluna/aba nova na planilha.
+
+**Ainda não testado:** medir se a troca de aba (SOF principalmente, depois
+Recibos) ficou perceptivelmente mais rápida; conferir que os dados exibidos
+continuam corretos (Fontes do SOF, números de NE, indicadores de Recibos,
+Dashboard) depois das mudanças de leitura; conferir que a invalidação de
+cache funciona (ex.: criar uma Nota de Empenho e ver se o card de SOF já
+reflete na hora, sem esperar os 30s).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

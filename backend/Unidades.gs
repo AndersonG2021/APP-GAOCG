@@ -3,19 +3,36 @@
  * Valor do Contrato de Gestão e os Termos Aditivos (T.A.s) vinculados.
  */
 
+/**
+ * Lê a aba UnidadesTA inteira, com cache de 30s (mesmo padrão de
+ * todasOpcoesComCache_ em ListasPersonalizadas.gs / todasFontesComCache_ em
+ * Sof.gs).
+ */
+function todasTasComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'unidades_ta';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.UNIDADES_TA));
+  rows.forEach(function (t) { delete t._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheTas_() {
+  CacheService.getScriptCache().remove('unidades_ta');
+}
+
 /** Todas as linhas de UnidadesTA de uma unidade. */
 function listarTasPorUnidade_(unidadeId) {
-  return sheetToObjects_(getSheet_(SHEETS.UNIDADES_TA))
-    .filter(function (t) { return String(t.unidade_id) === String(unidadeId); })
-    .map(function (t) { delete t._row; return t; });
+  return todasTasComCache_().filter(function (t) { return String(t.unidade_id) === String(unidadeId); });
 }
 
 /** Todas as linhas de UnidadesTA, agrupadas por unidade_id. Usado por listarUnidades pra evitar N+1. */
 function agruparTasPorUnidade_() {
-  var linhas = sheetToObjects_(getSheet_(SHEETS.UNIDADES_TA));
   var mapa = {};
-  linhas.forEach(function (t) {
-    delete t._row;
+  todasTasComCache_().forEach(function (t) {
     (mapa[t.unidade_id] = mapa[t.unidade_id] || []).push(t);
   });
   return mapa;
@@ -51,14 +68,35 @@ function substituirTasDaUnidade_(unidadeId, tasArray, session) {
       data_criacao: nowIso_()
     });
   });
+  invalidarCacheTas_();
+}
+
+/**
+ * Lê a aba Unidades inteira, com cache de 30s. Unidades é consultada em
+ * praticamente toda tela (listarUnidades em si, além de ser recarregada -
+ * com cache client-side - por SOF/Recibos/Notas de Empenho pra popular
+ * filtros/formulários), então vale o mesmo tratamento das outras abas
+ * "de apoio" (ListasPersonalizadas, SofFontes, NotasEmpenho).
+ */
+function todasUnidadesComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'unidades';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.UNIDADES));
+  rows.forEach(function (u) { delete u._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheUnidades_() {
+  CacheService.getScriptCache().remove('unidades');
 }
 
 function listarUnidades(session, params) {
   params = params || {};
-  var rows = sheetToObjects_(getSheet_(SHEETS.UNIDADES)).map(function (u) {
-    delete u._row;
-    return u;
-  });
+  var rows = todasUnidadesComCache_();
   if (toBool_(params.somenteAtivas)) {
     rows = rows.filter(function (u) { return toBool_(u.ativo); });
   }
@@ -109,6 +147,7 @@ function criarUnidade(session, dados) {
     data_criacao: nowIso_()
   };
   appendObjectRow_(sheet, novo);
+  invalidarCacheUnidades_();
   substituirTasDaUnidade_(id, dados.tas, session);
 
   var tas = listarTasPorUnidade_(id);
@@ -144,6 +183,7 @@ function atualizarUnidade(session, id, dados) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUnidades_();
 
   if (dados.hasOwnProperty('tas')) substituirTasDaUnidade_(id, dados.tas, session);
 
@@ -163,6 +203,7 @@ function inativarUnidade(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUnidades_();
   return ok_({ id: id, ativo: false });
 }
 
@@ -175,5 +216,6 @@ function reativarUnidade(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUnidades_();
   return ok_({ id: id, ativo: true });
 }

@@ -50,21 +50,40 @@ function calcularDestaqueParadoSof_(sof, listasCarregadas) {
   return { dias_parado: dias, destacar_parado: dias > 5 && !pausado && !toBool_(sof.visualizado_apos_alerta) };
 }
 
+/**
+ * Lê a aba SofFontes inteira, com cache de 30s (mesmo padrão de
+ * todasOpcoesComCache_ em ListasPersonalizadas.gs). listarSof lia essa aba
+ * do zero em toda chamada, mesmo sem nenhuma fonte ter mudado - somado às
+ * outras leituras da mesma chamada (SOF, NotasEmpenho), isso tornava a tela
+ * de SOF a mais lenta do app pra trocar de aba.
+ */
+function todasFontesComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'sof_fontes';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES));
+  rows.forEach(function (f) { delete f._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheFontes_() {
+  CacheService.getScriptCache().remove('sof_fontes');
+}
+
 /** Todas as linhas de SofFontes, agrupadas por sof_id. Usado por listarSof/obterSof pra anexar fontes + total calculado. */
 function agruparFontesPorSof_() {
-  var linhas = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES));
   var mapa = {};
-  linhas.forEach(function (f) {
-    delete f._row;
+  todasFontesComCache_().forEach(function (f) {
     (mapa[f.sof_id] = mapa[f.sof_id] || []).push(f);
   });
   return mapa;
 }
 
 function listarFontesPorSof_(sofId) {
-  return sheetToObjects_(getSheet_(SHEETS.SOF_FONTES))
-    .filter(function (f) { return String(f.sof_id) === String(sofId); })
-    .map(function (f) { delete f._row; return f; });
+  return todasFontesComCache_().filter(function (f) { return String(f.sof_id) === String(sofId); });
 }
 
 function totalSolicitadoDeFontes_(fontes) {
@@ -106,6 +125,7 @@ function substituirFontesDoSof_(sofId, fontesArray, session) {
       data_criacao: nowIso_()
     });
   });
+  invalidarCacheFontes_();
 }
 
 function criarSof(session, dados) {
@@ -295,7 +315,7 @@ function listarSof(session, params) {
   }
   if (params.dea) rows = rows.filter(function (r) { return r.dea === params.dea; });
   if (params.tipo_unidade) {
-    var unidadesDoTipo = sheetToObjects_(getSheet_(SHEETS.UNIDADES))
+    var unidadesDoTipo = todasUnidadesComCache_()
       .filter(function (u) { return u.tipo === params.tipo_unidade; })
       .map(function (u) { return String(u.id); });
     rows = rows.filter(function (r) { return unidadesDoTipo.indexOf(String(r.unidade_id)) !== -1; });
@@ -336,7 +356,7 @@ function listarSof(session, params) {
   var idsComNe = pageRows.filter(function (r) { return toBool_(r.possui_ne); }).map(function (r) { return r.id; });
   if (idsComNe.length) {
     var numerosPorSof = {};
-    sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).forEach(function (n) {
+    todasNotasEmpenhoComCache_().forEach(function (n) {
       if (idsComNe.indexOf(n.sof_id) === -1 || !n.numero_ne) return;
       (numerosPorSof[n.sof_id] = numerosPorSof[n.sof_id] || []).push(n.numero_ne);
     });
