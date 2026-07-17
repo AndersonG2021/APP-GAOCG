@@ -11,9 +11,15 @@
  * caminho crítico de "abrir edição" no caso comum (ninguém mais editando).
  */
 const EdicaoSimultanea = (function () {
-  /** Dispara a checagem de conflito em segundo plano - não bloqueia nada, o chamador não espera essa promise antes de abrir o formulário. */
+  /**
+   * Dispara a checagem de conflito em segundo plano - não bloqueia nada, o
+   * chamador não espera essa promise antes de abrir o formulário.
+   * `silencioso: true` é essencial aqui: sem isso, o spinner global continua
+   * cobrindo a tela até essa chamada responder mesmo com o formulário já
+   * renderizado por baixo, anulando o ganho de abrir de forma otimista.
+   */
   function iniciarEdicao(tipoProcesso, processoId) {
-    return Api.chamar('abrirEdicao', { tipoProcesso, processoId }).catch(() => null);
+    return Api.chamar('abrirEdicao', { tipoProcesso, processoId }, { silencioso: true }).catch(() => null);
   }
 
   /**

@@ -602,6 +602,15 @@ Recibo) e conferir que o aviso aparece corretamente dentro do formulário já
 aberto, que "Continuar mesmo assim" assume a trava e some com o aviso, e que
 "Sair" fecha sem apagar a trava do outro usuário.
 
+**Bug corrigido no mesmo complemento (usuário testou e só sentiu 1-2s de
+ganho, não o esperado):** `iniciarEdicao` (a chamada de `abrirEdicao`) e
+`listarNotasEmpenhoPorSof` (SOF) foram disparadas **sem** `opcoes.silencioso`.
+Como `#sobreposicaoCarregando` (spinner global, `z-index: 70`) fica **acima**
+de `#sobreposicaoModal` (`z-index: 40`), o formulário renderizava por baixo
+instantaneamente, mas o spinner continuava cobrindo a tela até essas duas
+chamadas responderem - na prática anulando quase todo o ganho da abertura
+otimista. Corrigido: as duas passaram a usar `{ silencioso: true }`.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
