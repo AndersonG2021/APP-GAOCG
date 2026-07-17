@@ -222,7 +222,10 @@ const TelaSof = (function () {
       // EdicaoSimultanea/PROGRESS.md (seção de Performance).
       const edicaoPromise = EdicaoSimultanea.iniciarEdicao('SOF', id);
       Api.chamar('marcarSofVisualizado', { id }, { silencioso: true }).catch(() => {});
-      const notasPromise = Api.chamar('listarNotasEmpenhoPorSof', { sofId: id }).catch(() => []);
+      // silencioso: a seção de Notas de Empenho pode aparecer um instante
+      // depois do resto do formulário, sem travar a tela toda com o spinner
+      // global enquanto isso.
+      const notasPromise = Api.chamar('listarNotasEmpenhoPorSof', { sofId: id }, { silencioso: true }).catch(() => []);
       await abrirFormulario(sof, notasPromise);
       EdicaoSimultanea.tratarConflito(edicaoPromise, 'SOF', id);
     } finally {
