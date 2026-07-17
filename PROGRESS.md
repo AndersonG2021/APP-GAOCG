@@ -1,5 +1,19 @@
 # GAOCG App — Progresso das mudanças (plano em fases)
 
+## Objetivo do app
+
+Aplicação interna da Gerência Administrativa Orçamentária dos Contratos de Gestão (GAOCG),
+Secretaria de Saúde de Pernambuco. Substitui planilhas soltas no acompanhamento do ciclo de
+pagamento dos Contratos de Gestão das unidades de saúde geridas por OSS (UPAs, UPAEs,
+Hospitais etc.): **Unidades** (cadastro mestre + Valor do C.G./Termos Aditivos) → **SOF**
+(pedido orçamentário, múltiplas fontes, andamento em 13 etapas) → **Notas de Empenho**
+(vinculadas a uma fonte do SOF, com alerta de saldo) → **Recibos** (pagamento, parcela
+dividida, leitura por OCR de Nota de Liquidação/Ordem Bancária). Complementado por Listas
+Personalizadas (OSS/Objeto/Andamento/Status geridos pela equipe), Dashboard, Log de
+Auditoria e aviso de edição simultânea. Qualquer analista opera qualquer processo
+(sem segmentação por "frente" - removida na Fase 3.2); só a gestão de usuários é exclusiva
+do gerente. Ver [`README.md`](README.md) pra visão geral de arquitetura/deploy.
+
 > Este arquivo existe para permitir retomar o trabalho em qualquer computador: basta clonar
 > este repositório e pedir para o Claude Code ler este arquivo. O backend real vive só no
 > editor do Google Apps Script vinculado à planilha (git não implanta nada sozinho) — mas a
