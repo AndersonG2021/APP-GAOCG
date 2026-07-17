@@ -129,6 +129,9 @@ function listarNotasEmpenho(session, params) {
   var sofsPorId = {};
   sofs.forEach(function (s) { sofsPorId[s.id] = s; });
 
+  var unidadesPorId = {};
+  sheetToObjects_(getSheet_(SHEETS.UNIDADES)).forEach(function (u) { unidadesPorId[u.id] = u; });
+
   var fontesPorSof = agruparFontesPorSof_();
   var valorLiquidadoPorNe = valorLiquidadoAgrupadoPorNe_();
   var linhas = todasNotasEmpenhoComCache_();
@@ -145,6 +148,7 @@ function listarNotasEmpenho(session, params) {
   var resultado = Object.keys(grupos).map(function (numeroNe) {
     var grupo = grupos[numeroNe];
     var sof = sofsPorId[grupo.sof_id];
+    var unidade = sof ? unidadesPorId[sof.unidade_id] : null;
     var fontesDoSof = fontesPorSof[grupo.sof_id] || [];
     var parcelaMensalRef = fontesDoSof
       .filter(function (f) { return f.fonte === grupo.fonte; })
@@ -160,6 +164,9 @@ function listarNotasEmpenho(session, params) {
       sof_numero: sof ? sof.sof_numero : '',
       sof_objeto: sof ? sof.objeto : '',
       sof_unidade_id: sof ? sof.unidade_id : '',
+      sof_oss: sof ? sof.oss_snapshot : '',
+      sof_dea: sof ? sof.dea : '',
+      sof_tipo_unidade: unidade ? unidade.tipo : '',
       valor_bruto: grupo.valor,
       valor_liquidado: valorLiquidado,
       valor_atual: valorAtual,
@@ -171,6 +178,21 @@ function listarNotasEmpenho(session, params) {
 
   if (params.unidade_id) resultado = resultado.filter(function (g) { return String(g.sof_unidade_id) === String(params.unidade_id); });
   if (params.fonte) resultado = resultado.filter(function (g) { return g.fonte === params.fonte; });
+  if (params.oss) resultado = resultado.filter(function (g) { return g.sof_oss === params.oss; });
+  if (params.objeto) resultado = resultado.filter(function (g) { return g.sof_objeto === params.objeto; });
+  if (params.tipo_unidade) resultado = resultado.filter(function (g) { return g.sof_tipo_unidade === params.tipo_unidade; });
+  if (params.dea) resultado = resultado.filter(function (g) { return g.sof_dea === params.dea; });
+
+  var busca = sanitizeString_(params.busca, 200).toLowerCase();
+  if (busca) {
+    resultado = resultado.filter(function (g) {
+      return Object.keys(g).some(function (campo) {
+        var valor = g[campo];
+        if (valor === null || valor === undefined || typeof valor === 'object') return false;
+        return String(valor).toLowerCase().indexOf(busca) !== -1;
+      });
+    });
+  }
 
   resultado.sort(function (a, b) {
     if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;

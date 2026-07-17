@@ -305,6 +305,15 @@ function marcarReciboVisualizado(session, id) {
   return ok_({ id: id });
 }
 
+/** Resolve o DEA de cada Nota de Empenho via o SOF de origem (sof_id -> dea), indexado por numero_ne. */
+function mapaDeaPorNumeroNe_() {
+  var sofsPorId = {};
+  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) { sofsPorId[s.id] = s.dea; });
+  var mapa = {};
+  sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).forEach(function (n) { mapa[n.numero_ne] = sofsPorId[n.sof_id] || ''; });
+  return mapa;
+}
+
 /** Filtros compartilhados por listarRecibos e indicadoresRecibos (mesma lista visível = mesmos indicadores). */
 function filtrarLinhasRecibos_(rows, params) {
   if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
@@ -312,6 +321,11 @@ function filtrarLinhasRecibos_(rows, params) {
   if (params.status) rows = rows.filter(function (r) { return r.status === params.status; });
   if (params.competencia) rows = rows.filter(function (r) { return r.competencia === params.competencia; });
   if (params.fonte) rows = rows.filter(function (r) { return r.fonte === params.fonte; });
+  if (params.tipo_unidade) rows = rows.filter(function (r) { return r.tipo_unidade === params.tipo_unidade; });
+  if (params.dea) {
+    var mapaDea = mapaDeaPorNumeroNe_();
+    rows = rows.filter(function (r) { return mapaDea[r.nota_empenho] === params.dea; });
+  }
 
   ['objeto', 'instrumento', 'nota_empenho', 'numero_processo'].forEach(function (campo) {
     if (params[campo]) {

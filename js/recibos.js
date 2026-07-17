@@ -14,11 +14,14 @@ const TelaRecibos = (function () {
   let abrindoLinha = false;
 
   async function render() {
-    const [unidadesCarregadas, statusFiltroOpcoes] = await Promise.all([
+    const [unidadesCarregadas, statusFiltroOpcoes, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
-      opcoesStatusFiltro('')
+      opcoesStatusFiltro(''),
+      TelaListas.obterOpcoes('OSS'),
+      TelaListas.obterOpcoes('OBJETO')
     ]);
     unidades = unidadesCarregadas;
+    const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Recibos</h2>
       <div class="grade-indicadores" id="recIndicadores"></div>
@@ -28,12 +31,23 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Unidade</label>
             <select id="recFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
           </div>
+          <div class="campo"><label>OSS</label>
+            <select id="recFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Objeto</label>
+            <select id="recFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Tipo de unidade</label>
+            <select id="recFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>DEA</label>
+            <select id="recFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
+          </div>
           <div class="campo"><label>Competência</label><select id="recFiltroCompetencia">${UI.opcoesCompetenciaHtml('', true)}</select></div>
           <div class="campo"><label>Fonte</label>
             <select id="recFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
           </div>
           <div class="campo"><label>Status</label><select id="recFiltroStatus">${statusFiltroOpcoes}</select></div>
-          <div class="campo"><label>Objeto</label><input id="recFiltroObjeto" placeholder="Objeto" /></div>
           <div class="campo"><label>Instrumento</label><input id="recFiltroInstrumento" placeholder="Instrumento" /></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recFiltroNotaEmpenho" placeholder="Nota de Empenho" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recFiltroNumeroProcesso" placeholder="Nº Processo" /></div>
@@ -47,7 +61,7 @@ const TelaRecibos = (function () {
       </div>`;
 
     document.getElementById('btnFiltrarRec').addEventListener('click', () => { paginaAtual = 1; carregar(); });
-    ['recBusca', 'recFiltroObjeto', 'recFiltroInstrumento', 'recFiltroNotaEmpenho', 'recFiltroNumeroProcesso'].forEach(id => {
+    ['recBusca', 'recFiltroInstrumento', 'recFiltroNotaEmpenho', 'recFiltroNumeroProcesso'].forEach(id => {
       document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
     });
     document.getElementById('btnNovoRecibo').addEventListener('click', async function () {
@@ -62,10 +76,13 @@ const TelaRecibos = (function () {
     return {
       busca: document.getElementById('recBusca').value.trim(),
       unidade_id: document.getElementById('recFiltroUnidade').value,
+      oss: document.getElementById('recFiltroOss').value,
+      objeto: document.getElementById('recFiltroObjeto').value,
+      tipo_unidade: document.getElementById('recFiltroTipoUnidade').value,
+      dea: document.getElementById('recFiltroDea').value,
       competencia: document.getElementById('recFiltroCompetencia').value.trim(),
       fonte: document.getElementById('recFiltroFonte').value,
       status: document.getElementById('recFiltroStatus').value,
-      objeto: document.getElementById('recFiltroObjeto').value.trim(),
       instrumento: document.getElementById('recFiltroInstrumento').value.trim(),
       nota_empenho: document.getElementById('recFiltroNotaEmpenho').value.trim(),
       numero_processo: document.getElementById('recFiltroNumeroProcesso').value.trim()
@@ -282,7 +299,7 @@ const TelaRecibos = (function () {
   // ===================== NOVO RECIBO (com ou sem parcela dividida) =====================
 
   async function abrirFormularioNovo() {
-    const statusOpcoes = await opcoesStatus(null, '');
+    const [statusOpcoes, opcoesObjeto] = await Promise.all([opcoesStatus(null, ''), TelaListas.obterOpcoes('OBJETO')]);
     contadorLinhasParcelaDividida = 0;
 
     const corpo = `
@@ -292,8 +309,12 @@ const TelaRecibos = (function () {
           <div class="campo"><label>OSS</label><input id="recOss" /></div>
           <div class="campo"><label>CNPJ</label><input id="recCnpj" /></div>
           <div class="campo"><label>Tipo de Unidade</label><input id="recTipoUnidade" /></div>
-          <div class="campo"><label>Objeto</label><input id="recObjeto" list="recObjetoLista" disabled /><datalist id="recObjetoLista"></datalist>
-            <p class="ajuda">Selecione a unidade primeiro. Escolhendo um objeto já usado antes para ela, os campos abaixo são preenchidos com o último lançamento.</p>
+          <div class="campo"><label>Objeto *</label>
+            <select id="recObjeto">
+              <option value="">Selecione...</option>
+              ${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}
+            </select>
+            <p class="ajuda">Escolhendo um objeto já usado antes para essa unidade, os campos abaixo são preenchidos com o último lançamento.</p>
           </div>
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
@@ -334,25 +355,11 @@ const TelaRecibos = (function () {
       document.getElementById('recFonte').value = '';
       document.getElementById('recNotaEmpenho').value = '';
       document.getElementById('recObjeto').value = '';
-
-      const objetoInput = document.getElementById('recObjeto');
-      const objetoLista = document.getElementById('recObjetoLista');
-      objetoInput.disabled = !unidade;
-      objetoLista.innerHTML = '';
       historicoRecibosUnidade = [];
       if (!unidade) return;
 
       const resposta = await Api.chamar('listarRecibos', { unidade_id: unidade.id, pageSize: 1000 });
       historicoRecibosUnidade = resposta.items.slice().sort((a, b) => b.data_criacao < a.data_criacao ? -1 : 1);
-
-      const vistos = new Set();
-      historicoRecibosUnidade.forEach(r => {
-        const objeto = (r.objeto || '').trim();
-        if (objeto && !vistos.has(objeto)) {
-          vistos.add(objeto);
-          objetoLista.insertAdjacentHTML('beforeend', `<option value="${UI.escaparHtml(objeto)}"></option>`);
-        }
-      });
     });
 
     document.getElementById('recObjeto').addEventListener('change', async function () {
@@ -498,7 +505,7 @@ const TelaRecibos = (function () {
   // ===================== EDIÇÃO DE RECIBO EXISTENTE =====================
 
   async function abrirFormularioEdicao(recibo) {
-    const statusOpcoes = await opcoesStatus(recibo.status, recibo.fonte);
+    const [statusOpcoes, opcoesObjeto] = await Promise.all([opcoesStatus(recibo.status, recibo.fonte), TelaListas.obterOpcoes('OBJETO')]);
     const corpo = `
       <form id="formReciboEdicao">
         ${recibo.parcela_dividida_grupo_id ? `<p class="ajuda">Esta linha faz parte de um grupo de parcela dividida (${UI.escaparHtml(recibo.parcela_dividida_grupo_id)}).</p>` : ''}
@@ -509,7 +516,12 @@ const TelaRecibos = (function () {
           <div class="campo"><label>OSS</label><input id="recEdOss" value="${UI.escaparHtml(recibo.oss_snapshot)}" /></div>
           <div class="campo"><label>CNPJ</label><input id="recEdCnpj" value="${UI.escaparHtml(recibo.cnpj_snapshot)}" /></div>
           <div class="campo"><label>Tipo de Unidade</label><input id="recEdTipoUnidade" value="${UI.escaparHtml(recibo.tipo_unidade)}" /></div>
-          <div class="campo"><label>Objeto</label><input id="recEdObjeto" value="${UI.escaparHtml(recibo.objeto)}" /></div>
+          <div class="campo"><label>Objeto *</label>
+            <select id="recEdObjeto">
+              <option value="">Selecione...</option>
+              ${opcoesObjeto.map(o => `<option ${recibo.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
+            </select>
+          </div>
           <div class="campo"><label>Instrumento</label><input id="recEdInstrumento" value="${UI.escaparHtml(recibo.instrumento)}" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="number" step="0.01" value="${recibo.parcela_contratual}" /></div>
           <div class="campo"><label>Fonte</label><select id="recEdFonte">${['', 'TESOURO', 'SUS', 'Outra'].map(f => `<option ${recibo.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
@@ -530,6 +542,7 @@ const TelaRecibos = (function () {
 
     UI.abrirModal('Editar Recibo', corpo,
       `<button class="botao" id="btnCancelarRecEd">Cancelar</button><button class="botao primario" id="btnSalvarRecEd">Salvar</button>`);
+    UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
 
     document.getElementById('recEdFonte').addEventListener('change', async function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);
@@ -547,10 +560,7 @@ const TelaRecibos = (function () {
     });
     if (recibo.ordem_bancaria_arquivo_url) anexoOb.travar(recibo.valor_pago, true);
 
-    document.getElementById('btnCancelarRecEd').addEventListener('click', async () => {
-      await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
-      UI.fecharModal();
-    });
+    document.getElementById('btnCancelarRecEd').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRecEd').addEventListener('click', () => salvarReciboEdicao(recibo));
   }
 
@@ -589,7 +599,6 @@ const TelaRecibos = (function () {
 
       await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
-      await EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id);
       UI.fecharModal();
       await carregar();
     } catch (err) {

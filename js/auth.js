@@ -44,9 +44,22 @@ const Auth = (function () {
     return usuarioAtual;
   }
 
+  /** Atualiza o nome em memória/sessionStorage após alterarMeuNome, sem exigir novo login. */
+  function atualizarNomeLocal(novoNome) {
+    if (!usuarioAtual) return;
+    usuarioAtual = Object.assign({}, usuarioAtual, { nome: novoNome });
+    const bruto = sessionStorage.getItem(CHAVE_SESSAO);
+    if (!bruto) return;
+    try {
+      const dados = JSON.parse(bruto);
+      dados.user = usuarioAtual;
+      sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify(dados));
+    } catch (e) { /* sessão inválida, ignora */ }
+  }
+
   function ehGerente() {
     return !!usuarioAtual && usuarioAtual.perfil === 'gerente';
   }
 
-  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente };
+  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, atualizarNomeLocal };
 })();
