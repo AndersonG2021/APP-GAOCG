@@ -134,7 +134,7 @@ function montarLinhaRecibo_(session, dados, unidade) {
 function criarRecibo(session, dados) {
   dados = dados || {};
   if (!dados.unidade_id) return fail_('Selecione a unidade.');
-  var unidade = findById_(getSheet_(SHEETS.UNIDADES), dados.unidade_id);
+  var unidade = buscarUnidadePorId_(dados.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
   var linha = montarLinhaRecibo_(session, dados, unidade);
@@ -176,7 +176,7 @@ function criarRecibo(session, dados) {
  */
 function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas.');
-  var unidade = findById_(getSheet_(SHEETS.UNIDADES), dadosBase.unidade_id);
+  var unidade = buscarUnidadePorId_(dadosBase.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
   var parcelaDivididaGrupoId = proximoId_('Recibos') + '-PD';
@@ -266,7 +266,7 @@ function atualizarRecibo(session, id, dados) {
   }
 
   if (dados.hasOwnProperty('oss_snapshot') || dados.hasOwnProperty('cnpj_snapshot')) {
-    var unidade = findById_(getSheet_(SHEETS.UNIDADES), atualizado.unidade_id);
+    var unidade = buscarUnidadePorId_(atualizado.unidade_id);
     atualizado.divergente_da_unidade = !!unidade &&
       (String(atualizado.oss_snapshot || '') !== String(unidade.oss || '') || String(atualizado.cnpj_snapshot || '') !== String(unidade.cnpj || ''));
   }

@@ -11,11 +11,19 @@ const UI = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
+  /**
+   * Contador em vez de toggle simples: se duas chamadas de Api.chamar
+   * estiverem em voo ao mesmo tempo, a primeira que terminar não pode
+   * esconder o spinner enquanto a outra ainda está em andamento.
+   */
+  let contadorCarregando = 0;
   function mostrarCarregando() {
+    contadorCarregando++;
     document.getElementById('sobreposicaoCarregando').classList.remove('oculto');
   }
   function esconderCarregando() {
-    document.getElementById('sobreposicaoCarregando').classList.add('oculto');
+    contadorCarregando = Math.max(0, contadorCarregando - 1);
+    if (contadorCarregando === 0) document.getElementById('sobreposicaoCarregando').classList.add('oculto');
   }
 
   function toast(mensagem, tipo) {

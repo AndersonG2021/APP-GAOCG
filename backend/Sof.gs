@@ -16,7 +16,7 @@ var SOF_SNAPSHOT_MAP = {
 /** Recalcula divergente_da_unidade comparando os campos snapshot atuais do SOF com o cadastro vigente da unidade. */
 function recalcularDivergenciaSof_(sof) {
   if (!sof.unidade_id) return false;
-  var unidade = findById_(getSheet_(SHEETS.UNIDADES), sof.unidade_id);
+  var unidade = buscarUnidadePorId_(sof.unidade_id);
   if (!unidade) return false;
   return SOF_SNAPSHOT_FIELDS.some(function (campoUnidade) {
     var campoSnapshot = SOF_SNAPSHOT_MAP[campoUnidade];
@@ -132,7 +132,7 @@ function criarSof(session, dados) {
   dados = dados || {};
   if (!dados.unidade_id) return fail_('Selecione a unidade.');
 
-  var unidade = findById_(getSheet_(SHEETS.UNIDADES), dados.unidade_id);
+  var unidade = buscarUnidadePorId_(dados.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
   if (isNonEmpty_(dados.sei) && !validarSei_(dados.sei)) {

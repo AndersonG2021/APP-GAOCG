@@ -213,13 +213,18 @@ const TelaSof = (function () {
     try {
       const podeAbrir = await EdicaoSimultanea.entrarEmEdicao('SOF', id);
       if (!podeAbrir) return;
-      // marcarSofVisualizado é só informativo (tira o destaque de "parado") e
-      // não precisa bloquear a abertura do card; listarNotasEmpenhoPorSof só
-      // depende do id (não do resultado de obterSof), então já dispara junto.
-      // As 3 chamadas rodam em paralelo em vez de em fila - ver RELATORIO_LENTIDAO_SOF.md.
-      Api.chamar('marcarSofVisualizado', { id }).catch(() => {});
+      // O card já tem tudo que obterSof devolveria (fontes, total, destaque de
+      // "parado" - listarSof calcula os 3 pra montar o próprio card), então
+      // reaproveita "itens" em vez de pedir de novo ao backend - mesmo padrão
+      // já usado em abrirReciboExistente (js/recibos.js). Isso elimina uma
+      // requisição inteira do caminho crítico de abrir a edição (cada
+      // requisição ao Apps Script Web App tem um piso de latência considerável,
+      // então menos requisições por ação pesa mais que otimizar o que cada uma
+      // faz por dentro - ver PROGRESS.md, seção de Performance).
+      // marcarSofVisualizado é só informativo e não precisa bloquear a abertura.
+      const sof = itens.find(s => s.id === id);
+      Api.chamar('marcarSofVisualizado', { id }, { silencioso: true }).catch(() => {});
       const notasPromise = Api.chamar('listarNotasEmpenhoPorSof', { sofId: id }).catch(() => []);
-      const sof = await Api.chamar('obterSof', { id });
       await abrirFormulario(sof, notasPromise);
     } finally {
       abrindoLinha = false;

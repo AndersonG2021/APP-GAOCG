@@ -94,6 +94,23 @@ function invalidarCacheUnidades_() {
   CacheService.getScriptCache().remove('unidades');
 }
 
+/**
+ * Busca uma Unidade por id usando o cache de 30s, em vez de
+ * findById_(getSheet_(SHEETS.UNIDADES), id) - que relia a aba Unidades
+ * inteira do zero. Usada nos lookups somente-leitura de SOF/Recibo (nunca
+ * escreve na Unidade, então dispensa o _row que findById_ devolve).
+ * Sozinho, esse ponto explicava boa parte da lentidão de "trocar andamento"
+ * (atualizarSof chama recalcularDivergenciaSof_, que fazia essa leitura a
+ * cada troca) e de criar/editar SOF e Recibo.
+ */
+function buscarUnidadePorId_(id) {
+  var rows = todasUnidadesComCache_();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].id) === String(id)) return rows[i];
+  }
+  return null;
+}
+
 function listarUnidades(session, params) {
   params = params || {};
   var rows = todasUnidadesComCache_();

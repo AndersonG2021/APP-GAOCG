@@ -163,7 +163,7 @@ const TelaRecibos = (function () {
       const recibo = itens.find(r => r.id === id);
       // marcarReciboVisualizado é só informativo (tira o destaque de "parado")
       // e não precisa bloquear a abertura do formulário - ver RELATORIO_LENTIDAO_SOF.md.
-      Api.chamar('marcarReciboVisualizado', { id }).catch(() => {});
+      Api.chamar('marcarReciboVisualizado', { id }, { silencioso: true }).catch(() => {});
       await abrirFormularioEdicao(recibo);
     } finally {
       abrindoLinha = false;
