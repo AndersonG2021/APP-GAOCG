@@ -13,6 +13,8 @@ const TelaRecibos = (function () {
   let historicoRecibosUnidade = [];
   let abrindoLinha = false;
 
+  const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+
   async function render() {
     const [unidadesCarregadas, statusFiltroOpcoes, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
@@ -112,10 +114,11 @@ const TelaRecibos = (function () {
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum recibo encontrado.</p>'; return; }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Unidade</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
+        <thead><tr><th></th><th>Unidade</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
         <tbody>${itens.map(r => {
           const unidade = unidades.find(u => u.id === r.unidade_id);
           return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
+            <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
             <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
             <td>${UI.escaparHtml(r.numero_processo)}</td>
             <td>${UI.escaparHtml(r.competencia)}</td>
@@ -126,7 +129,13 @@ const TelaRecibos = (function () {
           </tr>`;
         }).join('')}</tbody>
       </table>`;
-    alvo.querySelectorAll('tr[data-id]').forEach(tr => tr.addEventListener('click', () => abrirReciboExistente(tr.dataset.id)));
+    alvo.querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.addEventListener('click', () => abrirReciboExistente(tr.dataset.id));
+      tr.querySelector('[data-acao="excluir"]').addEventListener('click', e => {
+        e.stopPropagation();
+        confirmarExclusaoRecibo(tr.dataset.id);
+      });
+    });
   }
 
   function renderPaginacao() {
@@ -179,6 +188,26 @@ const TelaRecibos = (function () {
   function marcarLinhaCarregando(id, carregando) {
     const linha = document.querySelector(`tr[data-id="${id}"]`);
     if (linha) linha.classList.toggle('carregando', carregando);
+  }
+
+  /** Confirmação grande e em destaque - exclusão é lógica (excluido=true), mesmo padrão de confirmarExclusao em js/unidades.js. */
+  function confirmarExclusaoRecibo(id) {
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ESSE PROCESSO?</p>`;
+    UI.abrirModal('Excluir recibo', corpo,
+      `<button class="botao" id="btnCancelarExclusaoRec">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoRec">Excluir</button>`,
+      { pequeno: true });
+
+    document.getElementById('btnCancelarExclusaoRec').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnConfirmarExclusaoRec').addEventListener('click', async () => {
+      try {
+        await Api.chamar('excluirRecibo', { id });
+        UI.toast('Recibo excluído.', 'sucesso');
+        UI.fecharModal();
+        await carregar();
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
+    });
   }
 
   function opcoesUnidade(selecionadaId) {

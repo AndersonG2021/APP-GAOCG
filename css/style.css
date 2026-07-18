@@ -278,6 +278,11 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .botao-icone.editar:hover { background: var(--azul-claro); color: var(--azul-escuro); }
 .botao-icone.excluir { color: var(--vermelho); }
 .botao-icone.excluir:hover { background: var(--vermelho-claro); }
+.tabela-acoes { display: flex; gap: 6px; white-space: nowrap; }
+.cartao-ne-cronograma { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; margin: 4px 0; }
+.cartao-ne-cronograma-linha { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--cinza-700); }
+.cronograma-ne-grade { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 12px; margin: 6px 0; }
+.cronograma-ne-item { display: flex; justify-content: space-between; font-size: 12.5px; background: var(--cinza-100); border-radius: 6px; padding: 4px 8px; }
 .cartao-sof-corpo { flex: 1; min-width: 0; cursor: pointer; }
 .cartao-sof-cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .cartao-sof-cabecalho h3 { margin: 0; font-size: 14.5px; color: var(--azul-escuro); }

@@ -625,8 +625,62 @@ instantaneamente, mas o spinner continuava cobrindo a tela até essas duas
 chamadas responderem - na prática anulando quase todo o ganho da abertura
 otimista. Corrigido: as duas passaram a usar `{ silencioso: true }`.
 
+## Sessão 2026-07-18 — Excluir Recibo, editar/excluir em Listas Personalizadas, Nova Nota de Empenho (em andamento)
+
+Pedido do usuário com 3 itens. Decisões tomadas antes de implementar:
+1. Nova Nota de Empenho (item 3) continua vinculada a um SOF (selecionado no formulário) — não vira uma NE avulsa sem SOF.
+2. O cronograma de desembolso (valores mensais extraídos por OCR) é só informativo por enquanto — não substitui a `parcela_mensal` da fonte do SOF no cálculo do alerta "abaixo da parcela mensal" (Fase 4).
+3. Campos lidos por OCR (Número, cronograma, Preço Total) travam (somente leitura) depois da leitura, com link "Remover anexo" pra refazer — mesmo padrão já usado nos anexos de Recibo.
+
+### Item 1 — Excluir Recibo (CÓDIGO CONCLUÍDO, aguardando o usuário colar/implantar e ajustar a planilha)
+Mesmo padrão de exclusão lógica já usado em SOF (`excluirSof`)/Unidades: ícone de lixeira no canto esquerdo de cada linha da tabela de Recibos; ao clicar, abre modal com aviso vermelho em caixa alta ("TEM CERTEZA QUE QUER EXCLUIR ESSE PROCESSO?", reaproveitando a classe `.aviso-exclusao` já existente) antes de confirmar.
+- `backend/Utils.gs`: `HEADERS.Recibos` ganha `excluido`/`excluido_por`/`excluido_em`; `COLUNAS_BOOLEANAS.Recibos` ganha `excluido`.
+- `backend/Recibos.gs`: nova `excluirRecibo(session, id)` (qualquer perfil, mesmo princípio de `excluirSof` — sem trava de dono); `criarRecibo`/`criarGrupoParcelaDivididaRecibo` inicializam `excluido: false`; `filtrarLinhasRecibos_` (usada por `listarRecibos` e `indicadoresRecibos`) passa a esconder linhas excluídas por padrão, sem opção de "mostrar excluídos" (mesmo comportamento do SOF — sem restaurar).
+- `backend/Code.gs`: novo `case 'excluirRecibo'`.
+- `js/recibos.js`: nova coluna de ícone (lixeira) na tabela; `confirmarExclusaoRecibo`.
+
+**Passo manual pendente do usuário:** na aba **Recibos** da planilha, criar as colunas `excluido`, `excluido_por`, `excluido_em`; colar `backend/Utils.gs`, `backend/Recibos.gs`, `backend/Code.gs` no editor do Apps Script e reimplantar.
+**Ainda não testado.**
+
+### Item 3 — Listas Personalizadas: editar/excluir por item (CÓDIGO CONCLUÍDO, aguardando o usuário colar/implantar)
+Substituiu os botões "Alternar pausa"/"Alternar ativa" e as colunas "Ativa"/"Ações" por ícones de lápis (editar) e lixeira (excluir) por linha, mesmo padrão visual de `js/unidades.js`. Editar abre o mesmo modal de criação, pré-preenchido, reaproveitando `atualizarOpcao`. Excluir é **exclusão física** (`deleteRow_`, não lógica) — decisão: como SOF/Recibo guardam o texto da opção direto na própria linha (não uma FK), remover uma opção da lista não deixa nada órfão em processos já existentes, só deixa de aparecer para novos cadastros.
+- `backend/ListasPersonalizadas.gs`: nova `excluirOpcao(session, id)` (gerente, `deleteRow_` + invalida cache).
+- `backend/Code.gs`: novo `case 'excluirOpcao'`.
+- `js/listas.js`: `abrirFormulario` aceita `opcaoExistente` opcional (edição); `renderTabela` sem colunas Ativa/Ações, com ícones lápis/lixeira (gerente); `confirmarExclusaoOpcao`.
+- `css/style.css`: `.tabela-acoes` (novo, só layout dos dois ícones lado a lado).
+
+**Passo manual pendente do usuário:** colar `backend/ListasPersonalizadas.gs`, `backend/Code.gs` no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova na planilha.
+**Ainda não testado.**
+
+### Item 2 — Nova Nota de Empenho com OCR (CÓDIGO CONCLUÍDO, regex NÃO calibrado contra o OCR real — aguardando o usuário colar/implantar e testar)
+
+Botão "Nova Nota de Empenho" na tela de Notas de Empenho: usuário escolhe Unidade → SOF → Fonte, anexa o documento da NE já existente, e o OCR preenche Número/cronograma de desembolso (valores por mês)/Preço Total, travando os campos com link "Remover anexo" pra refazer (mesmo padrão de `ligarAnexoComOcr_` já usado em Recibos).
+
+O usuário forneceu um documento de exemplo real (Nota de Empenho do e-fisco/PE) usado para desenhar os regex de extração. **Atenção:** diferente do OCR de Recibo (já validado em produção), estes regex foram calibrados a partir do texto extraído do PDF por uma ferramenta externa (não pelo pipeline real do backend - Advanced Drive Service/`extrairTextoOcr_`), que pode preservar a ordem de leitura do documento de um jeito diferente do OCR real. **Se o número/cronograma/preço total vier errado no primeiro teste, é o próximo passo a corrigir antes de qualquer outra coisa** (mesmo processo que já aconteceu com o OCR de Recibo, que precisou de um ajuste de sintaxe da Drive API v2→v3 depois do primeiro teste real).
+
+**Dados:**
+- Nova aba **NotasEmpenhoCronograma** (`id, nota_empenho_id, mes, valor, criado_por, data_criacao`) — mesmo padrão child-table de SofFontes/UnidadesTA. Cronograma é só informativo (decisão do usuário) — não altera o cálculo do alerta "abaixo da parcela mensal" (que continua comparando com `parcela_mensal` da fonte do SOF, Fase 4).
+- `backend/Contadores.gs` (cópia local): novo `NotasEmpenhoCronograma: 'NEC'` em `PREFIXOS_ID`.
+
+**Backend (`backend/NotasEmpenho.gs`):**
+- `MESES_CRONOGRAMA` (12 regex, um por mês, ex. `JANEIRO\s*:?\s*([\d.,]+)`, com `MAR[ÇC]O` pra tolerar OCR sem cedilha) + `REGEX_PRECO_TOTAL_NE_DOCUMENTO` (usa lookbehind `(?<!PRE[ÇC]O\s)\bTOTAL...` pra distinguir do cabeçalho "PREÇO TOTAL" da tabela de itens e casar só com o rodapé "TOTAL" perto de "LOCALIDADE DE ENTREGA").
+- Nova `lerAnexoNotaEmpenho(session, params)`: reaproveita `extrairTextoOcr_`/`normalizarValorMonetarioBr_` (Utils.gs) e `REGEX_NUMERO_NE_DOCUMENTO` (já existente em Recibos.gs, mesmo formato de número em qualquer documento do e-fisco/PE); devolve `{ numero_ne, cronograma: [{mes,rotulo,valor}], preco_total, cronograma_diverge_do_total }` — a divergência é só um aviso não bloqueante no frontend (o preço total oficial impresso manda, o cronograma é informativo).
+- `criarNotaEmpenho`: aceita `dados.cronograma` opcional (só quando `tipo === 'original'`) e grava cada mês em `NotasEmpenhoCronograma`.
+- `listarNotasEmpenho`: cada grupo (card) passa a expor `cronograma` (do `nota_empenho_id` da NE "original" do grupo, via novo `agruparCronogramaPorNotaEmpenho_`/cache de 30s `todoCronogramaComCache_`).
+- `backend/Code.gs`: novo `case 'lerAnexoNotaEmpenho'`.
+
+**Frontend (`js/notas-empenho.js`):** botão "+ Nova Nota de Empenho"; modal com Unidade→SOF→Fonte em cascata (`listarSof` filtrado por unidade) e anexo com OCR; card ganha link "Ver cronograma de desembolso" (expansível, só aparece se houver cronograma salvo).
+**CSS:** `.cartao-ne-cronograma`/`.cronograma-ne-grade` (novo).
+
+**Passos manuais pendentes do usuário antes de testar:**
+1. Criar a aba **NotasEmpenhoCronograma** na planilha com cabeçalho `id, nota_empenho_id, mes, valor, criado_por, data_criacao`.
+2. No editor do Apps Script, adicionar `NotasEmpenhoCronograma: 'NEC'` ao mapa `PREFIXOS_ID` em `Contadores.gs`.
+3. Colar `backend/NotasEmpenho.gs`, `backend/Code.gs`, `backend/Utils.gs` e reimplantar.
+
+**Ainda não testado** (nenhum teste real feito ainda): leitura OCR do documento de exemplo ponta a ponta; se número/cronograma/preço total vêm certos; aviso de divergência cronograma×total; card mostrando o cronograma corretamente.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs`. **Falta** `Contadores.gs` (nunca coletado neste repositório). Já tem `SofFontes: 'SFT'` e `UnidadesTA: 'UTA'` no mapa `PREFIXOS_ID` (confirmado, sessão 2026-07-13) — só o conteúdo completo do arquivo continua fora deste repo. Sempre que precisar editar um `.gs` que não está em `/backend`, pedir ao usuário o conteúdo atual antes (cópias antigas do histórico do git podem estar desatualizadas).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Contadores.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs` — todos os `.gs` do backend agora estão cobertos (o usuário colou `Contadores.gs`, coletado pela primeira vez em 2026-07-18). Sempre que precisar editar um `.gs`, conferir se a cópia local está atualizada antes (cópias antigas do histórico do git podem estar desatualizadas).
