@@ -146,7 +146,8 @@ function criarRecibo(session, dados) {
     criado_por: session.id,
     data_criacao: nowIso_(),
     data_ultima_alteracao_status: nowIso_(),
-    visualizado_apos_alerta: true
+    visualizado_apos_alerta: true,
+    excluido: false
   });
   novo.divergente_da_unidade = String(novo.oss_snapshot) !== String(unidade.oss) || String(novo.cnpj_snapshot) !== String(unidade.cnpj);
 
@@ -194,7 +195,8 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
       criado_por: session.id,
       data_criacao: nowIso_(),
       data_ultima_alteracao_status: nowIso_(),
-      visualizado_apos_alerta: true
+      visualizado_apos_alerta: true,
+      excluido: false
     });
 
     if (combinado.notaLiquidacaoArquivoBase64 && combinado.notaLiquidacaoArquivoNome) {
@@ -294,6 +296,31 @@ function atualizarRecibo(session, id, dados) {
   return ok_(atualizado);
 }
 
+/**
+ * Exclusão lógica (soft delete): mantém a linha e o histórico de auditoria,
+ * apenas marca excluido = true e some da listagem padrão (listarRecibos) -
+ * mesmo padrão de excluirSof em Sof.gs. Qualquer perfil autenticado
+ * (analista ou gerente) pode excluir.
+ */
+function excluirRecibo(session, id) {
+  var sheet = getSheet_(SHEETS.RECIBOS);
+  var existente = findById_(sheet, id);
+  if (!existente) return fail_('Recibo não encontrado.');
+  if (toBool_(existente.excluido)) return fail_('Este recibo já foi excluído.');
+
+  var atualizado = Object.assign({}, existente, {
+    excluido: true,
+    excluido_por: session.id,
+    excluido_em: nowIso_()
+  });
+  var rowIndex = existente._row;
+  delete atualizado._row;
+  updateObjectRow_(sheet, rowIndex, atualizado);
+
+  registrarLog_(session, 'Recibo', id, existente.criado_por, 'EXCLUSAO', '', 'Recibo excluído (lógico)');
+  return ok_({ id: id });
+}
+
 function marcarReciboVisualizado(session, id) {
   var sheet = getSheet_(SHEETS.RECIBOS);
   var existente = findById_(sheet, id);
@@ -316,6 +343,7 @@ function mapaDeaPorNumeroNe_() {
 
 /** Filtros compartilhados por listarRecibos e indicadoresRecibos (mesma lista visível = mesmos indicadores). */
 function filtrarLinhasRecibos_(rows, params) {
+  rows = rows.filter(function (r) { return !toBool_(r.excluido); });
   if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
   if (params.oss) rows = rows.filter(function (r) { return String(r.oss_snapshot).toLowerCase() === String(params.oss).toLowerCase(); });
   if (params.status) rows = rows.filter(function (r) { return r.status === params.status; });

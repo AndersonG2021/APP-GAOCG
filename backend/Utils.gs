@@ -10,6 +10,7 @@ var SHEETS = {
   SOF_FONTES: 'SofFontes',
   UNIDADES_TA: 'UnidadesTA',
   NOTAS_EMPENHO: 'NotasEmpenho',
+  NOTAS_EMPENHO_CRONOGRAMA: 'NotasEmpenhoCronograma',
   RECIBOS: 'Recibos',
   LOG_AUDITORIA: 'LogAuditoria',
   EDICOES_EM_ANDAMENTO: 'EdicoesEmAndamento',
@@ -28,13 +29,22 @@ var HEADERS = {
     'excluido', 'excluido_por', 'excluido_em'],
   SofFontes: ['id', 'sof_id', 'fonte', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
   UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'criado_por', 'data_criacao'],
-  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'valor', 'periodo', 'criado_por', 'data_criacao'],
+  // fonte/arquivo_drive_id/arquivo_url/mes_referencia: colunas que já existem
+  // na aba real (criarNotaEmpenho já grava nelas há tempo - HEADERS não
+  // refletia isso porque appendObjectRow_/updateObjectRow_ usam o cabeçalho
+  // REAL da planilha, nunca esta constante). mes_referencia é novo nesta
+  // sessão (2026-07-20) - precisa da coluna criada na planilha antes de
+  // colar este arquivo, senão criarNotaEmpenho segue funcionando mas esse
+  // campo específico é descartado silenciosamente (mesmo mecanismo).
+  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'fonte', 'valor', 'periodo', 'mes_referencia',
+    'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao'],
+  NotasEmpenhoCronograma: ['id', 'nota_empenho_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
     'nota_liquidacao_drive_id', 'nota_liquidacao_url', 'ordem_bancaria', 'ordem_bancaria_arquivo_drive_id',
     'ordem_bancaria_arquivo_url', 'numero_processo', 'observacao', 'status', 'parcela_dividida_grupo_id',
     'percentual_parcela_dividida', 'alerta_divergencia_valores', 'completo', 'origem', 'criado_por', 'data_criacao',
-    'data_ultima_alteracao_status', 'visualizado_apos_alerta'],
+    'data_ultima_alteracao_status', 'visualizado_apos_alerta', 'excluido', 'excluido_por', 'excluido_em'],
   LogAuditoria: ['id', 'usuario_id', 'perfil_usuario', 'data_hora', 'tipo_processo', 'processo_id',
     'dono_processo', 'campo_alterado', 'valor_anterior', 'valor_novo', 'fora_do_dono', 'origem'],
   EdicoesEmAndamento: ['tipo_processo', 'processo_id', 'usuario_id', 'iniciado_em', 'ultimo_heartbeat'],
@@ -50,7 +60,8 @@ var COLUNAS_NUMERICAS = {
   Unidades: ['valor_contrato_gestao'],
   SofFontes: ['parcela_mensal', 'total_solicitado'],
   UnidadesTA: ['valor_ta'],
-  NotasEmpenho: ['valor'],
+  NotasEmpenho: ['valor', 'mes_referencia'],
+  NotasEmpenhoCronograma: ['mes', 'valor'],
   Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_parcela_dividida'],
   Contadores: ['proximo']
 };
@@ -68,7 +79,7 @@ var COLUNAS_BOOLEANAS = {
   Unidades: ['ativo'],
   ListasPersonalizadas: ['pausa_contagem_parado', 'ativo'],
   SOF: ['divergente_da_unidade', 'completo', 'visualizado_apos_alerta', 'possui_ne', 'excluido'],
-  Recibos: ['divergente_da_unidade', 'alerta_divergencia_valores', 'completo', 'visualizado_apos_alerta'],
+  Recibos: ['divergente_da_unidade', 'alerta_divergencia_valores', 'completo', 'visualizado_apos_alerta', 'excluido'],
   LogAuditoria: ['fora_do_dono']
 };
 

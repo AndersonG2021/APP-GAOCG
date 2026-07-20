@@ -66,6 +66,7 @@ function handleRequest_(params) {
       case 'listarOpcoes': return jsonOut_(listarOpcoes(session, params));
       case 'criarOpcao': return jsonOut_(criarOpcao(session, params.data));
       case 'atualizarOpcao': return jsonOut_(atualizarOpcao(session, params.id, params.data));
+      case 'excluirOpcao': return jsonOut_(excluirOpcao(session, params.id));
 
       // SOF (Funcionalidade 3)
       case 'listarSof': return jsonOut_(listarSof(session, params));
@@ -78,6 +79,7 @@ function handleRequest_(params) {
       // Notas de Empenho (Funcionalidade 5)
       case 'listarNotasEmpenhoPorSof': return jsonOut_(listarNotasEmpenhoPorSof(session, params.sofId));
       case 'listarNotasEmpenho': return jsonOut_(listarNotasEmpenho(session, params));
+      case 'lerAnexoNotaEmpenho': return jsonOut_(lerAnexoNotaEmpenho(session, params));
       case 'criarNotaEmpenho': return jsonOut_(criarNotaEmpenho(session, params.data));
 
       // Recibos (Funcionalidade 4)
@@ -86,6 +88,7 @@ function handleRequest_(params) {
       case 'criarRecibo': return jsonOut_(criarRecibo(session, params.data));
       case 'criarGrupoParcelaDivididaRecibo': return jsonOut_(criarGrupoParcelaDivididaRecibo(session, params.dadosBase, params.parcelas));
       case 'atualizarRecibo': return jsonOut_(atualizarRecibo(session, params.id, params.data));
+      case 'excluirRecibo': return jsonOut_(excluirRecibo(session, params.id));
       case 'marcarReciboVisualizado': return jsonOut_(marcarReciboVisualizado(session, params.id));
       case 'migrarRecibosHistorico': return jsonOut_(migrarRecibosHistorico(session, params.linhas));
       case 'lerAnexoRecibo': return jsonOut_(lerAnexoRecibo(session, params));

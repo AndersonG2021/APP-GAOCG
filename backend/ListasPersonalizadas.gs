@@ -87,6 +87,22 @@ function atualizarOpcao(session, id, dados) {
   return ok_(atualizado);
 }
 
+/**
+ * Apenas o gerente pode excluir uma opção. É exclusão física (deleteRow_) -
+ * diferente de SOF/Recibo/Unidade, aqui não há FK: SOF/Recibo guardam o
+ * texto da opção direto na própria linha (ex. `andamento`, `status`), não um
+ * id, então remover uma opção da lista não deixa nada órfão.
+ */
+function excluirOpcao(session, id) {
+  requireGerente_(session);
+  var sheet = getSheet_(SHEETS.LISTAS);
+  var existente = findById_(sheet, id);
+  if (!existente) return fail_('Opção não encontrada.');
+  deleteRow_(sheet, existente._row);
+  invalidarCacheListas_();
+  return ok_({ id: id });
+}
+
 /** Carga única (rodar manualmente no editor): popula a lista OSS a partir dos valores já cadastrados em Unidades. */
 function semearListaOSS() {
   var existentes = todasOpcoesComCache_().filter(function (l) { return l.tipo_lista === 'OSS'; }).map(function (l) { return l.valor; });

@@ -71,6 +71,7 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
+    ['recFiltroUnidade', 'recFiltroOss', 'recFiltroObjeto', 'recFiltroTipoUnidade', 'recFiltroCompetencia', 'recFiltroStatus'].forEach(id => UI.tornarPesquisavel(id));
     await carregar();
   }
 
@@ -378,6 +379,8 @@ const TelaRecibos = (function () {
     UI.abrirModal('Novo processo de Recibo', corpo,
       `<button class="botao" id="btnCancelarRec">Cancelar</button><button class="botao primario" id="btnSalvarRec">Salvar</button>`);
 
+    ['recUnidade', 'recObjeto', 'recCompetencia', 'recStatus'].forEach(id => UI.tornarPesquisavel(id));
+
     document.getElementById('recUnidade').addEventListener('change', async function () {
       const unidade = unidades.find(u => u.id === this.value);
       document.getElementById('recOss').value = unidade ? unidade.oss || '' : '';
@@ -404,10 +407,12 @@ const TelaRecibos = (function () {
       document.getElementById('recFonte').value = ultimoLancamento.fonte || '';
       document.getElementById('recNotaEmpenho').value = ultimoLancamento.nota_empenho || '';
       document.getElementById('recStatus').innerHTML = await opcoesStatus(document.getElementById('recStatus').value, document.getElementById('recFonte').value);
+      UI.tornarPesquisavel('recStatus');
     });
 
     document.getElementById('recFonte').addEventListener('change', async function () {
       document.getElementById('recStatus').innerHTML = await opcoesStatus(document.getElementById('recStatus').value, this.value);
+      UI.tornarPesquisavel('recStatus');
     });
 
     document.getElementById('recTemParcelaDividida').addEventListener('change', function () {
@@ -577,8 +582,11 @@ const TelaRecibos = (function () {
       `<button class="botao" id="btnCancelarRecEd">Cancelar</button><button class="botao primario" id="btnSalvarRecEd">Salvar</button>`);
     UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
 
+    ['recEdObjeto', 'recEdCompetencia', 'recEdStatus'].forEach(id => UI.tornarPesquisavel(id));
+
     document.getElementById('recEdFonte').addEventListener('change', async function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);
+      UI.tornarPesquisavel('recEdStatus');
     });
 
     const obterNotaEmpenhoEd_ = () => document.getElementById('recEdNotaEmpenho').value;

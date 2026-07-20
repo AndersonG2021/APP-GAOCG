@@ -136,9 +136,155 @@ const UI = (function () {
     if (e.target === this) fecharModal();
   });
 
+  const REGEX_MARCAS_DIACRITICAS = new RegExp('[̀-ͯ]', 'g');
+  function normalizarBusca_(texto) {
+    return String(texto || '').toLowerCase().normalize('NFD').replace(REGEX_MARCAS_DIACRITICAS, '');
+  }
+
+  /**
+   * Transforma um <select> já existente num combo pesquisável (progressive
+   * enhancement): o <select> original continua no DOM (escondido) e é a
+   * fonte de verdade de `.value` - todo código já existente que lê
+   * `elemento.value` ou escuta `change` no select continua funcionando sem
+   * alteração nenhuma. Ao lado dele é inserido um <input> de texto + um
+   * painel de opções filtráveis; escolher uma opção seta o `.value` do
+   * select original e dispara `change` nele.
+   *
+   * Idempotente: se chamado de novo sobre um select já convertido (comum nos
+   * cascatas Unidade->SOF->Fonte, onde o innerHTML do select é substituído
+   * depois de uma busca), só atualiza a lista de opções a partir do estado
+   * atual do select, em vez de duplicar o wrapper.
+   */
+  function tornarPesquisavel(idOuElemento) {
+    const select = typeof idOuElemento === 'string' ? document.getElementById(idOuElemento) : idOuElemento;
+    if (!select || select.tagName !== 'SELECT') return;
+
+    const wrapperExistente = select.nextElementSibling && select.nextElementSibling.classList && select.nextElementSibling.classList.contains('select-pesquisavel')
+      ? select.nextElementSibling
+      : null;
+
+    if (wrapperExistente) {
+      atualizarWrapperPesquisavel_(select, wrapperExistente);
+      return;
+    }
+
+    select.classList.add('select-pesquisavel-original');
+    select.style.display = 'none';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'select-pesquisavel';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'select-pesquisavel-input';
+    input.autocomplete = 'off';
+    input.placeholder = 'Buscar...';
+    const lista = document.createElement('ul');
+    lista.className = 'select-pesquisavel-lista oculto';
+    wrapper.appendChild(input);
+    wrapper.appendChild(lista);
+    select.insertAdjacentElement('afterend', wrapper);
+
+    let indiceDestacado = -1;
+
+    function opcoesDoSelect() {
+      return Array.from(select.options).filter(o => o.value !== '' || o === select.options[0]);
+    }
+
+    function textoDaOpcaoSelecionada() {
+      const opcao = select.options[select.selectedIndex];
+      return opcao && opcao.value !== '' ? opcao.textContent : '';
+    }
+
+    function renderLista(filtro) {
+      const termo = normalizarBusca_(filtro);
+      const opcoes = opcoesDoSelect().filter(o => o.value !== '');
+      const filtradas = termo ? opcoes.filter(o => normalizarBusca_(o.textContent).indexOf(termo) !== -1) : opcoes;
+      indiceDestacado = -1;
+      lista.innerHTML = filtradas.length
+        ? filtradas.map((o, i) => `<li class="select-pesquisavel-opcao" data-valor="${escaparHtml(o.value)}" data-indice="${i}">${escaparHtml(o.textContent)}</li>`).join('')
+        : '<li class="select-pesquisavel-vazio">Nenhuma opção encontrada</li>';
+      lista.querySelectorAll('.select-pesquisavel-opcao').forEach(li => {
+        li.addEventListener('mousedown', e => {
+          e.preventDefault();
+          escolherValor(li.dataset.valor);
+        });
+      });
+    }
+
+    function abrirLista() {
+      if (select.disabled) return;
+      renderLista(input.value === textoDaOpcaoSelecionada() ? '' : input.value);
+      lista.classList.remove('oculto');
+    }
+
+    function fecharLista() {
+      lista.classList.add('oculto');
+      input.value = textoDaOpcaoSelecionada();
+    }
+
+    function escolherValor(valor) {
+      select.value = valor;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      input.value = textoDaOpcaoSelecionada();
+      fecharLista();
+    }
+
+    // Reflete no input trocas de valor feitas fora do wrapper (ex.:
+    // autopreenchimento programático que faz `select.value = x` e dispara
+    // `change` direto no <select> original, sem passar por escolherValor).
+    select.addEventListener('change', () => { input.value = textoDaOpcaoSelecionada(); });
+
+    input.addEventListener('focus', abrirLista);
+    input.addEventListener('input', () => { renderLista(input.value); lista.classList.remove('oculto'); });
+    input.addEventListener('blur', () => setTimeout(fecharLista, 120));
+    input.addEventListener('keydown', e => {
+      const itens = () => Array.from(lista.querySelectorAll('.select-pesquisavel-opcao'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (lista.classList.contains('oculto')) { abrirLista(); return; }
+        const els = itens();
+        if (!els.length) return;
+        indiceDestacado = Math.min(indiceDestacado + 1, els.length - 1);
+        els.forEach(el => el.classList.remove('destacada'));
+        els[indiceDestacado].classList.add('destacada');
+        els[indiceDestacado].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const els = itens();
+        if (!els.length) return;
+        indiceDestacado = Math.max(indiceDestacado - 1, 0);
+        els.forEach(el => el.classList.remove('destacada'));
+        els[indiceDestacado].classList.add('destacada');
+        els[indiceDestacado].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const els = itens();
+        if (indiceDestacado >= 0 && els[indiceDestacado]) escolherValor(els[indiceDestacado].dataset.valor);
+      } else if (e.key === 'Escape') {
+        fecharLista();
+        input.blur();
+      }
+    });
+
+    input.disabled = select.disabled;
+    input.value = textoDaOpcaoSelecionada();
+
+    // Reobserva o select original (via MutationObserver) pra refletir trocas
+    // programáticas de .value/.disabled feitas direto pelo código existente
+    // (ex.: reset de formulário) sem precisar tocar em cada call site.
+    const observer = new MutationObserver(() => atualizarWrapperPesquisavel_(select, wrapper));
+    observer.observe(select, { attributes: true, attributeFilter: ['disabled'] });
+    wrapper._observerSelect = observer;
+    wrapper._render = () => { input.value = textoDaOpcaoSelecionada(); input.disabled = select.disabled; };
+  }
+
+  function atualizarWrapperPesquisavel_(select, wrapper) {
+    if (wrapper._render) wrapper._render();
+  }
+
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
-    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml
+    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel
   };
 })();
 

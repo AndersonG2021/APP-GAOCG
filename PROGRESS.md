@@ -679,6 +679,89 @@ O usuário forneceu um documento de exemplo real (Nota de Empenho do e-fisco/PE)
 
 **Ainda não testado** (nenhum teste real feito ainda): leitura OCR do documento de exemplo ponta a ponta; se número/cronograma/preço total vêm certos; aviso de divergência cronograma×total; card mostrando o cronograma corretamente.
 
+## Sessão 2026-07-20 (parte 2) — Reconciliação do `/backend` local com o editor real do Apps Script
+
+O usuário colou aqui o conteúdo real e atual de **todos** os arquivos do
+editor do Apps Script (incluindo `Contadores.gs`, `Seed.gs` e
+`appsscript.json`, que nunca tinham sido versionados neste repositório).
+Comparação com o que estava no `/backend` local:
+
+- **Idênticos, sem nenhuma mudança necessária:** `Auth.gs`, `Dashboard.gs`,
+  `EdicoesEmAndamento.gs`, `Unidades.gs`, `Usuarios.gs`, `LogAuditoria.gs`,
+  `Sof.gs`, `Code.gs`, `ListasPersonalizadas.gs`, `Recibos.gs` — a
+  reconstrução da sessão anterior (parte 1) bateu exatamente com o que já
+  estava implantado.
+- **Adicionados ao repositório** (existiam só no editor, nunca tinham cópia
+  local): `backend/Contadores.gs`, `backend/Seed.gs`, `backend/appsscript.json`.
+  `Contadores.gs` confirma que `PREFIXOS_ID` **já tem** `NotasEmpenhoCronograma: 'NEC'`
+  — a pendência registrada na sessão de 2026-07-18 (item "adicionar NEC ao
+  mapa") **já estava resolvida**, não precisa de ação.
+- **Divergências reais, corrigidas em `backend/Utils.gs`:**
+  `HEADERS.NotasEmpenho` no repositório estava incompleto (`['id', 'sof_id',
+  'tipo', 'numero_ne', 'valor', 'periodo', 'criado_por', 'data_criacao']`,
+  faltando `fonte`/`arquivo_drive_id`/`arquivo_url`, que `criarNotaEmpenho`
+  já grava há tempo na aba real). Isso nunca quebrou nada em produção porque
+  `appendObjectRow_`/`updateObjectRow_` usam o cabeçalho **real** da planilha,
+  não essa constante — só importa se alguém rodar `configurarPlanilha()` numa
+  planilha nova do zero. Corrigido, e adicionado `mes_referencia` (novo campo
+  desta sessão, ver abaixo).
+- **Divergência real, corrigida em `backend/NotasEmpenho.gs`:** a versão
+  reconstruída na sessão anterior tinha ficado **mais permissiva** do que a
+  real em dois pontos de `lerAnexoNotaEmpenho` — a versão real **exige** que
+  os 12 meses do cronograma sejam identificados no documento (falha se
+  faltar qualquer um) e **exige** o Preço Total (falha se não achar), sem a
+  tolerância que eu tinha adicionado. Também corrigido:
+  `REGEX_PRECO_TOTAL_NE_DOCUMENTO` voltou para o padrão exato real (sem o
+  `R?\$?\s*` que eu tinha acrescentado sem necessidade), e a pasta do Drive
+  da NE voltou a ser referenciada como literal inline (não uma variável nova
+  que eu tinha introduzido). Nenhuma dessas correções muda comportamento já
+  implantado — só faz o arquivo local bater com o que roda de verdade antes
+  de eu empilhar as mudanças novas (mes_referencia + situação do cronograma,
+  descritas na seção anterior) por cima.
+
+**Conclusão prática:** dos 5 arquivos que a sessão anterior listou pra colar,
+só **`backend/Utils.gs`** e **`backend/NotasEmpenho.gs`** de fato mudaram
+(agora corretos, reconciliados com o real). `Code.gs`, `ListasPersonalizadas.gs`
+e `Recibos.gs` já estavam certos — não precisam ser recolados. Os passos
+manuais continuam os mesmos da seção anterior (coluna `mes_referencia` em
+NotasEmpenho; confirmar `excluido`/`excluido_por`/`excluido_em` em Recibos),
+**exceto** o item do prefixo `NEC` em `Contadores.gs`, que já está lá.
+
+## Sessão 2026-07-20 — Dropdown pesquisável, redesenho de SOF/NE, situação do cronograma (CÓDIGO CONCLUÍDO, aguardando o usuário colar/implantar e testar)
+
+Pedido do usuário com vários itens. Antes de implementar, foi confirmado com o usuário: o campo "Número do Processo" pedido como obrigatório no SOF é o campo **SEI** já existente (só mudou o rótulo exibido).
+
+**Achado nesta sessão, corrigido como pré-requisito:** o mirror local `/backend` estava desatualizado em relação ao que o usuário confirmou já estar rodando de verdade no editor do Apps Script - `excluirOpcao` (Listas Personalizadas), `excluirRecibo` e `lerAnexoNotaEmpenho`/cronograma de desembolso (Notas de Empenho), todos com UI no frontend já prontos desde a sessão de 2026-07-18, mas sem `case` correspondente em `Code.gs` nem função nos `.gs` deste repositório. Reconstruído aqui a partir da especificação detalhada já registrada na sessão de 2026-07-18 (regexes de OCR, `NotasEmpenhoCronograma`, etc.) - **se o que está rodando de verdade no Apps Script divergir do que foi colado aqui, avisar pra ajustar.**
+
+### 1. Dropdown pesquisável em todo o app
+`js/app.js` (`UI.tornarPesquisavel`): novo componente que transforma qualquer `<select>` num combo com busca (progressive enhancement - o `<select>` original continua a fonte de verdade de `.value`/`change`, só fica escondido). Aplicado em todo `<select>` alimentado por lista dinâmica (Unidade, OSS, Objeto, Tipo de unidade, Status, Competência, SOF, Nota de Empenho, Mês) nas telas de SOF, Notas de Empenho, Recibos e Dashboard - não aplicado aos selects de 2-4 opções fixas (Fonte, DEA, perfil, tipo de NE).
+**CSS:** `.select-pesquisavel*` (novo).
+
+### 2. SOF - formulário e card (`js/sof.js`, `css/style.css`)
+- Campo **OSS** virou `<select>` (lista `ListasPersonalizadas` tipo OSS), pesquisável; se o snapshot atual não estiver na lista, entra como opção extra pra não perder dado.
+- Rótulo do campo SEI virou **"Número do Processo"** (mesmo campo/validação, só o texto exibido).
+- Nº SOF, DEA e Período (início/fim) já eram obrigatórios antes desta sessão - confirmado, sem mudança de comportamento aí.
+- **Stepper de Andamento saiu do modal de edição e foi pro próprio card da listagem** - as 13 etapas ficam à mostra e são clicáveis direto na lista, sem precisar abrir "Editar SOF" (mesma regra de antes: nó "NE EMITIDA" só libera com `possui_ne`).
+- **Botão "Adicionar Nota de Empenho" foi removido** - o mini-formulário de NE dentro da edição de SOF continua existindo, mas só é salvo/criado junto com o clique em "Salvar" do formulário principal (se todos os campos da NE ficarem vazios, nenhuma NE é criada nesse Salvar).
+- Tabela de NE dentro do SOF: coluna "Valor" renomeada para **"Valor Empenhado"**.
+- **Card de SOF redesenhado**, maior e mais espaçado: id do processo + pill de dias parado + lixeira no topo; Nº SOF como título grande; unidade como subtítulo; caixa de informações (Número do Processo/Objeto/Fonte/Total Solicitado); andamento com stepper embutido; rodapé com selo de NE + botão "Abrir processo".
+
+### 3. Notas de Empenho (`js/notas-empenho.js`, `css/style.css`, `backend/NotasEmpenho.gs`)
+- Modal "Nova Nota de Empenho": ao escolher tipo **Reforço**, os campos Unidade/SOF somem e aparece só um combo pesquisável **"Nota de Empenho a Reforçar"** (busca em todas as NEs do sistema, não só de uma unidade - `sof_id`/`fonte` são resolvidos a partir da NE escolhida).
+- Reforço (tanto no botão "+ Reforço" do card quanto no modal "Nova Nota de Empenho") ganhou o campo obrigatório **"Mês de referência do reforço"** (novo campo `mes_referencia` em `NotasEmpenho`, só gravado pra linhas `tipo=reforco`).
+- Card de NE redesenhado: cabeçalho com ícone+fonte/SOF, número grande, unidade, grid 2x2 (Valor bruto/Liquidado/Saldo atual/Parcela de referência), rodapé com "Ver cronograma"/arquivos + botão "+ Reforço".
+- Cronograma expandido: caixa com cabeçalho "CRONOGRAMA DE DESEMBOLSO" + badge de meses, tabela Mês/Valor previsto/**Situação** (pill colorida), rodapé com total.
+- **Situação por mês** (`Previsto`/`Em processamento`/`Liquidado`/`Pago`), calculada no backend (`listarNotasEmpenho`/`situacaoCronogramaMes_`): compara o mês do cronograma (+ ano tirado dos 4 primeiros dígitos do `numero_ne`) contra `Recibos.competencia` de recibos com aquele `nota_empenho` - sem Recibo = Previsto; `status=PAGO` = Pago; status contendo "LIQUID" = Liquidado; qualquer outro status = Em processamento. **Suposição assumida** (avisar se o fluxo real de status não usar a palavra "LIQUID" em nenhuma opção): pode precisar ajustar esse critério depois de testar com os status reais cadastrados em Listas Personalizadas.
+- Reforços com `mes_referencia` aparecem como uma etiqueta "+ reforço" no mês correspondente do cronograma (só informativo, não muda a Situação).
+
+### Passos manuais pendentes do usuário antes de testar
+1. Na planilha, aba **NotasEmpenho**: adicionar a coluna `mes_referencia` (se ainda não existir) - além de já ter `fonte`, `arquivo_drive_id`, `arquivo_url` (Fase anterior).
+2. Confirmar que a aba **NotasEmpenhoCronograma** existe (`id, nota_empenho_id, mes, valor, criado_por, data_criacao`) e que `NotasEmpenhoCronograma: 'NEC'` já está no mapa `PREFIXOS_ID` de `Contadores.gs` - segundo a sessão de 2026-07-18 isso já foi feito, só confirmar.
+3. Na planilha, aba **Recibos**: confirmar que as colunas `excluido`, `excluido_por`, `excluido_em` existem (pendência também da sessão de 2026-07-18).
+4. Colar `backend/Utils.gs`, `backend/Code.gs`, `backend/ListasPersonalizadas.gs`, `backend/Recibos.gs`, `backend/NotasEmpenho.gs` no editor do Apps Script e reimplantar - **revisar o diff contra o que já está lá antes de colar**, já que parte deste commit reconstrói funcionalidade que o usuário confirmou já estar rodando (ver "Achado nesta sessão" acima).
+
+**Ainda não testado** (nenhum teste real feito ainda nesta sessão): dropdown pesquisável em uso real; autopreenchimento de OSS via Unidade com o campo agora sendo select; stepper clicável direto no card; Salvar de SOF criando a NE junto; combo de busca de "Nota de Empenho a Reforçar" cruzando unidades; cálculo de Situação do cronograma contra Recibos reais.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
