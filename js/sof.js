@@ -16,7 +16,7 @@ const TelaSof = (function () {
     { id: 'sofAcao', rotulo: 'Ação' },
     { id: 'sofSubacao', rotulo: 'Subação' },
     { id: 'sofGd', rotulo: 'G.D.' },
-    { id: 'sofSei', rotulo: 'SEI' },
+    { id: 'sofSei', rotulo: 'Número do Processo' },
     { id: 'sofNumero', rotulo: 'Nº SOF' },
     { id: 'sofPeriodoInicio', rotulo: 'Período (início)' },
     { id: 'sofPeriodoFim', rotulo: 'Período (fim)' },
@@ -79,6 +79,7 @@ const TelaSof = (function () {
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
+    ['sofFiltroUnidade', 'sofFiltroOss', 'sofFiltroObjeto', 'sofFiltroTipoUnidade'].forEach(id => UI.tornarPesquisavel(id));
     await carregar();
   }
 
@@ -108,58 +109,90 @@ const TelaSof = (function () {
     return Math.round(((idx + 1) / ETAPAS_ANDAMENTO.length) * 100);
   }
 
-  const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+
+  function cartaoSofHtml(s) {
+    const unidade = unidades.find(u => u.id === s.unidade_id);
+    const pct = percentualAndamento(s);
+    const fontesTexto = (s.fontes || []).map(f => f.fonte).filter(Boolean).join(', ');
+    return `
+      <div class="cartao-sof ${s.destacar_parado ? 'parado' : ''}" data-id="${s.id}">
+        <div class="cartao-sof-topo">
+          <span class="cartao-sof-id">${UI.escaparHtml(s.id)}</span>
+          <div class="cartao-sof-topo-acoes">
+            ${s.destacar_parado ? `<span class="selo amarelo">${s.dias_parado} dia(s) parado</span>` : ''}
+            <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
+          </div>
+        </div>
+        <h3 class="cartao-sof-titulo">${UI.escaparHtml(s.sof_numero || '-')}</h3>
+        <p class="cartao-sof-subtitulo">${UI.escaparHtml(unidade ? unidade.nome : s.unidade_id)}</p>
+        <div class="cartao-sof-infogrid">
+          <div class="cartao-sof-infogrid-item"><span>Número do Processo</span><strong>${UI.escaparHtml(s.sei || '-')}</strong></div>
+          <div class="cartao-sof-infogrid-item"><span>Objeto</span><strong>${UI.escaparHtml(s.objeto || '-')}</strong></div>
+          <div class="cartao-sof-infogrid-item"><span>Fonte</span><strong>${UI.escaparHtml(fontesTexto || '-')}</strong></div>
+          <div class="cartao-sof-infogrid-item"><span>Total Solicitado</span><strong>${UI.formatarMoeda(s.total_solicitado)}</strong></div>
+        </div>
+        <div class="cartao-sof-andamento">
+          <div class="cartao-sof-andamento-topo">
+            <span>Andamento <strong>${UI.escaparHtml(s.andamento || '-')}</strong></span>
+            <span>${pct}%</span>
+          </div>
+          <div class="barra-progresso"><div class="barra-progresso-preenchimento ${pct >= 100 ? 'completo' : ''}" style="width:${pct}%"></div></div>
+          ${stepperHtml(s)}
+        </div>
+        <div class="cartao-sof-rodape">
+          ${s.possui_ne ? '<span class="selo verde">NE Emitida</span>' : '<span class="selo amarelo">Aguardando NE</span>'}
+          <button type="button" class="botao primario" data-acao="abrir">Abrir processo &rarr;</button>
+        </div>
+      </div>`;
+  }
+
+  function ligarEventosCartaoSof_(cartaoEl, sof) {
+    cartaoEl.querySelector('.botao-icone.excluir').addEventListener('click', () => excluirSofClique(sof));
+    cartaoEl.querySelector('[data-acao="abrir"]').addEventListener('click', () => abrirSofExistente(sof.id));
+    cartaoEl.querySelectorAll('.stepper-marcador').forEach(btn => {
+      btn.addEventListener('click', () => avancarEtapaCartao(sof, btn.dataset.etapa, cartaoEl));
+    });
+  }
 
   function renderCards() {
     const alvo = document.getElementById('listaSof');
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum processo de SOF encontrado.</p>'; return; }
-    alvo.innerHTML = `<div class="grade-cards-sof">${itens.map(s => {
-      const unidade = unidades.find(u => u.id === s.unidade_id);
-      const pct = percentualAndamento(s);
-      const numerosNe = (s.notas_empenho_numeros || []).filter(Boolean);
-      return `
-        <div class="cartao-sof ${s.destacar_parado ? 'parado' : ''}" data-id="${s.id}">
-          <div class="cartao-sof-acoes">
-            <button type="button" class="botao-icone editar" data-acao="editar" title="Editar">${ICONE_LAPIS}</button>
-            <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
-          </div>
-          <div class="cartao-sof-corpo">
-            <div class="cartao-sof-cabecalho">
-              <h3>${UI.escaparHtml(unidade ? unidade.nome : s.unidade_id)}</h3>
-              <span class="cartao-sof-total">${UI.formatarMoeda(s.total_solicitado)}</span>
-            </div>
-            ${(s.fontes || []).length ? `<div class="cartao-sof-fontes">${(s.fontes || []).map(f => `
-              <div class="cartao-sof-fonte-linha"><span>${UI.escaparHtml(f.fonte)}</span><span>${UI.formatarMoeda(f.total_solicitado)}</span></div>
-            `).join('')}</div>` : ''}
-            <p class="cartao-sof-objeto">${UI.escaparHtml(s.objeto || '-')}</p>
-            <div class="cartao-sof-meta">
-              <span>Nº SOF: <strong>${UI.escaparHtml(s.sof_numero || '-')}</strong></span>
-              ${s.destacar_parado ? '<span class="selo amarelo">Parado</span>' : ''}
-              ${s.possui_ne
-                ? `<span class="selo verde">NE ${numerosNe.length ? UI.escaparHtml(numerosNe.join(', ')) : 'emitida'}</span>`
-                : '<span class="selo amarelo">NE pendente</span>'}
-            </div>
-            <div class="cartao-sof-andamento">
-              <div class="cartao-sof-andamento-topo">
-                <span>${UI.escaparHtml(s.andamento || '-')}</span>
-                <span>${pct}%</span>
-              </div>
-              <div class="barra-progresso"><div class="barra-progresso-preenchimento ${pct >= 100 ? 'completo' : ''}" style="width:${pct}%"></div></div>
-            </div>
-          </div>
-        </div>`;
-    }).join('')}</div>`;
-
+    alvo.innerHTML = `<div class="grade-cards-sof">${itens.map(cartaoSofHtml).join('')}</div>`;
     alvo.querySelectorAll('.cartao-sof').forEach(cartao => {
-      const id = cartao.dataset.id;
-      cartao.querySelector('.cartao-sof-corpo').addEventListener('click', () => abrirSofExistente(id));
-      cartao.querySelector('.botao-icone.editar').addEventListener('click', e => { e.stopPropagation(); abrirSofExistente(id); });
-      cartao.querySelector('.botao-icone.excluir').addEventListener('click', e => {
-        e.stopPropagation();
-        excluirSofClique(itens.find(i => i.id === id));
-      });
+      const sof = itens.find(i => i.id === cartao.dataset.id);
+      if (sof) ligarEventosCartaoSof_(cartao, sof);
     });
+  }
+
+  /** Reconstrói só um card (depois de avançar uma etapa do stepper direto na lista), sem recarregar a página inteira. */
+  function rerenderCartaoSof_(sof) {
+    const atual = document.querySelector(`.cartao-sof[data-id="${sof.id}"]`);
+    if (!atual) return;
+    atual.outerHTML = cartaoSofHtml(sof);
+    const novo = document.querySelector(`.cartao-sof[data-id="${sof.id}"]`);
+    if (novo) ligarEventosCartaoSof_(novo, sof);
+  }
+
+  /**
+   * Avança/retrocede o andamento direto no card, sem precisar abrir o modal
+   * de edição - o stepper de 13 etapas fica à mostra e editável na lista.
+   */
+  async function avancarEtapaCartao(sof, etapa, cartaoEl) {
+    if (etapa === 'NE EMITIDA' && !sof.possui_ne) {
+      UI.toast('Anexe a Nota de Empenho no processo (botão "Abrir processo") para avançar esta etapa.', 'erro');
+      return;
+    }
+    try {
+      await Api.chamar('atualizarSof', { id: sof.id, data: { andamento: etapa } });
+      sof.andamento = etapa;
+      sof.dias_parado = 0;
+      sof.destacar_parado = false;
+      rerenderCartaoSof_(sof);
+      UI.toast('Andamento atualizado.', 'sucesso');
+    } catch (err) {
+      UI.toast(err.message, 'erro');
+    }
   }
 
   async function excluirSofClique(sof) {
@@ -262,6 +295,7 @@ const TelaSof = (function () {
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
     const opcoesObjeto = await TelaListas.obterOpcoes('OBJETO');
+    const opcoesOss = await TelaListas.obterOpcoes('OSS');
     const corpo = `
       <form id="formSof">
         <div class="campo"><label>Unidade *</label>
@@ -272,13 +306,13 @@ const TelaSof = (function () {
         </div>
         ${sof && sof.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ Um ou mais campos abaixo divergem do cadastro atual da unidade.</p>' : ''}
         <div class="grade-3">
-          <div class="campo"><label>OSS</label><input id="sofOss" value="${UI.escaparHtml(snapshot.oss_snapshot)}" /></div>
+          <div class="campo"><label>OSS</label>${selectOssHtml_(opcoesOss, snapshot.oss_snapshot)}</div>
           <div class="campo"><label>CNPJ</label><input id="sofCnpj" value="${UI.escaparHtml(snapshot.cnpj_snapshot)}" /></div>
           <div class="campo"><label>Contrato de Gestão</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
           <div class="campo"><label>Ação</label><input id="sofAcao" value="${UI.escaparHtml(snapshot.acao_snapshot)}" /></div>
           <div class="campo"><label>Subação</label><input id="sofSubacao" value="${UI.escaparHtml(snapshot.subacao_snapshot)}" /></div>
           <div class="campo"><label>G.D.</label><input id="sofGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
-          <div class="campo"><label>SEI</label><input id="sofSei" value="${UI.escaparHtml(sof ? sof.sei : '')}" placeholder="0000000000.000000/0000-00" /></div>
+          <div class="campo"><label>Número do Processo</label><input id="sofSei" value="${UI.escaparHtml(sof ? sof.sei : '')}" placeholder="0000000000.000000/0000-00" /></div>
           <div class="campo"><label>Nº SOF</label><input id="sofNumero" value="${UI.escaparHtml(sof ? sof.sof_numero : '')}" placeholder="000/0000" /></div>
           <div class="campo"><label>Período - início</label><input type="date" id="sofPeriodoInicio" value="${UI.escaparHtml(sof ? sof.periodo_inicio : '')}" /></div>
           <div class="campo"><label>Período - fim</label><input type="date" id="sofPeriodoFim" value="${UI.escaparHtml(sof ? sof.periodo_fim : '')}" /></div>
@@ -307,9 +341,7 @@ const TelaSof = (function () {
           </select>
         </div>
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${UI.escaparHtml(sof ? sof.observacao : '')}</textarea></div>
-        <div class="campo"><label>Andamento</label>
-          <div id="stepperAndamento">${editando ? '' : '<p class="ajuda">Disponível depois que o processo for salvo.</p>'}</div>
-        </div>
+        <p class="ajuda">O andamento do processo agora é editado direto no card da listagem (stepper), sem precisar abrir esta tela.</p>
         <p id="sofErro" class="erro-campo oculto"></p>
       </form>
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
@@ -329,6 +361,7 @@ const TelaSof = (function () {
       const unidade = unidades.find(u => u.id === this.value);
       const preenchido = camposAutopreenchimento(unidade, null);
       document.getElementById('sofOss').value = preenchido.oss_snapshot;
+      document.getElementById('sofOss').dispatchEvent(new Event('change', { bubbles: true }));
       document.getElementById('sofCnpj').value = preenchido.cnpj_snapshot;
       document.getElementById('sofContrato').value = preenchido.contrato_snapshot;
       document.getElementById('sofAcao').value = preenchido.acao_snapshot;
@@ -340,10 +373,22 @@ const TelaSof = (function () {
 
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof));
 
+    ['sofUnidade', 'sofOss', 'sofObjeto'].forEach(id => UI.tornarPesquisavel(id));
+
     if (editando) {
-      atualizarStepperVisual(sof);
       await renderNotasEmpenho(sof, notasPromise);
     }
+  }
+
+  /** Monta o <select> de OSS a partir da lista personalizada; se o valor do snapshot não estiver na lista, entra como opção extra selecionada (não perde dado já existente). */
+  function selectOssHtml_(opcoesOss, valorAtual) {
+    const valores = opcoesOss.map(o => o.valor);
+    const extra = valorAtual && valores.indexOf(valorAtual) === -1 ? [valorAtual] : [];
+    const todas = extra.concat(valores);
+    return `<select id="sofOss">
+      <option value="">Selecione...</option>
+      ${todas.map(v => `<option ${v === valorAtual ? 'selected' : ''}>${UI.escaparHtml(v)}</option>`).join('')}
+    </select>`;
   }
 
   /** Lê as linhas de fonte direto do DOM (fonte da verdade entre re-renders). */
@@ -426,6 +471,36 @@ const TelaSof = (function () {
     };
   }
 
+  /**
+   * Lê o mini-formulário de Nota de Empenho embutido na edição de SOF (sem
+   * botão próprio - só é salvo/adicionado junto com o botão "Salvar" do
+   * formulário principal). Retorna `null` se o mini-formulário nem existe na
+   * tela (SOF novo) ou está totalmente vazio (usuário não quer adicionar
+   * nenhuma NE nesse Salvar). Lança erro com mensagem amigável se algo foi
+   * preenchido parcialmente.
+   */
+  async function lerMiniFormularioNe_() {
+    const numeroEl = document.getElementById('neNumero');
+    if (!numeroEl) return null;
+    const tipo = document.getElementById('neTipo').value;
+    const numero = numeroEl.value.trim();
+    const fonte = document.getElementById('neFonte').value;
+    const valor = document.getElementById('neValor').value;
+    const arquivoInput = document.getElementById('neArquivo');
+    const arquivo = arquivoInput.files[0];
+
+    const algumPreenchido = numero || fonte || valor || arquivo;
+    if (!algumPreenchido) return null;
+
+    if (!numero) throw new Error('Informe o número da Nota de Empenho (ou limpe os outros campos da NE pra não adicionar nenhuma).');
+    if (!fonte) throw new Error('Selecione a fonte da Nota de Empenho.');
+    if (!arquivo) throw new Error('Anexe o arquivo da Nota de Empenho.');
+    if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo da Nota de Empenho muito grande (máximo 8MB).');
+
+    const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
+    return { tipo, numero_ne: numero, fonte, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+  }
+
   async function salvarSof(sofExistente) {
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
@@ -434,12 +509,28 @@ const TelaSof = (function () {
     const mensagemObrigatorio = validarCamposObrigatorios();
     if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
 
+    let dadosNe;
+    try {
+      dadosNe = await lerMiniFormularioNe_();
+    } catch (err) {
+      UI.mostrarErro(erroEl, err.message);
+      return;
+    }
+
     try {
       let resposta;
       if (sofExistente) resposta = await Api.chamar('atualizarSof', { id: sofExistente.id, data: dados });
       else resposta = await Api.chamar('criarSof', { data: dados });
 
-      UI.toast('SOF salvo com sucesso.', 'sucesso');
+      if (dadosNe) {
+        await Api.chamar('criarNotaEmpenho', {
+          data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, valor: dadosNe.valor,
+            arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
+        });
+        if (dadosNe.tipo === 'original') resposta.possui_ne = true;
+      }
+
+      UI.toast(dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.', 'sucesso');
       if (sofExistente) {
         UI.fecharModal();
         await carregar();
@@ -473,62 +564,33 @@ const TelaSof = (function () {
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor</th><th>Período</th><th>Arquivo</th></tr></thead>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor Empenhado</th><th>Período</th><th>Arquivo</th></tr></thead>
         <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
-      <div class="grade-3" style="margin-top:10px">
+      <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora.</p>
+      <div class="grade-3">
         <div class="campo"><label>Tipo</label><select id="neTipo"><option value="original">Original</option><option value="reforco">Reforço</option></select></div>
-        <div class="campo"><label>Número *</label><div id="neNumeroContainer">${camposNumeroNeHtml(notas, 'original')}</div></div>
-        <div class="campo"><label>Fonte *</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Número</label><div id="neNumeroContainer">${camposNumeroNeHtml(notas, 'original')}</div></div>
+        <div class="campo"><label>Fonte</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
       </div>
       <div class="grade-3">
-        <div class="campo"><label>Valor</label><input id="neValor" type="number" step="0.01" /></div>
+        <div class="campo"><label>Valor Empenhado</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
-      <div class="campo"><label>Arquivo da Nota de Empenho *</label><input type="file" id="neArquivo" accept=".pdf,image/*" required /></div>
-      <button class="botao sucesso" id="btnAddNe">Adicionar Nota de Empenho</button>
-      <p id="neErro" class="erro-campo oculto"></p>`;
+      <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
 
     document.getElementById('neTipo').addEventListener('change', function () {
       document.getElementById('neNumeroContainer').innerHTML = camposNumeroNeHtml(notas, this.value);
+      UI.tornarPesquisavel('neNumero');
     });
-
-    document.getElementById('btnAddNe').addEventListener('click', async () => {
-      const erroEl = document.getElementById('neErro');
-      erroEl.classList.add('oculto');
-      const arquivoInput = document.getElementById('neArquivo');
-      const arquivo = arquivoInput.files[0];
-      if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo da Nota de Empenho.'); return; }
-      if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
-      const numeroEl = document.getElementById('neNumero');
-      if (!numeroEl || !numeroEl.value.trim()) { UI.mostrarErro(erroEl, 'Informe o número da Nota de Empenho.'); return; }
-      const fonte = document.getElementById('neFonte').value;
-      if (!fonte) { UI.mostrarErro(erroEl, 'Selecione a fonte da Nota de Empenho.'); return; }
-
-      try {
-        const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
-        const tipo = document.getElementById('neTipo').value;
-        await Api.chamar('criarNotaEmpenho', {
-          data: {
-            sof_id: sof.id, tipo, numero_ne: numeroEl.value.trim(), fonte, valor: document.getElementById('neValor').value,
-            arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
-          }
-        });
-        UI.toast('Nota de Empenho adicionada.', 'sucesso');
-        await renderNotasEmpenho(sof);
-        if (tipo === 'original' && sof.andamento !== 'NE EMITIDA') {
-          sof.possui_ne = true;
-          await avancarEtapa(sof, 'NE EMITIDA');
-        }
-      } catch (err) {
-        UI.mostrarErro(erroEl, err.message);
-      }
-    });
+    UI.tornarPesquisavel('neNumero');
   }
 
   /**
-   * Monta o HTML do stepper de Andamento (13 etapas fixas). Navegação é livre
-   * (qualquer nó, pra frente ou pra trás) — a única trava é o nó "NE EMITIDA",
-   * que só fica clicável depois que o SOF tiver uma Nota de Empenho anexada.
+   * Monta o HTML do stepper de Andamento (13 etapas fixas), embutido direto
+   * no card da listagem (Funcionalidade 3) - não existe mais dentro do modal
+   * de edição. Navegação é livre (qualquer nó, pra frente ou pra trás) — a
+   * única trava é o nó "NE EMITIDA", que só fica clicável depois que o SOF
+   * tiver uma Nota de Empenho anexada.
    */
   function stepperHtml(sof) {
     const atual = sof && sof.andamento ? ETAPAS_ANDAMENTO.indexOf(sof.andamento) : -1;
@@ -540,33 +602,6 @@ const TelaSof = (function () {
         <span class="stepper-rotulo">${UI.escaparHtml(etapa)}</span>
       </div>`;
     }).join('')}</div>`;
-  }
-
-  function atualizarStepperVisual(sof) {
-    const alvo = document.getElementById('stepperAndamento');
-    if (!alvo) return;
-    alvo.innerHTML = stepperHtml(sof);
-    alvo.querySelectorAll('.stepper-marcador').forEach(btn => {
-      btn.addEventListener('click', () => avancarEtapa(sof, btn.dataset.etapa));
-    });
-  }
-
-  async function avancarEtapa(sof, etapa) {
-    const erroEl = document.getElementById('sofErro');
-    if (etapa === 'NE EMITIDA' && !sof.possui_ne) {
-      UI.mostrarErro(erroEl, 'Anexe a Nota de Empenho na seção abaixo para avançar esta etapa.');
-      const secao = document.getElementById('secaoNotasEmpenho');
-      if (secao) secao.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-    try {
-      await Api.chamar('atualizarSof', { id: sof.id, data: { andamento: etapa } });
-      sof.andamento = etapa;
-      atualizarStepperVisual(sof);
-      UI.toast('Andamento atualizado.', 'sucesso');
-    } catch (err) {
-      UI.mostrarErro(erroEl, err.message);
-    }
   }
 
   function validarCamposObrigatorios() {

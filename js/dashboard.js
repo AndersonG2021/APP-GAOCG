@@ -15,6 +15,7 @@ const Dashboard = (function () {
         <div id="dashConteudo"></div>
       </div>`;
     document.getElementById('btnAtualizarDash').addEventListener('click', carregar);
+    UI.tornarPesquisavel('dashCompetencia');
     await carregar();
   }
 
@@ -23,6 +24,7 @@ const Dashboard = (function () {
     const dados = await Api.chamar('obterDashboard', { competencia });
     if (!document.getElementById('dashCompetencia').value) {
       document.getElementById('dashCompetencia').value = dados.recibos.competencia;
+      UI.tornarPesquisavel('dashCompetencia');
     }
     renderConteudo(dados);
   }
