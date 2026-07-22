@@ -16,12 +16,14 @@ const TelaRecibos = (function () {
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 
   async function render() {
-    const [unidadesCarregadas, statusFiltroOpcoes, opcoesOss, opcoesObjeto] = await Promise.all([
+    const [unidadesCarregadas, statusFiltroOpcoesBrutas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
-      opcoesStatusFiltro(''),
+      carregarOpcoesStatus_(),
       TelaListas.obterOpcoes('OSS'),
       TelaListas.obterOpcoes('OBJETO')
     ]);
+    const vistosStatus_ = new Set();
+    const statusFiltroOpcoes = statusFiltroOpcoesBrutas.filter(o => (vistosStatus_.has(o.valor) ? false : (vistosStatus_.add(o.valor), true)));
     unidades = unidadesCarregadas;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
@@ -30,30 +32,35 @@ const TelaRecibos = (function () {
       <div class="painel">
         <div class="barra-filtros">
           <div class="campo"><label>Busca livre</label><input id="recBusca" placeholder="processo, ordem bancária, valor..." /></div>
-          <div class="campo"><label>Unidade</label>
-            <select id="recFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="recFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
-          <div class="campo"><label>OSS</label>
-            <select id="recFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">OSS</label>
+            <div id="recFiltroOss"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroOss" title="Limpar filtro de OSS">&times;</button>
           </div>
-          <div class="campo"><label>Objeto</label>
-            <select id="recFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Objeto</label>
+            <div id="recFiltroObjeto"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroObjeto" title="Limpar filtro de Objeto">&times;</button>
           </div>
-          <div class="campo"><label>Tipo de unidade</label>
-            <select id="recFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo de unidade</label>
+            <div id="recFiltroTipoUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroTipoUnidade" title="Limpar filtro de Tipo de unidade">&times;</button>
           </div>
-          <div class="campo"><label>DEA</label>
-            <select id="recFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">DEA</label>
+            <div id="recFiltroDea"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroDea" title="Limpar filtro de DEA">&times;</button>
           </div>
-          <div class="campo"><label>Competência</label><select id="recFiltroCompetencia">${UI.opcoesCompetenciaHtml('', true)}</select></div>
-          <div class="campo"><label>Fonte</label>
-            <select id="recFiltroFonte"><option value="">Todas</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Competência</label>
+            <div id="recFiltroCompetencia"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroCompetencia" title="Limpar filtro de Competência">&times;</button>
           </div>
-          <div class="campo"><label>Status</label><select id="recFiltroStatus">${statusFiltroOpcoes}</select></div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
+            <div id="recFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
+          </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Status</label>
+            <div id="recFiltroStatus"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroStatus" title="Limpar filtro de Status">&times;</button>
+          </div>
           <div class="campo"><label>Instrumento</label><input id="recFiltroInstrumento" placeholder="Instrumento" /></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recFiltroNotaEmpenho" placeholder="Nota de Empenho" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recFiltroNumeroProcesso" placeholder="Nº Processo" /></div>
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
+          <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnExportarRec">Exportar CSV</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
@@ -71,21 +78,36 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
-    ['recFiltroUnidade', 'recFiltroOss', 'recFiltroObjeto', 'recFiltroTipoUnidade', 'recFiltroCompetencia', 'recFiltroStatus'].forEach(id => UI.tornarPesquisavel(id));
+    UI.criarFiltroMultiplo('recFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('recFiltroOss', opcoesOss.map(o => o.valor));
+    UI.criarFiltroMultiplo('recFiltroObjeto', opcoesObjeto.map(o => o.valor));
+    UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('recFiltroDea', ['SIM', 'NÃO']);
+    UI.criarFiltroMultiplo('recFiltroCompetencia', UI.listaCompetencias());
+    UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);
+    UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosRec', () => {
+      document.getElementById('recBusca').value = '';
+      document.getElementById('recFiltroInstrumento').value = '';
+      document.getElementById('recFiltroNotaEmpenho').value = '';
+      document.getElementById('recFiltroNumeroProcesso').value = '';
+      paginaAtual = 1;
+      carregar();
+    });
     await carregar();
   }
 
   function filtrosAtuais() {
     return {
       busca: document.getElementById('recBusca').value.trim(),
-      unidade_id: document.getElementById('recFiltroUnidade').value,
-      oss: document.getElementById('recFiltroOss').value,
-      objeto: document.getElementById('recFiltroObjeto').value,
-      tipo_unidade: document.getElementById('recFiltroTipoUnidade').value,
-      dea: document.getElementById('recFiltroDea').value,
-      competencia: document.getElementById('recFiltroCompetencia').value.trim(),
-      fonte: document.getElementById('recFiltroFonte').value,
-      status: document.getElementById('recFiltroStatus').value,
+      unidade_id: UI.valoresFiltroMultiplo('recFiltroUnidade'),
+      oss: UI.valoresFiltroMultiplo('recFiltroOss'),
+      objeto: UI.valoresFiltroMultiplo('recFiltroObjeto'),
+      tipo_unidade: UI.valoresFiltroMultiplo('recFiltroTipoUnidade'),
+      dea: UI.valoresFiltroMultiplo('recFiltroDea'),
+      competencia: UI.valoresFiltroMultiplo('recFiltroCompetencia'),
+      fonte: UI.valoresFiltroMultiplo('recFiltroFonte'),
+      status: UI.valoresFiltroMultiplo('recFiltroStatus'),
       instrumento: document.getElementById('recFiltroInstrumento').value.trim(),
       nota_empenho: document.getElementById('recFiltroNotaEmpenho').value.trim(),
       numero_processo: document.getElementById('recFiltroNumeroProcesso').value.trim()

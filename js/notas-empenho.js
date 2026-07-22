@@ -29,25 +29,26 @@ const TelaNotasEmpenho = (function () {
         <p class="ajuda">Cada card agrupa a Nota de Empenho original e seus reforços pelo número. O valor atual já desconta o que foi liquidado nos Recibos vinculados a essa NE.</p>
         <div class="barra-filtros">
           <div class="campo"><label>Busca livre</label><input id="neBusca" placeholder="número, SEI, valor..." /></div>
-          <div class="campo"><label>Unidade</label>
-            <select id="neFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="neFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
-          <div class="campo"><label>OSS</label>
-            <select id="neFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">OSS</label>
+            <div id="neFiltroOss"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroOss" title="Limpar filtro de OSS">&times;</button>
           </div>
-          <div class="campo"><label>Objeto</label>
-            <select id="neFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Objeto</label>
+            <div id="neFiltroObjeto"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroObjeto" title="Limpar filtro de Objeto">&times;</button>
           </div>
-          <div class="campo"><label>Tipo de unidade</label>
-            <select id="neFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo de unidade</label>
+            <div id="neFiltroTipoUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroTipoUnidade" title="Limpar filtro de Tipo de unidade">&times;</button>
           </div>
-          <div class="campo"><label>DEA</label>
-            <select id="neFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">DEA</label>
+            <div id="neFiltroDea"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroDea" title="Limpar filtro de DEA">&times;</button>
           </div>
-          <div class="campo"><label>Fonte</label>
-            <select id="neFiltroFonte"><option value="">Todas</option>${OPCOES_FONTE.map(f => `<option>${f}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
+            <div id="neFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
+          <button class="botao botao-limpar-filtros" id="btnLimparFiltrosNe">Limpar filtros</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovaNe">+ Nova Nota de Empenho</button>
         </div>
@@ -56,7 +57,13 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('btnFiltrarNe').addEventListener('click', carregar);
     document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
-    ['neFiltroUnidade', 'neFiltroOss', 'neFiltroObjeto', 'neFiltroTipoUnidade'].forEach(id => UI.tornarPesquisavel(id));
+    UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor));
+    UI.criarFiltroMultiplo('neFiltroObjeto', opcoesObjeto.map(o => o.valor));
+    UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
+    UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => { document.getElementById('neBusca').value = ''; carregar(); });
     await carregar();
   }
 
@@ -67,12 +74,12 @@ const TelaNotasEmpenho = (function () {
     gruposTodos = [];
     const params = {
       busca: document.getElementById('neBusca').value.trim(),
-      unidade_id: document.getElementById('neFiltroUnidade').value,
-      oss: document.getElementById('neFiltroOss').value,
-      objeto: document.getElementById('neFiltroObjeto').value,
-      tipo_unidade: document.getElementById('neFiltroTipoUnidade').value,
-      dea: document.getElementById('neFiltroDea').value,
-      fonte: document.getElementById('neFiltroFonte').value
+      unidade_id: UI.valoresFiltroMultiplo('neFiltroUnidade'),
+      oss: UI.valoresFiltroMultiplo('neFiltroOss'),
+      objeto: UI.valoresFiltroMultiplo('neFiltroObjeto'),
+      tipo_unidade: UI.valoresFiltroMultiplo('neFiltroTipoUnidade'),
+      dea: UI.valoresFiltroMultiplo('neFiltroDea'),
+      fonte: UI.valoresFiltroMultiplo('neFiltroFonte')
     };
     grupos = await Api.chamar('listarNotasEmpenho', params);
     renderCards();

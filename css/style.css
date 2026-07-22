@@ -202,6 +202,39 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .select-pesquisavel-opcao:hover, .select-pesquisavel-opcao.destacada { background: var(--azul-claro); color: var(--azul-escuro); }
 .select-pesquisavel-vazio { padding: 7px 9px; font-size: 12.5px; color: var(--cinza-500); }
 
+/* ===== Filtro de múltipla escolha (barras de filtro) ===== */
+.campo-filtro-multiplo { display: flex; align-items: flex-end; gap: 4px; }
+.campo-filtro-multiplo .filtro-multiplo { flex: 1; }
+.filtro-multiplo { position: relative; }
+.filtro-multiplo-cabecalho {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 8px 10px; border: 1px solid var(--cinza-300); border-radius: 8px; background: var(--branco);
+  font-size: 13.5px; font-family: inherit; cursor: pointer; color: var(--cinza-900); text-align: left;
+}
+.filtro-multiplo-cabecalho svg { flex-shrink: 0; color: var(--cinza-500); }
+.filtro-multiplo.tem-selecao .filtro-multiplo-cabecalho { border-color: var(--azul); background: var(--azul-claro); color: var(--azul-escuro); font-weight: 600; }
+.filtro-multiplo-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filtro-multiplo-painel {
+  position: absolute; z-index: 45; top: calc(100% + 4px); left: 0; min-width: 220px; max-width: 320px;
+  background: var(--branco); border: 1px solid var(--cinza-300); border-radius: 8px; box-shadow: var(--sombra); padding: 6px;
+}
+.filtro-multiplo-busca {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--cinza-300); border-radius: 6px;
+  font-size: 13px; font-family: inherit; margin-bottom: 4px;
+}
+.filtro-multiplo-opcoes { max-height: 220px; overflow-y: auto; }
+.filtro-multiplo-opcao { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.filtro-multiplo-opcao:hover { background: var(--cinza-100); }
+.filtro-multiplo-opcao input { flex-shrink: 0; }
+.filtro-multiplo-vazio { padding: 7px 9px; font-size: 12.5px; color: var(--cinza-500); }
+.filtro-multiplo-x {
+  flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--cinza-300); border-radius: 8px;
+  background: var(--branco); color: var(--cinza-500); font-size: 15px; line-height: 1; cursor: pointer;
+}
+.filtro-multiplo-x:hover { background: var(--vermelho-claro); color: var(--vermelho); border-color: var(--vermelho-claro); }
+.botao-limpar-filtros { background: var(--vermelho-claro); color: var(--vermelho); }
+.botao-limpar-filtros:hover { filter: brightness(0.96); }
+
 .aviso-divergencia { color: var(--amarelo); font-size: 12px; margin-top: 2px; }
 .estado-vazio { text-align: center; color: var(--cinza-500); padding: 40px 0; }
 
