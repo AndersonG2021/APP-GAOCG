@@ -120,7 +120,7 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 
 .campo { margin-bottom: 14px; }
 .campo label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 12.5px; color: var(--cinza-700); }
-.campo input, .campo select, .campo textarea {
+.campo input:not([type="checkbox"]):not([type="radio"]), .campo select, .campo textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--cinza-300);
@@ -203,8 +203,8 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .select-pesquisavel-vazio { padding: 7px 9px; font-size: 12.5px; color: var(--cinza-500); }
 
 /* ===== Filtro de múltipla escolha (barras de filtro) ===== */
-.campo-filtro-multiplo { display: flex; align-items: flex-end; gap: 4px; }
-.campo-filtro-multiplo .filtro-multiplo { flex: 1; }
+.campo-filtro-multiplo { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px; }
+.campo-filtro-multiplo label { grid-column: 1 / -1; width: auto !important; text-align: left; }
 .filtro-multiplo { position: relative; }
 .filtro-multiplo-cabecalho {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -228,8 +228,8 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .filtro-multiplo-opcao input { flex-shrink: 0; }
 .filtro-multiplo-vazio { padding: 7px 9px; font-size: 12.5px; color: var(--cinza-500); }
 .filtro-multiplo-x {
-  flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--cinza-300); border-radius: 8px;
-  background: var(--branco); color: var(--cinza-500); font-size: 15px; line-height: 1; cursor: pointer;
+  flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--cinza-300); border-radius: 6px;
+  background: var(--branco); color: var(--cinza-500); font-size: 13px; line-height: 1; cursor: pointer;
 }
 .filtro-multiplo-x:hover { background: var(--vermelho-claro); color: var(--vermelho); border-color: var(--vermelho-claro); }
 .botao-limpar-filtros { background: var(--vermelho-claro); color: var(--vermelho); }
