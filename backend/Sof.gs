@@ -304,26 +304,41 @@ function listarSof(session, params) {
     r.total_solicitado = totalSolicitadoDeFontes_(fontes);
   });
 
-  if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
-  if (params.oss) {
-    var ossBusca = String(params.oss).toLowerCase();
-    rows = rows.filter(function (r) { return String(r.oss_snapshot || '').toLowerCase().indexOf(ossBusca) !== -1; });
+  var unidadeIds = paraArrayFiltro_(params.unidade_id);
+  if (unidadeIds.length) rows = rows.filter(function (r) { return unidadeIds.indexOf(String(r.unidade_id)) !== -1; });
+
+  var ossValores = paraArrayFiltro_(params.oss).map(function (v) { return v.toLowerCase(); });
+  if (ossValores.length) {
+    rows = rows.filter(function (r) {
+      var ossLinha = String(r.oss_snapshot || '').toLowerCase();
+      return ossValores.some(function (v) { return ossLinha.indexOf(v) !== -1; });
+    });
   }
-  if (params.objeto) {
-    var objetoBusca = String(params.objeto).toLowerCase();
-    rows = rows.filter(function (r) { return String(r.objeto || '').toLowerCase().indexOf(objetoBusca) !== -1; });
+
+  var objetoValores = paraArrayFiltro_(params.objeto).map(function (v) { return v.toLowerCase(); });
+  if (objetoValores.length) {
+    rows = rows.filter(function (r) {
+      var objetoLinha = String(r.objeto || '').toLowerCase();
+      return objetoValores.some(function (v) { return objetoLinha.indexOf(v) !== -1; });
+    });
   }
-  if (params.dea) rows = rows.filter(function (r) { return r.dea === params.dea; });
-  if (params.tipo_unidade) {
-    var unidadesDoTipo = todasUnidadesComCache_()
-      .filter(function (u) { return u.tipo === params.tipo_unidade; })
+
+  var deaValores = paraArrayFiltro_(params.dea);
+  if (deaValores.length) rows = rows.filter(function (r) { return deaValores.indexOf(r.dea) !== -1; });
+
+  var tipoUnidadeValores = paraArrayFiltro_(params.tipo_unidade);
+  if (tipoUnidadeValores.length) {
+    var unidadesDosTipos = todasUnidadesComCache_()
+      .filter(function (u) { return tipoUnidadeValores.indexOf(u.tipo) !== -1; })
       .map(function (u) { return String(u.id); });
-    rows = rows.filter(function (r) { return unidadesDoTipo.indexOf(String(r.unidade_id)) !== -1; });
+    rows = rows.filter(function (r) { return unidadesDosTipos.indexOf(String(r.unidade_id)) !== -1; });
   }
   if (params.andamento) rows = rows.filter(function (r) { return r.andamento === params.andamento; });
-  if (params.fonte) {
+
+  var fonteValores = paraArrayFiltro_(params.fonte);
+  if (fonteValores.length) {
     rows = rows.filter(function (r) {
-      return r.fontes.some(function (f) { return f.fonte === params.fonte; });
+      return r.fontes.some(function (f) { return fonteValores.indexOf(f.fonte) !== -1; });
     });
   }
 

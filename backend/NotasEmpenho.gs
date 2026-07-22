@@ -379,12 +379,23 @@ function listarNotasEmpenho(session, params) {
     };
   });
 
-  if (params.unidade_id) resultado = resultado.filter(function (g) { return String(g.sof_unidade_id) === String(params.unidade_id); });
-  if (params.fonte) resultado = resultado.filter(function (g) { return g.fonte === params.fonte; });
-  if (params.oss) resultado = resultado.filter(function (g) { return g.sof_oss === params.oss; });
-  if (params.objeto) resultado = resultado.filter(function (g) { return g.sof_objeto === params.objeto; });
-  if (params.tipo_unidade) resultado = resultado.filter(function (g) { return g.sof_tipo_unidade === params.tipo_unidade; });
-  if (params.dea) resultado = resultado.filter(function (g) { return g.sof_dea === params.dea; });
+  var unidadeIds = paraArrayFiltro_(params.unidade_id);
+  if (unidadeIds.length) resultado = resultado.filter(function (g) { return unidadeIds.indexOf(String(g.sof_unidade_id)) !== -1; });
+
+  var fonteValores = paraArrayFiltro_(params.fonte);
+  if (fonteValores.length) resultado = resultado.filter(function (g) { return fonteValores.indexOf(g.fonte) !== -1; });
+
+  var ossValores = paraArrayFiltro_(params.oss);
+  if (ossValores.length) resultado = resultado.filter(function (g) { return ossValores.indexOf(g.sof_oss) !== -1; });
+
+  var objetoValores = paraArrayFiltro_(params.objeto);
+  if (objetoValores.length) resultado = resultado.filter(function (g) { return objetoValores.indexOf(g.sof_objeto) !== -1; });
+
+  var tipoUnidadeValores = paraArrayFiltro_(params.tipo_unidade);
+  if (tipoUnidadeValores.length) resultado = resultado.filter(function (g) { return tipoUnidadeValores.indexOf(g.sof_tipo_unidade) !== -1; });
+
+  var deaValores = paraArrayFiltro_(params.dea);
+  if (deaValores.length) resultado = resultado.filter(function (g) { return deaValores.indexOf(g.sof_dea) !== -1; });
 
   var busca = sanitizeString_(params.busca, 200).toLowerCase();
   if (busca) {

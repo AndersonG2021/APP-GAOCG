@@ -344,21 +344,38 @@ function mapaDeaPorNumeroNe_() {
 /** Filtros compartilhados por listarRecibos e indicadoresRecibos (mesma lista visível = mesmos indicadores). */
 function filtrarLinhasRecibos_(rows, params) {
   rows = rows.filter(function (r) { return !toBool_(r.excluido); });
-  if (params.unidade_id) rows = rows.filter(function (r) { return String(r.unidade_id) === String(params.unidade_id); });
-  if (params.oss) rows = rows.filter(function (r) { return String(r.oss_snapshot).toLowerCase() === String(params.oss).toLowerCase(); });
-  if (params.status) rows = rows.filter(function (r) { return r.status === params.status; });
-  if (params.competencia) rows = rows.filter(function (r) { return r.competencia === params.competencia; });
-  if (params.fonte) rows = rows.filter(function (r) { return r.fonte === params.fonte; });
-  if (params.tipo_unidade) rows = rows.filter(function (r) { return r.tipo_unidade === params.tipo_unidade; });
-  if (params.dea) {
+
+  var unidadeIds = paraArrayFiltro_(params.unidade_id);
+  if (unidadeIds.length) rows = rows.filter(function (r) { return unidadeIds.indexOf(String(r.unidade_id)) !== -1; });
+
+  var ossValores = paraArrayFiltro_(params.oss).map(function (v) { return v.toLowerCase(); });
+  if (ossValores.length) rows = rows.filter(function (r) { return ossValores.indexOf(String(r.oss_snapshot || '').toLowerCase()) !== -1; });
+
+  var statusValores = paraArrayFiltro_(params.status);
+  if (statusValores.length) rows = rows.filter(function (r) { return statusValores.indexOf(r.status) !== -1; });
+
+  var competenciaValores = paraArrayFiltro_(params.competencia);
+  if (competenciaValores.length) rows = rows.filter(function (r) { return competenciaValores.indexOf(r.competencia) !== -1; });
+
+  var fonteValores = paraArrayFiltro_(params.fonte);
+  if (fonteValores.length) rows = rows.filter(function (r) { return fonteValores.indexOf(r.fonte) !== -1; });
+
+  var tipoUnidadeValores = paraArrayFiltro_(params.tipo_unidade);
+  if (tipoUnidadeValores.length) rows = rows.filter(function (r) { return tipoUnidadeValores.indexOf(r.tipo_unidade) !== -1; });
+
+  var deaValores = paraArrayFiltro_(params.dea);
+  if (deaValores.length) {
     var mapaDea = mapaDeaPorNumeroNe_();
-    rows = rows.filter(function (r) { return mapaDea[r.nota_empenho] === params.dea; });
+    rows = rows.filter(function (r) { return deaValores.indexOf(mapaDea[r.nota_empenho]) !== -1; });
   }
 
   ['objeto', 'instrumento', 'nota_empenho', 'numero_processo'].forEach(function (campo) {
-    if (params[campo]) {
-      var termo = String(params[campo]).toLowerCase();
-      rows = rows.filter(function (r) { return String(r[campo] || '').toLowerCase().indexOf(termo) !== -1; });
+    var valores = paraArrayFiltro_(params[campo]).map(function (v) { return v.toLowerCase(); });
+    if (valores.length) {
+      rows = rows.filter(function (r) {
+        var valorLinha = String(r[campo] || '').toLowerCase();
+        return valores.some(function (v) { return valorLinha.indexOf(v) !== -1; });
+      });
     }
   });
 

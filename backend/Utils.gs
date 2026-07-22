@@ -281,6 +281,21 @@ function isNonEmpty_(value) {
   return value !== undefined && value !== null && String(value).trim() !== '';
 }
 
+/**
+ * Normaliza um parâmetro de filtro de lista (unidade_id, oss, objeto, etc.)
+ * pra array de strings não vazias, aceitando tanto o formato antigo (um
+ * único valor, de quando os filtros eram <select> simples) quanto o novo
+ * (array, dos filtros de múltipla escolha) - retrocompatível com qualquer
+ * chamada de API antiga que ainda mande um valor solto.
+ */
+function paraArrayFiltro_(valor) {
+  if (valor === undefined || valor === null || valor === '') return [];
+  var lista = Array.isArray(valor) ? valor : [valor];
+  return lista
+    .filter(function (v) { return v !== undefined && v !== null && String(v).trim() !== ''; })
+    .map(function (v) { return String(v); });
+}
+
 /** Valida CNPJ (formato + dígitos verificadores). Aceita com ou sem máscara. */
 function validarCnpj_(cnpjRaw) {
   var cnpj = String(cnpjRaw || '').replace(/[^\d]/g, '');

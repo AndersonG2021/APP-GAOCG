@@ -282,9 +282,167 @@ const UI = (function () {
     if (wrapper._render) wrapper._render();
   }
 
+  /**
+   * ===== Filtro de múltipla escolha =====
+   * Substitui um <div id="..."> vazio (colocado no lugar de um <select> nas
+   * barras de filtro) por um combo de checkboxes com busca, permitindo
+   * selecionar 0..N opções. O valor "vazio" (nenhuma opção marcada) tem o
+   * mesmo efeito de "Todas"/"Todos" que os selects antigos tinham.
+   *
+   * Cada instância fica registrada em `registroFiltrosMultiplos` pelo id do
+   * container, para que `valoresFiltroMultiplo`/`limparFiltroMultiplo` sejam
+   * chamados de qualquer lugar (ex.: filtrosAtuais(), botão "Limpar filtros",
+   * botão "x" individual de cada campo) sem precisar guardar a referência.
+   */
+  const registroFiltrosMultiplos = {};
+
+  function normalizarOpcoesFiltro_(opcoes) {
+    return (opcoes || []).map(o => (typeof o === 'string' ? { valor: o, rotulo: o } : { valor: o.valor, rotulo: o.rotulo != null ? o.rotulo : o.valor }));
+  }
+
+  function criarFiltroMultiplo(id, opcoes) {
+    const raiz = document.getElementById(id);
+    if (!raiz) return null;
+
+    let normalizadas = normalizarOpcoesFiltro_(opcoes);
+    let selecionados = new Set();
+
+    raiz.classList.add('filtro-multiplo');
+    raiz.innerHTML = `
+      <button type="button" class="filtro-multiplo-cabecalho">
+        <span class="filtro-multiplo-texto">Todas</span>
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="filtro-multiplo-painel oculto">
+        <input type="text" class="filtro-multiplo-busca" placeholder="Buscar..." autocomplete="off" />
+        <div class="filtro-multiplo-opcoes"></div>
+      </div>`;
+
+    const botao = raiz.querySelector('.filtro-multiplo-cabecalho');
+    const texto = raiz.querySelector('.filtro-multiplo-texto');
+    const painel = raiz.querySelector('.filtro-multiplo-painel');
+    const buscaInput = raiz.querySelector('.filtro-multiplo-busca');
+    const opcoesContainer = raiz.querySelector('.filtro-multiplo-opcoes');
+
+    function renderOpcoes(filtro) {
+      const termo = normalizarBusca_(filtro);
+      const filtradas = termo ? normalizadas.filter(o => normalizarBusca_(o.rotulo).indexOf(termo) !== -1) : normalizadas;
+      opcoesContainer.innerHTML = filtradas.length
+        ? filtradas.map(o => `
+          <label class="filtro-multiplo-opcao">
+            <input type="checkbox" value="${escaparHtml(o.valor)}" ${selecionados.has(o.valor) ? 'checked' : ''} />
+            <span>${escaparHtml(o.rotulo)}</span>
+          </label>`).join('')
+        : '<div class="filtro-multiplo-vazio">Nenhuma opção encontrada</div>';
+      opcoesContainer.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          if (cb.checked) selecionados.add(cb.value); else selecionados.delete(cb.value);
+          atualizarTexto();
+        });
+      });
+    }
+
+    function atualizarTexto() {
+      if (selecionados.size === 0) {
+        texto.textContent = 'Todas';
+      } else if (selecionados.size === 1) {
+        const valor = Array.from(selecionados)[0];
+        const opcao = normalizadas.find(o => o.valor === valor);
+        texto.textContent = opcao ? opcao.rotulo : valor;
+      } else {
+        texto.textContent = `${selecionados.size} selecionadas`;
+      }
+      raiz.classList.toggle('tem-selecao', selecionados.size > 0);
+    }
+
+    function aoClicarFora_(e) {
+      if (!raiz.contains(e.target)) fechar();
+    }
+
+    function abrir() {
+      if (!painel.classList.contains('oculto')) return;
+      painel.classList.remove('oculto');
+      buscaInput.value = '';
+      renderOpcoes('');
+      buscaInput.focus();
+      document.addEventListener('mousedown', aoClicarFora_, true);
+    }
+
+    function fechar() {
+      painel.classList.add('oculto');
+      document.removeEventListener('mousedown', aoClicarFora_, true);
+    }
+
+    botao.addEventListener('click', () => { painel.classList.contains('oculto') ? abrir() : fechar(); });
+    buscaInput.addEventListener('input', () => renderOpcoes(buscaInput.value));
+    buscaInput.addEventListener('keydown', e => { if (e.key === 'Escape') { fechar(); botao.focus(); } });
+
+    atualizarTexto();
+
+    const api = {
+      obterValores: () => Array.from(selecionados),
+      definirValores: (valores) => {
+        selecionados = new Set((valores || []).map(String));
+        atualizarTexto();
+        if (!painel.classList.contains('oculto')) renderOpcoes(buscaInput.value);
+      },
+      limpar: () => {
+        if (selecionados.size === 0) return;
+        selecionados.clear();
+        atualizarTexto();
+        if (!painel.classList.contains('oculto')) renderOpcoes(buscaInput.value);
+      },
+      atualizarOpcoes: (novasOpcoes) => {
+        normalizadas = normalizarOpcoesFiltro_(novasOpcoes);
+        selecionados = new Set(Array.from(selecionados).filter(v => normalizadas.some(o => o.valor === v)));
+        atualizarTexto();
+        if (!painel.classList.contains('oculto')) renderOpcoes(buscaInput.value);
+      }
+    };
+    registroFiltrosMultiplos[id] = api;
+    return api;
+  }
+
+  function valoresFiltroMultiplo(id) {
+    return registroFiltrosMultiplos[id] ? registroFiltrosMultiplos[id].obterValores() : [];
+  }
+
+  function limparFiltroMultiplo(id) {
+    if (registroFiltrosMultiplos[id]) registroFiltrosMultiplos[id].limpar();
+  }
+
+  /**
+   * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
+   * e o botão maior de "Limpar filtros" (se existir, via seu id) de uma barra
+   * de filtros recém-renderizada. `aoLimpar` roda depois de limpar tudo
+   * (tipicamente recarrega a lista com paginaAtual = 1).
+   */
+  function ligarLimpezaFiltros(raizOuSeletor, botaoLimparTodosId, aoLimpar) {
+    const raiz = typeof raizOuSeletor === 'string' ? document.querySelector(raizOuSeletor) : raizOuSeletor;
+    if (!raiz) return;
+    raiz.querySelectorAll('.filtro-multiplo-x').forEach(btn => {
+      btn.addEventListener('click', () => {
+        limparFiltroMultiplo(btn.dataset.alvo);
+        if (aoLimpar) aoLimpar();
+      });
+    });
+    if (botaoLimparTodosId) {
+      const botaoTodos = document.getElementById(botaoLimparTodosId);
+      if (botaoTodos) {
+        botaoTodos.addEventListener('click', () => {
+          raiz.querySelectorAll('.filtro-multiplo-x').forEach(btn => limparFiltroMultiplo(btn.dataset.alvo));
+          raiz.querySelectorAll('input[type=text], input[type=search]').forEach(inp => { inp.value = ''; });
+          raiz.querySelectorAll('select').forEach(sel => { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });
+          if (aoLimpar) aoLimpar();
+        });
+      }
+    }
+  }
+
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
-    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel
+    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
+    criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, ligarLimpezaFiltros
   };
 })();
 
