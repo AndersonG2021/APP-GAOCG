@@ -4,20 +4,41 @@
  */
 
 const TelaUnidades = (function () {
+  const OPCOES_TIPO = ['UPA', 'UPAE', 'Hospital', 'Carreta', 'Outro'];
   let unidades = [];
+  let todasUnidades = []; // sem filtro nenhum - só pra popular o dropdown do filtro "Unidade", separado da lista filtrada exibida nos cartões
   let linhasTas = [];
+  let ultimoFiltroJson = null;
 
   const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
   const ICONE_RESTAURAR = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
   async function render() {
+    const [opcoesOss, todasUnidadesCarregadas] = await Promise.all([
+      TelaListas.obterOpcoes('OSS'),
+      Api.chamar('listarUnidades', {}, { cache: true })
+    ]);
+    todasUnidades = todasUnidadesCarregadas;
     const container = document.getElementById('conteudo');
     container.innerHTML = `
       <h2 class="titulo-tela">Unidades</h2>
       <div class="painel">
-        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
-          <label style="font-size:13px"><input type="checkbox" id="chkSomenteAtivas" checked /> Somente ativas</label>
+        <div class="barra-filtros">
+          <div class="campo"><label>Busca livre</label><input id="uniBusca" placeholder="nome, OSS, CNPJ..." /></div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="uniFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
+          </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo</label>
+            <div id="uniFiltroTipo"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroTipo" title="Limpar filtro de Tipo">&times;</button>
+          </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">OSS</label>
+            <div id="uniFiltroOss"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroOss" title="Limpar filtro de OSS">&times;</button>
+          </div>
+          <label style="align-self:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="chkSomenteAtivas" checked /> Somente ativas</label>
+          <button class="botao" id="btnFiltrarUni">Filtrar</button>
+          <button class="botao botao-limpar-filtros" id="btnLimparFiltrosUni">Limpar filtros</button>
+          <span style="flex:1"></span>
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
         <div id="listaUnidades"></div>
@@ -25,12 +46,37 @@ const TelaUnidades = (function () {
 
     document.getElementById('btnNovaUnidade').addEventListener('click', () => abrirFormulario());
     document.getElementById('chkSomenteAtivas').addEventListener('change', carregar);
+    document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) carregar(); });
+    document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) carregar(); });
+    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO);
+    UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor));
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosUni', () => {
+      document.getElementById('uniBusca').value = '';
+      if (filtrosMudaram_()) carregar();
+    });
     await carregar();
   }
 
+  function filtrosAtuais() {
+    return {
+      busca: document.getElementById('uniBusca').value.trim(),
+      unidade_id: UI.valoresFiltroMultiplo('uniFiltroUnidade'),
+      tipo: UI.valoresFiltroMultiplo('uniFiltroTipo'),
+      oss: UI.valoresFiltroMultiplo('uniFiltroOss'),
+      somenteAtivas: document.getElementById('chkSomenteAtivas').checked
+    };
+  }
+
+  /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
+  function filtrosMudaram_() {
+    return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
+  }
+
   async function carregar() {
-    const somenteAtivas = document.getElementById('chkSomenteAtivas').checked;
-    unidades = await Api.chamar('listarUnidades', { somenteAtivas });
+    const filtros = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(filtros);
+    unidades = await Api.chamar('listarUnidades', filtros);
     renderCards();
   }
 
@@ -156,7 +202,7 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Nome *</label><input id="uNome" value="${UI.escaparHtml(unidade ? unidade.nome : '')}" required /></div>
           <div class="campo"><label>Tipo</label>
             <select id="uTipo">
-              ${['UPA', 'UPAE', 'Hospital', 'Carreta', 'Outro'].map(t => `<option ${unidade && unidade.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+              ${OPCOES_TIPO.map(t => `<option ${unidade && unidade.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
             </select>
           </div>
           <div class="campo"><label>OSS</label><input id="uOss" value="${UI.escaparHtml(unidade ? unidade.oss : '')}" /></div>

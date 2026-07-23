@@ -31,6 +31,7 @@ const TelaSof = (function () {
   let sofEmEdicaoId = null;
   let abrindoLinha = false;
   let linhasFontes = [];
+  let ultimoFiltroJson = null;
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
@@ -45,25 +46,26 @@ const TelaSof = (function () {
       <div class="painel">
         <div class="barra-filtros">
           <div class="campo"><label>Busca livre</label><input id="sofBusca" placeholder="unidade, SEI, valor..." /></div>
-          <div class="campo"><label>Unidade</label>
-            <select id="sofFiltroUnidade"><option value="">Todas</option>${unidades.map(u => `<option value="${u.id}">${UI.escaparHtml(u.nome)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="sofFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
-          <div class="campo"><label>OSS</label>
-            <select id="sofFiltroOss"><option value="">Todas</option>${opcoesOss.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">OSS</label>
+            <div id="sofFiltroOss"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroOss" title="Limpar filtro de OSS">&times;</button>
           </div>
-          <div class="campo"><label>Objeto</label>
-            <select id="sofFiltroObjeto"><option value="">Todos</option>${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Objeto</label>
+            <div id="sofFiltroObjeto"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroObjeto" title="Limpar filtro de Objeto">&times;</button>
           </div>
-          <div class="campo"><label>Tipo de unidade</label>
-            <select id="sofFiltroTipoUnidade"><option value="">Todos</option>${tiposUnidade.map(t => `<option>${UI.escaparHtml(t)}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo de unidade</label>
+            <div id="sofFiltroTipoUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroTipoUnidade" title="Limpar filtro de Tipo de unidade">&times;</button>
           </div>
-          <div class="campo"><label>DEA</label>
-            <select id="sofFiltroDea"><option value="">Todas</option><option>SIM</option><option>NÃO</option></select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">DEA</label>
+            <div id="sofFiltroDea"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroDea" title="Limpar filtro de DEA">&times;</button>
           </div>
-          <div class="campo"><label>Fonte</label>
-            <select id="sofFiltroFonte"><option value="">Todas</option>${OPCOES_FONTE.map(f => `<option>${f}</option>`).join('')}</select>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
+            <div id="sofFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
+          <button class="botao botao-limpar-filtros" id="btnLimparFiltrosSof">Limpar filtros</button>
           <button class="botao" id="btnExportarSof">Exportar CSV</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoSof">+ Nova SOF</button>
@@ -72,31 +74,49 @@ const TelaSof = (function () {
         <div class="paginacao" id="paginacaoSof"></div>
       </div>`;
 
-    document.getElementById('btnFiltrarSof').addEventListener('click', () => { paginaAtual = 1; carregar(); });
-    document.getElementById('sofBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
+    document.getElementById('btnFiltrarSof').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
+    document.getElementById('sofBusca').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+    });
     document.getElementById('btnNovoSof').addEventListener('click', async function () {
       this.disabled = true;
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
-    ['sofFiltroUnidade', 'sofFiltroOss', 'sofFiltroObjeto', 'sofFiltroTipoUnidade'].forEach(id => UI.tornarPesquisavel(id));
+    UI.criarFiltroMultiplo('sofFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('sofFiltroOss', opcoesOss.map(o => o.valor));
+    UI.criarFiltroMultiplo('sofFiltroObjeto', opcoesObjeto.map(o => o.valor));
+    UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
+    UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
+      document.getElementById('sofBusca').value = '';
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+    });
     await carregar();
+  }
+
+  /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
+  function filtrosMudaram_() {
+    return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
   }
 
   function filtrosAtuais() {
     return {
       busca: document.getElementById('sofBusca').value.trim(),
-      unidade_id: document.getElementById('sofFiltroUnidade').value,
-      oss: document.getElementById('sofFiltroOss').value.trim(),
-      objeto: document.getElementById('sofFiltroObjeto').value.trim(),
-      tipo_unidade: document.getElementById('sofFiltroTipoUnidade').value,
-      dea: document.getElementById('sofFiltroDea').value,
-      fonte: document.getElementById('sofFiltroFonte').value
+      unidade_id: UI.valoresFiltroMultiplo('sofFiltroUnidade'),
+      oss: UI.valoresFiltroMultiplo('sofFiltroOss'),
+      objeto: UI.valoresFiltroMultiplo('sofFiltroObjeto'),
+      tipo_unidade: UI.valoresFiltroMultiplo('sofFiltroTipoUnidade'),
+      dea: UI.valoresFiltroMultiplo('sofFiltroDea'),
+      fonte: UI.valoresFiltroMultiplo('sofFiltroFonte')
     };
   }
 
   async function carregar() {
-    const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtrosAtuais()));
+    const filtros = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(filtros);
+    const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
     itens = resposta.items;
     totalRegistros = resposta.total;
     renderCards();
