@@ -12,6 +12,7 @@ const TelaRecibos = (function () {
   let contadorLinhasParcelaDividida = 0;
   let historicoRecibosUnidade = [];
   let abrindoLinha = false;
+  let ultimoFiltroJson = null;
 
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 
@@ -69,9 +70,11 @@ const TelaRecibos = (function () {
         <div class="paginacao" id="paginacaoRec"></div>
       </div>`;
 
-    document.getElementById('btnFiltrarRec').addEventListener('click', () => { paginaAtual = 1; carregar(); });
+    document.getElementById('btnFiltrarRec').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     ['recBusca', 'recFiltroInstrumento', 'recFiltroNotaEmpenho', 'recFiltroNumeroProcesso'].forEach(id => {
-      document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+      });
     });
     document.getElementById('btnNovoRecibo').addEventListener('click', async function () {
       this.disabled = true;
@@ -91,10 +94,14 @@ const TelaRecibos = (function () {
       document.getElementById('recFiltroInstrumento').value = '';
       document.getElementById('recFiltroNotaEmpenho').value = '';
       document.getElementById('recFiltroNumeroProcesso').value = '';
-      paginaAtual = 1;
-      carregar();
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     });
     await carregar();
+  }
+
+  /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
+  function filtrosMudaram_() {
+    return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
   }
 
   function filtrosAtuais() {
@@ -116,6 +123,7 @@ const TelaRecibos = (function () {
 
   async function carregar() {
     const filtros = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(filtros);
     // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
     // (evita reler a aba Recibos inteira duas vezes numa única troca de aba).
     const resposta = await Api.chamar('listarRecibos', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));

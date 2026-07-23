@@ -14,6 +14,7 @@ const TelaNotasEmpenho = (function () {
   let unidades = [];
   let grupos = [];
   let gruposTodos = [];
+  let ultimoFiltroJson = null;
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
@@ -54,8 +55,8 @@ const TelaNotasEmpenho = (function () {
         </div>
         <div id="listaNe"></div>
       </div>`;
-    document.getElementById('btnFiltrarNe').addEventListener('click', carregar);
-    document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
+    document.getElementById('btnFiltrarNe').addEventListener('click', () => { if (filtrosMudaram_()) carregar(); });
+    document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) carregar(); });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
     UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
     UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor));
@@ -63,16 +64,15 @@ const TelaNotasEmpenho = (function () {
     UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade);
     UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
-    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => { document.getElementById('neBusca').value = ''; carregar(); });
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => {
+      document.getElementById('neBusca').value = '';
+      if (filtrosMudaram_()) carregar();
+    });
     await carregar();
   }
 
-  async function carregar() {
-    // Zera o cache do combo "Nota de Empenho a Reforçar" (Nova NE -> Reforço):
-    // ele é buscado sem filtro na primeira vez que esse tipo é selecionado no
-    // modal, e precisa refletir qualquer NE criada desde o último carregar().
-    gruposTodos = [];
-    const params = {
+  function filtrosAtuais() {
+    return {
       busca: document.getElementById('neBusca').value.trim(),
       unidade_id: UI.valoresFiltroMultiplo('neFiltroUnidade'),
       oss: UI.valoresFiltroMultiplo('neFiltroOss'),
@@ -81,6 +81,20 @@ const TelaNotasEmpenho = (function () {
       dea: UI.valoresFiltroMultiplo('neFiltroDea'),
       fonte: UI.valoresFiltroMultiplo('neFiltroFonte')
     };
+  }
+
+  /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
+  function filtrosMudaram_() {
+    return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
+  }
+
+  async function carregar() {
+    // Zera o cache do combo "Nota de Empenho a Reforçar" (Nova NE -> Reforço):
+    // ele é buscado sem filtro na primeira vez que esse tipo é selecionado no
+    // modal, e precisa refletir qualquer NE criada desde o último carregar().
+    gruposTodos = [];
+    const params = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(params);
     grupos = await Api.chamar('listarNotasEmpenho', params);
     renderCards();
   }
