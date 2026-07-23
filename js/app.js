@@ -44,6 +44,7 @@ const UI = (function () {
     document.getElementById('modalRodape').innerHTML = rodapeHtml || '';
     const modalEl = document.getElementById('modal');
     modalEl.classList.toggle('pequeno', !!(opcoes && opcoes.pequeno));
+    modalEl.classList.toggle('grande', !!(opcoes && opcoes.grande));
     document.getElementById('sobreposicaoModal').classList.remove('oculto');
   }
 

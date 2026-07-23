@@ -278,6 +278,9 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
   max-height: 90vh; overflow-y: auto; box-shadow: var(--sombra);
 }
 .modal.pequeno { max-width: 420px; }
+.modal.grande { max-width: 900px; }
+.sei-secao-titulo { margin: 16px 0 6px; font-size: 13px; color: var(--cinza-700); text-transform: uppercase; border-top: 1px solid var(--cinza-200); padding-top: 12px; }
+.sei-secao-titulo:first-child { border-top: none; margin-top: 0; padding-top: 0; }
 .modal-cabecalho { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--cinza-200); }
 .modal-cabecalho h3 { margin: 0; font-size: 16px; }
 .modal-cabecalho button.fechar { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--cinza-500); line-height: 1; }
