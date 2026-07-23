@@ -772,6 +772,28 @@ Três pedidos pequenos do usuário, todos já colados/reimplantados quando aplic
 
 **Passo manual pendente:** colar `backend/Unidades.gs` atualizado no editor do Apps Script e reimplantar (só esse arquivo mudou no backend; os outros dois itens são só frontend).
 
+### Lentidão ao trocar andamento no SOF (2-7s) — investigado e corrigido (aguardando o usuário colar/implantar e medir)
+
+Usuário relatou 2-7s ao clicar num nó do stepper direto no card (fluxo introduzido na sessão de 2026-07-20, quando o stepper saiu do modal e foi pro card da lista). O frontend (`avancarEtapaCartao`, `js/sof.js`) já fazia só 1 chamada (`atualizarSof`) sem recarregar a lista - o problema estava inteiro no backend, em `registrarDiferencas_` (log de auditoria):
+
+- Uma troca de andamento muda `andamento` **e também** dois campos derivados automaticamente (`data_ultima_alteracao_andamento`, `visualizado_apos_alerta`) - `registrarDiferencas_` gravava **uma linha de log por campo mudado**, ou seja, até 3 linhas pra uma ação que o usuário só vê como "mudei o andamento".
+- Cada linha de log chamava `proximoId_('LogAuditoria')`, que faz `LockService.getScriptLock()` + leitura + escrita na aba **Contadores** - um lock completo só pra gerar 1 ID. 3 campos mudando = 3 ciclos de lock, cada um podendo esperar por outros usuários/chamadas concorrentes.
+- Cada linha de log também era `appendObjectRow_` isolado (sua própria leitura de cabeçalho + `setNumberFormats` + `setValues`).
+
+Ou seja, uma troca de andamento podia disparar até **3 locks + 3 escritas de log**, além da própria leitura/escrita do SOF - explica bem a variação de 2 a 7s (pior quando havia outro usuário disputando o lock).
+
+**Corrigido:**
+1. `data_ultima_alteracao_andamento`/`visualizado_apos_alerta` (SOF) e o par equivalente `data_ultima_alteracao_status`/`visualizado_apos_alerta` (Recibo) saem do escopo do log de auditoria (`camposIgnorados` em `atualizarSof`/`atualizarRecibo`) - são campos derivados/internos, não uma edição real do usuário, e não deveriam gerar linha de auditoria mesmo (efeito colateral bom: log fica mais limpo, sem essas 2 linhas técnicas por edição).
+2. Nova `proximosIds_(nomeAba, quantidade)` (`backend/Contadores.gs`) reserva vários IDs de uma vez com **um único** lock/leitura/escrita na aba Contadores, em vez de um ciclo por ID. `proximoId_` (já usada em todo o resto do backend) vira só `proximosIds_(nomeAba, 1)[0]` - comportamento idêntico pra quem já chama com 1.
+3. Nova `appendObjectRows_(sheet, objs)` (`backend/Utils.gs`) grava várias linhas numa única chamada (`setNumberFormats`/`setValues` em lote), reaproveitando o cálculo de formato já usado por `protegerFormatoLinha_` (extraído pra `formatoColunas_`).
+4. `registrarDiferencas_` (`backend/LogAuditoria.gs`) agora monta todas as linhas de diferença primeiro, reserva todos os IDs de uma vez (`proximosIds_`) e grava tudo com uma única `appendObjectRows_` - pro caso comum de trocar só o andamento (depois do item 1), isso já vira **1 lock + 1 escrita** de log, igual a uma edição de campo único.
+
+Efeito esperado: pra uma troca de andamento pura, a chamada `atualizarSof` cai de "leitura do SOF + escrita do SOF + até 3 ciclos de lock/escrita de log" pra "leitura do SOF + escrita do SOF + 1 ciclo de lock/escrita de log". Continua existindo 1 leitura não-cacheada da aba SOF inteira (`findById_`) no início de `atualizarSof` - decisão deliberada de não mexer nisso ainda (ver sessão de performance de 2026-07-17: cache pra SOF/Recibo tem risco maior de introduzir bug de dado desatualizado, ao contrário do que já foi feito pra Unidades via `buscarUnidadePorId_`); se a lentidão persistir depois desta correção, esse é o próximo suspeito.
+
+**Passos manuais pendentes do usuário:** colar `backend/Contadores.gs`, `backend/Utils.gs`, `backend/LogAuditoria.gs`, `backend/Sof.gs`, `backend/Recibos.gs` no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova na planilha.
+
+**Ainda não testado:** medir o tempo de trocar andamento de novo depois de colar/reimplantar; conferir que o Log de Auditoria continua registrando corretamente mudanças reais de `andamento`/`status` (só sem as 2 linhas derivadas a mais); conferir que criar/editar SOF ou Recibo com múltiplos campos alterados de uma vez (ex.: editar o formulário inteiro) continua gerando uma linha de log por campo realmente mudado, só que numa escrita em lote.
+
 **Bug encontrado e corrigido no mesmo dia (ainda não testado):** o "x" individual de um campo (múltipla escolha) disparava recarregamento mesmo quando esse campo específico já estava vazio - por causa da otimização "recarregar só se mudou" (acima), qualquer seleção *pendente* (marcada mas ainda sem clicar em "Filtrar") em **outro** campo fazia o "x" de um campo vazio aplicar essa seleção pendente sem querer. Corrigido em `ligarLimpezaFiltros` (`js/app.js`, usado pelas 4 telas com filtro): o "x" individual só recarrega se o campo que ele mesmo limpa tinha alguma seleção antes do clique - `js/app.js` é o único arquivo que muda, o fix vale pra SOF/Recibos/Notas de Empenho/Unidades ao mesmo tempo.
 
 ## Referências úteis

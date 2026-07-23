@@ -162,13 +162,16 @@ function corrigirFormatoTexto() {
  * planilhas em toda escrita (inclusive marcarSofVisualizado, disparado a cada
  * abertura de card). Ver RELATORIO_LENTIDAO_SOF.md.
  */
-function protegerFormatoLinha_(sheet, headers, linha) {
+function formatoColunas_(sheet, headers) {
   var nomeAba = sheet.getName();
   var protegidas = (COLUNAS_NUMERICAS[nomeAba] || []).concat(COLUNAS_BOOLEANAS[nomeAba] || []);
-  var formatos = headers.map(function (coluna) {
+  return headers.map(function (coluna) {
     return protegidas.indexOf(coluna) !== -1 ? 'General' : '@';
   });
-  sheet.getRange(linha, 1, 1, headers.length).setNumberFormats([formatos]);
+}
+
+function protegerFormatoLinha_(sheet, headers, linha) {
+  sheet.getRange(linha, 1, 1, headers.length).setNumberFormats([formatoColunas_(sheet, headers)]);
 }
 
 /** Converte uma aba inteira em array de objetos, com _row (índice 1-based na planilha). */
@@ -216,6 +219,28 @@ function appendObjectRow_(sheet, obj) {
   var novaLinha = sheet.getLastRow() + 1;
   protegerFormatoLinha_(sheet, headers, novaLinha);
   sheet.getRange(novaLinha, 1, 1, row.length).setValues([row]);
+}
+
+/**
+ * Igual a appendObjectRow_, mas grava várias linhas de uma vez (uma chamada
+ * de setNumberFormats + uma de setValues para todas, em vez de duas chamadas
+ * por linha). Usada por registrarDiferencas_ (LogAuditoria.gs), que podia
+ * gerar várias linhas de log numa única edição (ex.: trocar o andamento do
+ * SOF também mudava data_ultima_alteracao_andamento/visualizado_apos_alerta,
+ * virando 3 chamadas separadas à API do Sheets só de log) - ver PROGRESS.md.
+ */
+function appendObjectRows_(sheet, objs) {
+  if (!objs || !objs.length) return;
+  var headers = getHeaders_(sheet);
+  var linhas = objs.map(function (obj) {
+    return headers.map(function (h) { return obj.hasOwnProperty(h) ? serializeCell_(obj[h]) : ''; });
+  });
+  var primeiraLinha = sheet.getLastRow() + 1;
+  var formatoLinha = formatoColunas_(sheet, headers);
+  var formatos = linhas.map(function () { return formatoLinha; });
+  var alvo = sheet.getRange(primeiraLinha, 1, linhas.length, headers.length);
+  alvo.setNumberFormats(formatos);
+  alvo.setValues(linhas);
 }
 
 function updateObjectRow_(sheet, rowIndex, obj) {

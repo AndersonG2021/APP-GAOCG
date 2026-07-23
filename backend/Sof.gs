@@ -234,7 +234,11 @@ function atualizarSof(session, id, dados) {
 
   if (dados.hasOwnProperty('fontes')) substituirFontesDoSof_(id, dados.fontes, session);
 
-  registrarDiferencas_(session, 'SOF', id, existente.criado_por, antigo, atualizado, ['_row']);
+  // data_ultima_alteracao_andamento/visualizado_apos_alerta são derivados (mudam sozinhos
+  // junto de andamento, não são uma edição real do usuário) - fora do log evita 2 linhas
+  // de auditoria extras (e 2 escritas a mais no Sheets) a cada troca de andamento.
+  registrarDiferencas_(session, 'SOF', id, existente.criado_por, antigo, atualizado,
+    ['_row', 'data_ultima_alteracao_andamento', 'visualizado_apos_alerta']);
 
   var fontes = listarFontesPorSof_(id);
   atualizado.fontes = fontes;

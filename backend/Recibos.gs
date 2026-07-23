@@ -277,7 +277,10 @@ function atualizarRecibo(session, id, dados) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
 
-  registrarDiferencas_(session, 'Recibo', id, existente.criado_por, antigo, atualizado, ['_row']);
+  // data_ultima_alteracao_status/visualizado_apos_alerta são derivados (mudam sozinhos
+  // junto de status, não são uma edição real do usuário) - mesmo princípio do SOF.
+  registrarDiferencas_(session, 'Recibo', id, existente.criado_por, antigo, atualizado,
+    ['_row', 'data_ultima_alteracao_status', 'visualizado_apos_alerta']);
 
   if (atualizado.parcela_dividida_grupo_id) recalcularAlertaRecibo_(atualizado.parcela_dividida_grupo_id);
   else recalcularAlertaRecibo_(null);
