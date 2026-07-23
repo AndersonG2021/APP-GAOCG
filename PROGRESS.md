@@ -762,6 +762,16 @@ Pedido do usuário com vários itens. Antes de implementar, foi confirmado com o
 
 **Ainda não testado** (nenhum teste real feito ainda nesta sessão): dropdown pesquisável em uso real; autopreenchimento de OSS via Unidade com o campo agora sendo select; stepper clicável direto no card; Salvar de SOF criando a NE junto; combo de busca de "Nota de Empenho a Reforçar" cruzando unidades; cálculo de Situação do cronograma contra Recibos reais.
 
+## Sessão 2026-07-22 — Ajustes de UX nos filtros (CONCLUÍDO, só frontend/backend leve, sem passo manual)
+
+Três pedidos pequenos do usuário, todos já colados/reimplantados quando aplicável e testados:
+
+- **Visual dos filtros de múltipla escolha** (`css/style.css`): `.campo input` estava vazando `width:100%`/padding pros checkboxes das listas suspensas (empilhava o checkbox em cima do texto em vez de lado a lado) — corrigido excluindo `[type=checkbox]`/`[type=radio]` dessa regra (efeito colateral bom: também corrige a aparência de *todo* checkbox dentro de um `.campo` no app inteiro, não só os das listas). `.campo-filtro-multiplo` virou grid de 2 linhas (rótulo em cima, dropdown+botão "x" embaixo) em vez do flex desalinhado anterior. Botão "x" reduzido de 34px para 26px.
+- **Recarregamento desnecessário** (`js/sof.js`, `js/recibos.js`, `js/notas-empenho.js`): "Filtrar"/Enter, "Limpar filtros" e o "x" individual de cada filtro disparavam `carregar()` (spinner + chamada à API) mesmo sem nenhuma mudança real nos filtros. Cada tela agora guarda o último filtro carregado (`ultimoFiltroJson`) e só recarrega se o snapshot atual diverge dele. `notas-empenho.js` ganhou uma `filtrosAtuais()` própria (antes os parâmetros eram montados direto dentro de `carregar()`) pra poder reaproveitar a comparação.
+- **Filtros na tela de Unidades** (`js/unidades.js`, `backend/Unidades.gs`): não existiam (só o checkbox "Somente ativas"). Adicionados Busca livre (substring em todos os campos, mesmo padrão das outras telas), Tipo (múltipla escolha, mesma lista fixa `OPCOES_TIPO` já usada no formulário) e OSS (múltipla escolha, mesma lista de Listas Personalizadas usada em SOF/Recibos/NE), com os mesmos botões "Filtrar"/"Limpar filtros" e a mesma otimização de "só recarrega se mudou" acima. `listarUnidades` (`backend/Unidades.gs`) ganhou os parâmetros `busca`/`tipo`/`oss`, reaproveitando `paraArrayFiltro_` (`Utils.gs`) já usado em `listarSof`. Chamadas existentes de `listarUnidades` sem esses parâmetros (SOF/Recibos/NE carregando a lista de unidades pros próprios formulários) continuam funcionando sem filtro, como antes.
+
+**Passo manual pendente:** colar `backend/Unidades.gs` atualizado no editor do Apps Script e reimplantar (só esse arquivo mudou no backend; os outros dois itens são só frontend).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
