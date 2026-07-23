@@ -762,6 +762,37 @@ Pedido do usuário com vários itens. Antes de implementar, foi confirmado com o
 
 **Ainda não testado** (nenhum teste real feito ainda nesta sessão): dropdown pesquisável em uso real; autopreenchimento de OSS via Unidade com o campo agora sendo select; stepper clicável direto no card; Salvar de SOF criando a NE junto; combo de busca de "Nota de Empenho a Reforçar" cruzando unidades; cálculo de Situação do cronograma contra Recibos reais.
 
+## OCR de Nota de Empenho - bug real de cronograma + Fonte automática + ligado no mini-formulário do SOF (sessão 2026-07-21)
+
+Usuário reportou que o OCR de NE "não funciona" no mini-formulário de NE embutido na edição de SOF, e enviou um documento real (`2026NE000078...pdf`) que expôs um bug de verdade, além de pedir que Número/Fonte/Valor Empenhado sejam preenchidos automaticamente ali (esse mini-formulário nunca tinha tido OCR - só o botão separado "Nova Nota de Empenho", ver sessão 2026-07-18, tinha).
+
+**Bug real encontrado com o documento de exemplo:** o texto extraído desse layout lista os **12 rótulos dos meses primeiro** ("JANEIRO: FEVEREIRO: MARÇO: ABRIL:" em blocos de linha, cabeçalho da tabela) **e só depois os 12 valores**, um por linha, na mesma ordem - nunca "MÊS: valor" adjacentes como o regex por mês (`/JANEIRO\s*:?\s*([\d.,]+)/i`) exigia. Isso fazia `lerAnexoNotaEmpenho` falhar sempre no primeiro mês, antes mesmo de chegar em Número/Preço Total - exatamente a causa do "não está funcionando" relatado (mesma classe de problema já prevista no aviso da sessão de 2026-07-18: "NÃO calibrado ainda contra o OCR real").
+
+**Corrigido (`backend/NotasEmpenho.gs`):**
+- Nova `extrairCronogramaDesembolso_`: em vez de casar rótulo+valor por mês, isola a seção entre "CRONOGRAMA DE DESEMBOLSO" e o próximo cabeçalho conhecido, e pega os 12 valores monetários que aparecem nela, na ordem (Janeiro a Dezembro é a ordem sempre impressa) - robusto ao formato real de extração observado.
+- Cronograma virou **best-effort**: se não achar os 12 valores, `lerAnexoNotaEmpenho` não falha mais por causa disso (antes, qualquer mês não encontrado derrubava a leitura inteira, mesmo Número/Preço Total já tendo sido lidos) - só Número e Preço Total continuam obrigatórios.
+- **Fonte automática (pedido novo do usuário):** o documento não traz a categoria TESOURO/SUS/Outra usada pelo app, só um código orçamentário de 10 dígitos (`FONTE: 0605000000` no exemplo). Nova `REGEX_CODIGO_FONTE_NE_DOCUMENTO` (único campo do documento com exatamente 10 dígitos sem separador) + `classificarFonteDoCodigoOrcamentario_`, com a convenção **confirmada com o usuário**: prefixo `500` = TESOURO, `600` ou `605` = SUS, `754` = Operação de Crédito (sem categoria própria no app - cai em "Outra"). Prefixo não reconhecido devolve `null` (campo fica sem sugestão, não arrisca uma classificação errada). `lerAnexoNotaEmpenho` passou a devolver `fonte`/`fonte_codigo`.
+
+**Ligado no mini-formulário de NE do SOF (`js/sof.js`):** nova `ligarOcrMiniFormularioNe_` - ao anexar o arquivo em `neArquivo`, chama `lerAnexoNotaEmpenho` e preenche/trava Número (só quando Tipo = original - em Reforço o Número já vem de um `<select>` de números existentes), Fonte (só trava se o código foi classificado E a categoria existir nas opções daquele SOF) e Valor Empenhado, com link "Remover anexo" pra refazer - mesmo padrão visual (`.anexo-ocr-status`/`.anexo-ocr-remover`) já usado em Recibos/Notas de Empenho, sem CSS novo.
+
+**Passos manuais do usuário antes de testar:** colar `backend/NotasEmpenho.gs` atualizado e reimplantar. Nenhuma coluna/aba nova.
+
+**Ainda não testado:** reler o documento de exemplo (ou outro real) no mini-formulário do SOF e conferir se Número/Fonte/Valor vêm certos; conferir que o cronograma (usado pelo botão "Nova Nota de Empenho" separado) passa a extrair os 12 meses corretamente com esse mesmo documento; testar um código de Fonte de cada categoria (500/600 ou 605/754) pra confirmar a classificação.
+
+## Reconciliação em paralelo: mais performance + filtros multi-seleção (sessão 2026-07-21)
+
+Enquanto a correção do OCR acima estava em andamento, o usuário colou no repositório o conteúdo real e atual de vários `.gs` do Apps Script (reconciliação, mesmo padrão da sessão de 2026-07-20). Isso trouxe trabalho novo que eu não tinha visto ainda:
+
+- **Mais uma causa real de lentidão em escritas (ex.: trocar andamento no SOF):** `registrarDiferencas_` (log de auditoria) chamava `proximoId_` uma vez por campo alterado - cada uma com seu próprio ciclo de lock+leitura+escrita na aba **Contadores**. Uma troca de andamento mudava 3 campos de uma vez (andamento + 2 campos derivados), virando 3 ciclos de lock só pra gerar IDs de log. Corrigido: `backend/Contadores.gs` ganhou `proximosIds_` (reserva N IDs num único lock) e `backend/Utils.gs` ganhou `appendObjectRows_` (grava várias linhas numa única chamada); `registrarDiferencas_` usa os dois. Além disso, `atualizarSof`/`atualizarRecibo` passaram a excluir os campos derivados (`data_ultima_alteracao_andamento`/`visualizado_apos_alerta` no SOF, `data_ultima_alteracao_status`/`visualizado_apos_alerta` no Recibo) do diff de auditoria - trocar status/andamento vira 1 linha de log, não 3.
+- **Filtros multi-seleção:** nova `paraArrayFiltro_` (`Utils.gs`, retrocompatível com valor único) aplicada em `listarSof`, `listarUnidades`, `listarNotasEmpenho` e `filtrarLinhasRecibos_` - todos os filtros de texto/categoria dessas 4 telas agora aceitam array de valores, não só um.
+- **Unidades ganhou filtros novos:** `unidade_id` (múltiplo), `tipo`, `oss`, busca livre.
+
+**Acidente encontrado e corrigido durante essa reconciliação:** em algum momento da colagem, `backend/Recibos.gs` ficou temporariamente com o **conteúdo errado** (uma cópia de `backend/NotasEmpenho.gs` por cima do próprio, apagando `criarRecibo`/`atualizarRecibo`/`excluirRecibo`/`lerAnexoRecibo`/etc.) - percebido antes de qualquer commit ou de colar de volta no Apps Script, então nada real chegou a ser afetado. O usuário colou o conteúdo certo de novo e o arquivo foi conferido função por função antes de seguir.
+
+**Passos manuais do usuário antes de testar:** colar `backend/Contadores.gs`, `backend/LogAuditoria.gs`, `backend/Utils.gs`, `backend/Sof.gs`, `backend/Unidades.gs`, `backend/Recibos.gs`, `backend/NotasEmpenho.gs` (esse último já reflete a correção do OCR desta mesma sessão, ver acima) e reimplantar. Nenhuma coluna/aba nova.
+
+**Ainda não testado:** medir se trocar andamento/status ficou mais rápido ainda; os filtros multi-seleção (frontend correspondente ainda não foi visto/conferido nesta sessão - os `<select>` das telas continuam single-select até onde sei; confirmar se já foi atualizado em outra sessão ou se é um passo pendente).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
