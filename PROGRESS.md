@@ -815,6 +815,18 @@ Efeito esperado: pra uma troca de andamento pura, a chamada `atualizarSof` cai d
 
 **Bug encontrado e corrigido no mesmo dia (ainda não testado):** o "x" individual de um campo (múltipla escolha) disparava recarregamento mesmo quando esse campo específico já estava vazio - por causa da otimização "recarregar só se mudou" (acima), qualquer seleção *pendente* (marcada mas ainda sem clicar em "Filtrar") em **outro** campo fazia o "x" de um campo vazio aplicar essa seleção pendente sem querer. Corrigido em `ligarLimpezaFiltros` (`js/app.js`, usado pelas 4 telas com filtro): o "x" individual só recarrega se o campo que ele mesmo limpa tinha alguma seleção antes do clique - `js/app.js` é o único arquivo que muda, o fix vale pra SOF/Recibos/Notas de Empenho/Unidades ao mesmo tempo.
 
+## Auto-avançar andamento do SOF para "NE EMITIDA" ao anexar Nota de Empenho (sessão 2026-07-23, aguardando o usuário colar/implantar e testar)
+
+Pedido do usuário: ao anexar a Nota de Empenho no SOF, se o andamento estiver em qualquer etapa antes de "NE EMITIDA" (das 13 do stepper), avançar sozinho pra lá — hoje o nó só desbloqueava (`sof.possui_ne`), mas ninguém clicava por conta própria. (`docs/ESPECIFICACAO_ATUAL_COMPLETA.md` já descrevia esse comportamento como existente — não estava; este é o que faltava pra doc bater com o código.)
+
+- **`backend/Sof.gs`:** nova constante `ETAPAS_ANDAMENTO_`, espelhando `ETAPAS_ANDAMENTO` de `js/sof.js` (mesma ordem das 13 etapas) — o backend não tinha nenhuma noção de ordem até agora; duplicada porque não há import entre arquivos `.gs`/`.js`.
+- **`backend/NotasEmpenho.gs`:** o bloco final de `criarNotaEmpenho` que só marcava `possui_ne = true` na primeira NE original agora também compara `sof.andamento` contra `ETAPAS_ANDAMENTO_.indexOf('NE EMITIDA')`; se estiver antes (incluindo andamento desconhecido/legado, que cai em `indexOf === -1`), avança pra "NE EMITIDA" na mesma escrita da linha (1 só `updateObjectRow_`), replicando o mesmo efeito colateral que uma troca manual já tem em `atualizarSof` (`data_ultima_alteracao_andamento`/`visualizado_apos_alerta`) e logando a mudança normalmente. Só avança pra frente — nunca recua um andamento já igual ou posterior a "NE EMITIDA". Gate em `tipo === 'original'` (reforço nunca aciona, já que só é aceito se a NE original já existir).
+- **`js/sof.js`:** o patch otimista local que `salvarSof` já fazia (`resposta.possui_ne = true` depois de criar a NE pelo mini-formulário) ganhou o mesmo cálculo client-side pra refletir o andamento na hora, sem esperar recarregar.
+
+**Passos manuais pendentes do usuário:** colar `backend/Sof.gs` e `backend/NotasEmpenho.gs` atualizados no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova na planilha.
+
+**Ainda não testado:** anexar a primeira NE original num SOF com andamento antes de "NE EMITIDA" (pelo mini-formulário do SOF e pela tela "Nova Nota de Empenho") e conferir que o card mostra "NE EMITIDA" na hora; conferir no Log de Auditoria que ficou registrada a mudança de `andamento`; anexar um reforço ou uma NE original num SOF cujo andamento já esteja em "NE EMITIDA" ou depois e confirmar que nada muda.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

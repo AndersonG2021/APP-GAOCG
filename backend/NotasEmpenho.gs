@@ -261,12 +261,37 @@ function criarNotaEmpenho(session, dados) {
     invalidarCacheCronograma_();
   }
 
-  if (tipo === 'original' && !toBool_(sof.possui_ne)) {
-    var atualizado = Object.assign({}, sof, { possui_ne: true });
-    var rowIndex = sof._row;
-    delete atualizado._row;
-    updateObjectRow_(sofSheet, rowIndex, atualizado);
-    registrarLog_(session, 'SOF', sof.id, sof.criado_por, 'possui_ne', 'false', 'true');
+  // Ao anexar a primeira NE original, marca possui_ne = true e, se o
+  // andamento ainda estiver antes de "NE EMITIDA" na ordem fixa das 13
+  // etapas (ETAPAS_ANDAMENTO_ em Sof.gs), avança automaticamente para lá -
+  // uma única leitura/escrita da linha do SOF para os dois campos.
+  if (tipo === 'original') {
+    var patchSof = {};
+    var logsSof = [];
+
+    if (!toBool_(sof.possui_ne)) {
+      patchSof.possui_ne = true;
+      logsSof.push(['possui_ne', 'false', 'true']);
+    }
+
+    var indiceAtual = ETAPAS_ANDAMENTO_.indexOf(sof.andamento);
+    var indiceNeEmitida = ETAPAS_ANDAMENTO_.indexOf('NE EMITIDA');
+    if (indiceAtual < indiceNeEmitida) {
+      patchSof.andamento = 'NE EMITIDA';
+      patchSof.data_ultima_alteracao_andamento = nowIso_();
+      patchSof.visualizado_apos_alerta = false;
+      logsSof.push(['andamento', sof.andamento, 'NE EMITIDA']);
+    }
+
+    if (Object.keys(patchSof).length) {
+      var atualizado = Object.assign({}, sof, patchSof);
+      var rowIndex = sof._row;
+      delete atualizado._row;
+      updateObjectRow_(sofSheet, rowIndex, atualizado);
+      logsSof.forEach(function (l) {
+        registrarLog_(session, 'SOF', sof.id, sof.criado_por, l[0], l[1], l[2]);
+      });
+    }
   }
 
   return ok_(nova);

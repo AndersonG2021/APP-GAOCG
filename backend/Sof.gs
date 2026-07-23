@@ -31,6 +31,16 @@ function aplicarSnapshotUnidadeSof_(sof, unidade) {
   });
 }
 
+/**
+ * Espelha ETAPAS_ANDAMENTO de js/sof.js (13 etapas fixas do processo, em
+ * ordem). Duplicado aqui porque o backend não tinha noção de ordem até agora
+ * - qualquer mudança nas etapas precisa ser replicada nos dois arquivos.
+ */
+var ETAPAS_ANDAMENTO_ = [
+  'SES-NP_DGPO', 'SES-DGPO', 'SES', 'NAP_POAS', 'SES-GPOAS', 'SES-GORC', 'SES-GPF',
+  'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
+];
+
 function diasSemAlteracao_(dataIso) {
   if (!dataIso) return 0;
   var data = new Date(dataIso);
