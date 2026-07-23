@@ -17,9 +17,19 @@ var PREFIXOS_ID = {
   NotasEmpenhoCronograma: 'NEC'
 };
 
-function proximoId_(nomeAba) {
+/**
+ * Reserva `quantidade` IDs sequenciais de uma vez, com um único lock/leitura/
+ * escrita na aba Contadores, em vez de um ciclo de lock por ID. Usada por
+ * registrarDiferencas_ (LogAuditoria.gs) quando uma edição muda vários campos
+ * de uma vez - cada `proximoId_` isolado é lock+read+write própria, então N
+ * campos alterados viravam N ciclos de lock só pra gerar os IDs do log,
+ * antes mesmo de escrever as linhas em si. Ver PROGRESS.md (lentidão ao
+ * trocar andamento no SOF).
+ */
+function proximosIds_(nomeAba, quantidade) {
   var prefixo = PREFIXOS_ID[nomeAba];
   if (!prefixo) throw new Error('Prefixo de ID não definido para a aba "' + nomeAba + '".');
+  if (!quantidade || quantidade < 1) return [];
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -37,16 +47,23 @@ function proximoId_(nomeAba) {
       }
     }
 
-    var novoProximo = proximo + 1;
+    var novoProximo = proximo + quantidade;
     if (rowIndex === -1) {
       sheet.appendRow([prefixo, novoProximo]);
     } else {
       sheet.getRange(rowIndex, 2).setValue(novoProximo);
     }
 
-    var numero = ('000000' + proximo).slice(-6);
-    return prefixo + '-' + numero;
+    var ids = [];
+    for (var n = 0; n < quantidade; n++) {
+      ids.push(prefixo + '-' + ('000000' + (proximo + n)).slice(-6));
+    }
+    return ids;
   } finally {
     lock.releaseLock();
   }
+}
+
+function proximoId_(nomeAba) {
+  return proximosIds_(nomeAba, 1)[0];
 }

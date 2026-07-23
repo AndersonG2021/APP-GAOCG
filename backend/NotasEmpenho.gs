@@ -55,28 +55,35 @@ function agruparCronogramaPorNotaEmpenho_() {
   return mapa;
 }
 
+var NOMES_MESES_CRONOGRAMA = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
 /**
- * Rótulos e regex de extração do Cronograma de Desembolso (documento oficial
- * de Nota de Empenho do e-fisco/PE). NÃO calibrado ainda contra o OCR real do
- * backend (Advanced Drive Service) - desenhado a partir de um documento de
- * exemplo. Se o valor de algum mês vier errado no primeiro teste, ajustar os
- * regex abaixo primeiro (mesmo processo que já aconteceu com o OCR de Recibo
- * - ver PROGRESS.md, "Corrige OCR do Recibo pra sintaxe da Drive API v3").
+ * Extrai o Cronograma de Desembolso (12 valores mensais). Bug corrigido com
+ * um documento real do usuário: o texto extraído desse layout (tabela de
+ * meses) lista os 12 RÓTULOS primeiro ("JANEIRO: FEVEREIRO: MARÇO: ABRIL:" em
+ * blocos de linha) e só depois os 12 VALORES, um por linha, na mesma ordem -
+ * nunca "MÊS: valor" adjacentes. A versão anterior (regex por mês, tipo
+ * `/JANEIRO\s*:?\s*([\d.,]+)/i`) sempre falhava por causa disso. Em vez de
+ * casar rótulo+valor, isola a seção do cronograma (entre o título e o próximo
+ * cabeçalho conhecido) e pega os 12 valores monetários que aparecem nela, na
+ * ordem (Janeiro a Dezembro é a ordem sempre impressa no documento).
  */
-var MESES_CRONOGRAMA = [
-  { mes: 1, rotulo: 'Janeiro', regex: /JANEIRO\s*:?\s*([\d.,]+)/i },
-  { mes: 2, rotulo: 'Fevereiro', regex: /FEVEREIRO\s*:?\s*([\d.,]+)/i },
-  { mes: 3, rotulo: 'Março', regex: /MAR[ÇC]O\s*:?\s*([\d.,]+)/i },
-  { mes: 4, rotulo: 'Abril', regex: /ABRIL\s*:?\s*([\d.,]+)/i },
-  { mes: 5, rotulo: 'Maio', regex: /MAIO\s*:?\s*([\d.,]+)/i },
-  { mes: 6, rotulo: 'Junho', regex: /JUNHO\s*:?\s*([\d.,]+)/i },
-  { mes: 7, rotulo: 'Julho', regex: /JULHO\s*:?\s*([\d.,]+)/i },
-  { mes: 8, rotulo: 'Agosto', regex: /AGOSTO\s*:?\s*([\d.,]+)/i },
-  { mes: 9, rotulo: 'Setembro', regex: /SETEMBRO\s*:?\s*([\d.,]+)/i },
-  { mes: 10, rotulo: 'Outubro', regex: /OUTUBRO\s*:?\s*([\d.,]+)/i },
-  { mes: 11, rotulo: 'Novembro', regex: /NOVEMBRO\s*:?\s*([\d.,]+)/i },
-  { mes: 12, rotulo: 'Dezembro', regex: /DEZEMBRO\s*:?\s*([\d.,]+)/i }
-];
+function extrairCronogramaDesembolso_(texto) {
+  var inicioMatch = texto.match(/CRONOGRAMA\s+DE\s+DESEMBOLSO/i);
+  if (!inicioMatch) return [];
+  var trecho = texto.slice(inicioMatch.index + inicioMatch[0].length);
+  var fimMatch = trecho.match(/FICHA\s+FINANCEIRA|ITENS\s+DO\s+EMPENHO|MODALIDADE\s+DE\s+EMPENHO/i);
+  if (fimMatch) trecho = trecho.slice(0, fimMatch.index);
+
+  var valores = trecho.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
+  if (!valores || valores.length < 12) return [];
+
+  var cronograma = [];
+  for (var i = 0; i < 12; i++) {
+    cronograma.push({ mes: i + 1, rotulo: NOMES_MESES_CRONOGRAMA[i], valor: normalizarValorMonetarioBr_(valores[i]) });
+  }
+  return cronograma;
+}
 
 /**
  * "Preço Total" fica perto de "LOCALIDADE DE ENTREGA" no rodapé do documento,
@@ -87,11 +94,40 @@ var MESES_CRONOGRAMA = [
 var REGEX_PRECO_TOTAL_NE_DOCUMENTO = /(?<!PRE[ÇC]O\s)\bTOTAL\s*:?\s*([\d.,]+)/i;
 
 /**
+ * O código orçamentário da FONTE é um número de 10 dígitos sem separadores
+ * (ex.: "0605000000") - único campo do documento nesse formato exato (UG,
+ * Programa de Trabalho, CNPJ, CEP etc. sempre têm pontos/barras/traços ou
+ * outra quantidade de dígitos), então basta achar o primeiro token de 10
+ * dígitos "soltos" no documento.
+ */
+var REGEX_CODIGO_FONTE_NE_DOCUMENTO = /\b(\d{10})\b/;
+
+/**
+ * Classifica o código orçamentário da FONTE na categoria usada pelo app
+ * (TESOURO/SUS/Outra) - convenção confirmada com o usuário: prefixo 500 =
+ * TESOURO, 600 ou 605 = SUS, 754 = Operação de Crédito (sem categoria própria
+ * no app, cai em "Outra"). Prefixo não reconhecido devolve null - o campo
+ * Fonte fica sem sugestão automática, em vez de arriscar uma classificação
+ * errada num dado financeiro.
+ */
+function classificarFonteDoCodigoOrcamentario_(codigo) {
+  var digitos = String(codigo || '').replace(/\D/g, '').replace(/^0+/, '');
+  if (/^500/.test(digitos)) return 'TESOURO';
+  if (/^(600|605)/.test(digitos)) return 'SUS';
+  if (/^754/.test(digitos)) return 'Outra';
+  return null;
+}
+
+/**
  * Lê (via OCR) o documento de uma Nota de Empenho ainda não cadastrada e
- * extrai Número, Cronograma de Desembolso (valor por mês) e Preço Total -
- * usado pelo botão "Nova Nota de Empenho" (criação do zero, fora do SOF, ver
- * js/notas-empenho.js). REGEX_NUMERO_NE_DOCUMENTO é a mesma de Recibos.gs
- * (mesmo formato de número em qualquer documento do e-fisco/PE).
+ * extrai Número, Fonte (classificada do código orçamentário), Preço Total e
+ * Cronograma de Desembolso - usado tanto pelo botão "Nova Nota de Empenho"
+ * (js/notas-empenho.js) quanto pelo mini-formulário de NE embutido na edição
+ * de SOF (js/sof.js, que não usa o cronograma). Cronograma é best-effort (não
+ * bloqueia o resto se não achar os 12 meses) - Número/Preço Total são os
+ * únicos campos que fazem a leitura falhar se não encontrados.
+ * REGEX_NUMERO_NE_DOCUMENTO é a mesma de Recibos.gs (mesmo formato de número
+ * em qualquer documento do e-fisco/PE).
  */
 function lerAnexoNotaEmpenho(session, params) {
   params = params || {};
@@ -108,28 +144,25 @@ function lerAnexoNotaEmpenho(session, params) {
   if (!matchNumero) return fail_('Não foi possível identificar o número da Nota de Empenho no documento anexado.');
   var numeroNe = matchNumero[1].toUpperCase();
 
-  var cronograma = [];
-  var somaCronograma = 0;
-  for (var i = 0; i < MESES_CRONOGRAMA.length; i++) {
-    var mesInfo = MESES_CRONOGRAMA[i];
-    var matchMes = texto.match(mesInfo.regex);
-    var valorMes = matchMes ? normalizarValorMonetarioBr_(matchMes[1]) : null;
-    if (valorMes === null) return fail_('Não foi possível identificar o valor de ' + mesInfo.rotulo + ' no cronograma de desembolso.');
-    cronograma.push({ mes: mesInfo.mes, rotulo: mesInfo.rotulo, valor: valorMes });
-    somaCronograma += valorMes;
-  }
-
   var matchTotal = texto.match(REGEX_PRECO_TOTAL_NE_DOCUMENTO);
   var precoTotal = matchTotal ? normalizarValorMonetarioBr_(matchTotal[1]) : null;
   if (precoTotal === null) return fail_('Não foi possível identificar o Preço Total no documento anexado.');
 
+  var cronograma = extrairCronogramaDesembolso_(texto);
+  var somaCronograma = cronograma.reduce(function (s, m) { return s + m.valor; }, 0);
+
+  var matchFonteCodigo = texto.match(REGEX_CODIGO_FONTE_NE_DOCUMENTO);
+  var fonteCodigo = matchFonteCodigo ? matchFonteCodigo[1] : null;
+
   return ok_({
     numero_ne: numeroNe,
-    cronograma: cronograma,
     preco_total: precoTotal,
+    cronograma: cronograma,
     // Informativo - o valor oficial impresso é o preco_total; se a soma do
-    // cronograma não bater, o frontend só avisa, não bloqueia.
-    cronograma_diverge_do_total: Math.abs(precoTotal - somaCronograma) > 0.01
+    // cronograma não bater (ou não tiver sido lido), o frontend só avisa, não bloqueia.
+    cronograma_diverge_do_total: cronograma.length === 12 && Math.abs(precoTotal - somaCronograma) > 0.01,
+    fonte: fonteCodigo ? classificarFonteDoCodigoOrcamentario_(fonteCodigo) : null,
+    fonte_codigo: fonteCodigo
   });
 }
 
@@ -379,12 +412,23 @@ function listarNotasEmpenho(session, params) {
     };
   });
 
-  if (params.unidade_id) resultado = resultado.filter(function (g) { return String(g.sof_unidade_id) === String(params.unidade_id); });
-  if (params.fonte) resultado = resultado.filter(function (g) { return g.fonte === params.fonte; });
-  if (params.oss) resultado = resultado.filter(function (g) { return g.sof_oss === params.oss; });
-  if (params.objeto) resultado = resultado.filter(function (g) { return g.sof_objeto === params.objeto; });
-  if (params.tipo_unidade) resultado = resultado.filter(function (g) { return g.sof_tipo_unidade === params.tipo_unidade; });
-  if (params.dea) resultado = resultado.filter(function (g) { return g.sof_dea === params.dea; });
+  var unidadeIds = paraArrayFiltro_(params.unidade_id);
+  if (unidadeIds.length) resultado = resultado.filter(function (g) { return unidadeIds.indexOf(String(g.sof_unidade_id)) !== -1; });
+
+  var fonteValores = paraArrayFiltro_(params.fonte);
+  if (fonteValores.length) resultado = resultado.filter(function (g) { return fonteValores.indexOf(g.fonte) !== -1; });
+
+  var ossValores = paraArrayFiltro_(params.oss);
+  if (ossValores.length) resultado = resultado.filter(function (g) { return ossValores.indexOf(g.sof_oss) !== -1; });
+
+  var objetoValores = paraArrayFiltro_(params.objeto);
+  if (objetoValores.length) resultado = resultado.filter(function (g) { return objetoValores.indexOf(g.sof_objeto) !== -1; });
+
+  var tipoUnidadeValores = paraArrayFiltro_(params.tipo_unidade);
+  if (tipoUnidadeValores.length) resultado = resultado.filter(function (g) { return tipoUnidadeValores.indexOf(g.sof_tipo_unidade) !== -1; });
+
+  var deaValores = paraArrayFiltro_(params.dea);
+  if (deaValores.length) resultado = resultado.filter(function (g) { return deaValores.indexOf(g.sof_dea) !== -1; });
 
   var busca = sanitizeString_(params.busca, 200).toLowerCase();
   if (busca) {

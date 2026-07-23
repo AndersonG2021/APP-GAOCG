@@ -583,6 +583,71 @@ const TelaSof = (function () {
       UI.tornarPesquisavel('neNumero');
     });
     UI.tornarPesquisavel('neNumero');
+    ligarOcrMiniFormularioNe_();
+  }
+
+  /**
+   * Ao anexar o arquivo no mini-formulário de NE (dentro da edição de SOF),
+   * lê o documento por OCR e preenche Número (só quando Tipo = original - em
+   * Reforço o Número já vem de um <select> com os números existentes),
+   * Fonte (classificada do código orçamentário do documento) e Valor
+   * Empenhado, travando os campos (mesmo padrão de ligarAnexoComOcr_ em
+   * js/recibos.js) com link "Remover anexo" pra refazer.
+   */
+  function ligarOcrMiniFormularioNe_() {
+    const inputEl = document.getElementById('neArquivo');
+    const statusEl = document.createElement('p');
+    statusEl.className = 'ajuda anexo-ocr-status oculto';
+    inputEl.insertAdjacentElement('afterend', statusEl);
+
+    function travar(resultado) {
+      const numeroEl = document.getElementById('neNumero');
+      if (numeroEl && document.getElementById('neTipo').value === 'original') {
+        numeroEl.value = resultado.numero_ne;
+        numeroEl.readOnly = true;
+      }
+      const fonteEl = document.getElementById('neFonte');
+      const fonteEncontrada = resultado.fonte && Array.from(fonteEl.options).some(o => o.value === resultado.fonte);
+      if (fonteEncontrada) {
+        fonteEl.value = resultado.fonte;
+        fonteEl.disabled = true;
+      }
+      document.getElementById('neValor').value = resultado.preco_total;
+      document.getElementById('neValor').readOnly = true;
+
+      statusEl.classList.remove('oculto');
+      statusEl.innerHTML = (fonteEncontrada
+        ? '🔒 Número/Fonte/Valor lidos do documento.'
+        : '🔒 Número/Valor lidos do documento (Fonte não identificada - selecione manualmente).')
+        + ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
+      statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
+        e.preventDefault();
+        if (numeroEl && document.getElementById('neTipo').value === 'original') {
+          numeroEl.readOnly = false;
+          numeroEl.value = '';
+        }
+        fonteEl.disabled = false;
+        if (fonteEncontrada) fonteEl.value = '';
+        document.getElementById('neValor').readOnly = false;
+        document.getElementById('neValor').value = '';
+        inputEl.value = '';
+        statusEl.classList.add('oculto');
+      });
+    }
+
+    inputEl.addEventListener('change', async function () {
+      const arquivo = inputEl.files[0];
+      if (!arquivo) return;
+      try {
+        if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
+        travar(resultado);
+      } catch (err) {
+        inputEl.value = '';
+        UI.toast(err.message, 'erro');
+      }
+    });
   }
 
   /**

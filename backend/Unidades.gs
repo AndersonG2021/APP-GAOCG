@@ -118,6 +118,31 @@ function listarUnidades(session, params) {
     rows = rows.filter(function (u) { return toBool_(u.ativo); });
   }
 
+  var idsValores = paraArrayFiltro_(params.unidade_id);
+  if (idsValores.length) rows = rows.filter(function (u) { return idsValores.indexOf(String(u.id)) !== -1; });
+
+  var tipoValores = paraArrayFiltro_(params.tipo);
+  if (tipoValores.length) rows = rows.filter(function (u) { return tipoValores.indexOf(u.tipo) !== -1; });
+
+  var ossValores = paraArrayFiltro_(params.oss).map(function (v) { return v.toLowerCase(); });
+  if (ossValores.length) {
+    rows = rows.filter(function (u) {
+      var ossLinha = String(u.oss || '').toLowerCase();
+      return ossValores.some(function (v) { return ossLinha.indexOf(v) !== -1; });
+    });
+  }
+
+  var busca = sanitizeString_(params.busca, 200).toLowerCase();
+  if (busca) {
+    rows = rows.filter(function (u) {
+      return Object.keys(u).some(function (campo) {
+        var valor = u[campo];
+        if (valor === null || valor === undefined) return false;
+        return String(valor).toLowerCase().indexOf(busca) !== -1;
+      });
+    });
+  }
+
   var tasPorUnidade = agruparTasPorUnidade_();
   rows.forEach(function (u) {
     var tas = tasPorUnidade[u.id] || [];
