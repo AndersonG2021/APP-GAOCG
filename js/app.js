@@ -422,8 +422,14 @@ const UI = (function () {
     if (!raiz) return;
     raiz.querySelectorAll('.filtro-multiplo-x').forEach(btn => {
       btn.addEventListener('click', () => {
+        // Só recarrega se ESTE campo tinha algo selecionado - clicar no "x" de
+        // um campo vazio não pode disparar a aplicação de outros filtros que
+        // o usuário ainda não confirmou em "Filtrar" (ex.: marcou opções em
+        // Tipo mas não clicou Filtrar, e clica no "x" de OSS, que já estava
+        // vazio - nada deveria acontecer).
+        const tinhaSelecao = valoresFiltroMultiplo(btn.dataset.alvo).length > 0;
         limparFiltroMultiplo(btn.dataset.alvo);
-        if (aoLimpar) aoLimpar();
+        if (tinhaSelecao && aoLimpar) aoLimpar();
       });
     });
     if (botaoLimparTodosId) {
