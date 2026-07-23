@@ -827,6 +827,19 @@ Pedido do usuário: ao anexar a Nota de Empenho no SOF, se o andamento estiver e
 
 **Ainda não testado:** anexar a primeira NE original num SOF com andamento antes de "NE EMITIDA" (pelo mini-formulário do SOF e pela tela "Nova Nota de Empenho") e conferir que o card mostra "NE EMITIDA" na hora; conferir no Log de Auditoria que ficou registrada a mudança de `andamento`; anexar um reforço ou uma NE original num SOF cujo andamento já esteja em "NE EMITIDA" ou depois e confirmar que nada muda.
 
+## Paginação em Unidades e Notas de Empenho (sessão 2026-07-23, aguardando o usuário colar/implantar e testar)
+
+Pedido do usuário: aplicar a técnica de paginação no app inteiro pra deixar mais fluido. SOF, Recibos e Log de Auditoria já paginavam (backend fatiando os resultados + botões Anterior/Próxima no frontend) desde fases anteriores — só **Unidades** e **Notas de Empenho** ainda carregavam a lista inteira de uma vez (sem paginar), gerando telas com todos os cards renderizados de uma vez só. Esta sessão estende o mesmo padrão já existente (`listarSof`/`js/sof.js`) pra essas duas telas.
+
+- **`backend/Unidades.gs` (`listarUnidades`):** passou a ordenar por `nome` e paginar (`page`/`pageSize`, padrão 20 por página) igual a `listarSof`, retornando `{ items, total, page, pageSize }` em vez do array direto. O cálculo de T.A./parcela mensal (que antes rodava pra toda a lista filtrada) agora roda só nos itens da página exibida.
+- **`backend/NotasEmpenho.gs` (`listarNotasEmpenho`):** mesma mudança de formato (`{ items, total, page, pageSize }`), paginando depois de já ter agrupado/ordenado os cards (o agrupamento por `numero_ne` continua precisando processar todas as linhas antes de paginar — a paginação aqui economiza no tamanho da resposta e na renderização, não na leitura da planilha).
+- **`js/unidades.js`/`js/notas-empenho.js`:** ganharam paginação de verdade na tela (mesmo padrão visual/de código de `js/sof.js`: `paginaAtual`/`totalRegistros`/`TAMANHO_PAGINA = 20`, `renderPaginacao()`, reseta pra página 1 ao aplicar/limpar filtro).
+- **Como `listarUnidades`/`listarNotasEmpenho` também são usadas em outros lugares só pra popular dropdowns (não pra exibir uma lista paginada)** — unidades ativas em SOF/Recibos/Notas de Empenho, todas as unidades no filtro de Unidades, todos os números de NE no combo de reforço — essas chamadas passaram a enviar `pageSize: 100000` explicitamente (mesmo truque que `listarSof`/`listarRecibos` já usavam pra isso) e a ler `.items` da resposta, em vez do array direto.
+
+**Passos manuais pendentes do usuário:** colar `backend/Unidades.gs` e `backend/NotasEmpenho.gs` atualizados no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova na planilha.
+
+**Ainda não testado:** abrir Unidades e Notas de Empenho com mais de 20 registros e conferir que só 20 aparecem por vez, com "Anterior"/"Próxima" funcionando; conferir que os dropdowns que dependem da lista completa (unidade em SOF/Recibos/NE, "Nota de Empenho a Reforçar") continuam trazendo todos os registros, não só os 20 da primeira página; conferir que aplicar um filtro em Unidades/Notas de Empenho volta pra página 1.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

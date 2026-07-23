@@ -18,14 +18,14 @@ const TelaRecibos = (function () {
 
   async function render() {
     const [unidadesCarregadas, statusFiltroOpcoesBrutas, opcoesOss, opcoesObjeto] = await Promise.all([
-      Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
+      Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       carregarOpcoesStatus_(),
       TelaListas.obterOpcoes('OSS'),
       TelaListas.obterOpcoes('OBJETO')
     ]);
     const vistosStatus_ = new Set();
     const statusFiltroOpcoes = statusFiltroOpcoesBrutas.filter(o => (vistosStatus_.has(o.valor) ? false : (vistosStatus_.add(o.valor), true)));
-    unidades = unidadesCarregadas;
+    unidades = unidadesCarregadas.items;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Recibos</h2>

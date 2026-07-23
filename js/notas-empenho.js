@@ -15,14 +15,17 @@ const TelaNotasEmpenho = (function () {
   let grupos = [];
   let gruposTodos = [];
   let ultimoFiltroJson = null;
+  let paginaAtual = 1;
+  let totalRegistros = 0;
+  const TAMANHO_PAGINA = 20;
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
-      Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
+      Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),
       TelaListas.obterOpcoes('OBJETO')
     ]);
-    unidades = unidadesCarregadas;
+    unidades = unidadesCarregadas.items;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">Notas de Empenho</h2>
@@ -54,9 +57,10 @@ const TelaNotasEmpenho = (function () {
           <button class="botao primario" id="btnNovaNe">+ Nova Nota de Empenho</button>
         </div>
         <div id="listaNe"></div>
+        <div class="paginacao" id="paginacaoNe"></div>
       </div>`;
-    document.getElementById('btnFiltrarNe').addEventListener('click', () => { if (filtrosMudaram_()) carregar(); });
-    document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) carregar(); });
+    document.getElementById('btnFiltrarNe').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
+    document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
     UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
     UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor));
@@ -66,7 +70,7 @@ const TelaNotasEmpenho = (function () {
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => {
       document.getElementById('neBusca').value = '';
-      if (filtrosMudaram_()) carregar();
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     });
     await carregar();
   }
@@ -95,8 +99,23 @@ const TelaNotasEmpenho = (function () {
     gruposTodos = [];
     const params = filtrosAtuais();
     ultimoFiltroJson = JSON.stringify(params);
-    grupos = await Api.chamar('listarNotasEmpenho', params);
+    const resposta = await Api.chamar('listarNotasEmpenho', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, params));
+    grupos = resposta.items;
+    totalRegistros = resposta.total;
     renderCards();
+    renderPaginacao();
+  }
+
+  function renderPaginacao() {
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    document.getElementById('paginacaoNe').innerHTML = `
+      <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="botoes">
+        <button class="botao" id="nePagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
+        <button class="botao" id="nePagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
+      </div>`;
+    document.getElementById('nePagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
+    document.getElementById('nePagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
   }
 
   function seloSituacao_(situacao) {
@@ -306,7 +325,7 @@ const TelaNotasEmpenho = (function () {
       if (ehReforco && !gruposTodos.length) {
         const selectAlvo = document.getElementById('novaNeReforcoAlvo');
         selectAlvo.innerHTML = '<option value="">Carregando...</option>';
-        gruposTodos = await Api.chamar('listarNotasEmpenho', {});
+        gruposTodos = (await Api.chamar('listarNotasEmpenho', { pageSize: 100000 })).items;
         selectAlvo.innerHTML = gruposTodos.length
           ? '<option value="">Selecione...</option>' + gruposTodos.map(g => `<option value="${UI.escaparHtml(g.numero_ne)}">NE ${UI.escaparHtml(g.numero_ne)} — ${UI.escaparHtml(g.unidade_nome || '')} — ${UI.escaparHtml(g.fonte || '')}</option>`).join('')
           : '<option value="">Nenhuma Nota de Empenho cadastrada</option>';
