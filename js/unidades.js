@@ -9,6 +9,9 @@ const TelaUnidades = (function () {
   let todasUnidades = []; // sem filtro nenhum - só pra popular o dropdown do filtro "Unidade", separado da lista filtrada exibida nos cartões
   let linhasTas = [];
   let ultimoFiltroJson = null;
+  let paginaAtual = 1;
+  let totalRegistros = 0;
+  const TAMANHO_PAGINA = 20;
 
   const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
@@ -17,9 +20,9 @@ const TelaUnidades = (function () {
   async function render() {
     const [opcoesOss, todasUnidadesCarregadas] = await Promise.all([
       TelaListas.obterOpcoes('OSS'),
-      Api.chamar('listarUnidades', {}, { cache: true })
+      Api.chamar('listarUnidades', { pageSize: 100000 }, { cache: true })
     ]);
-    todasUnidades = todasUnidadesCarregadas;
+    todasUnidades = todasUnidadesCarregadas.items;
     const container = document.getElementById('conteudo');
     container.innerHTML = `
       <h2 class="titulo-tela">Unidades</h2>
@@ -42,18 +45,19 @@ const TelaUnidades = (function () {
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
         <div id="listaUnidades"></div>
+        <div class="paginacao" id="paginacaoUni"></div>
       </div>`;
 
     document.getElementById('btnNovaUnidade').addEventListener('click', () => abrirFormulario());
-    document.getElementById('chkSomenteAtivas').addEventListener('change', carregar);
-    document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) carregar(); });
-    document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) carregar(); });
+    document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
+    document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
+    document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })));
     UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO);
     UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor));
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosUni', () => {
       document.getElementById('uniBusca').value = '';
-      if (filtrosMudaram_()) carregar();
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     });
     await carregar();
   }
@@ -76,8 +80,23 @@ const TelaUnidades = (function () {
   async function carregar() {
     const filtros = filtrosAtuais();
     ultimoFiltroJson = JSON.stringify(filtros);
-    unidades = await Api.chamar('listarUnidades', filtros);
+    const resposta = await Api.chamar('listarUnidades', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
+    unidades = resposta.items;
+    totalRegistros = resposta.total;
     renderCards();
+    renderPaginacao();
+  }
+
+  function renderPaginacao() {
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    document.getElementById('paginacaoUni').innerHTML = `
+      <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="botoes">
+        <button class="botao" id="uniPagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
+        <button class="botao" id="uniPagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
+      </div>`;
+    document.getElementById('uniPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
+    document.getElementById('uniPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
   }
 
   function detalheTasHtml(unidade) {

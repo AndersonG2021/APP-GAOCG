@@ -35,11 +35,11 @@ const TelaSof = (function () {
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
-      Api.chamar('listarUnidades', { somenteAtivas: true }, { cache: true }),
+      Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),
       TelaListas.obterOpcoes('OBJETO')
     ]);
-    unidades = unidadesCarregadas;
+    unidades = unidadesCarregadas.items;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
       <h2 class="titulo-tela">SOF</h2>

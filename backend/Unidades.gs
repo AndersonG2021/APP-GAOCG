@@ -143,14 +143,22 @@ function listarUnidades(session, params) {
     });
   }
 
+  rows.sort(function (a, b) { return String(a.nome || '').localeCompare(String(b.nome || '')); });
+
+  var pageSize = Number(params.pageSize) || 20;
+  var page = Number(params.page) || 1;
+  var total = rows.length;
+  var start = (page - 1) * pageSize;
+  var pageRows = rows.slice(start, start + pageSize);
+
   var tasPorUnidade = agruparTasPorUnidade_();
-  rows.forEach(function (u) {
+  pageRows.forEach(function (u) {
     var tas = tasPorUnidade[u.id] || [];
     u.tas = tas;
     u.parcela_mensal_total = parcelaMensalTotal_(u.valor_contrato_gestao, tas);
   });
 
-  return ok_(rows);
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
 }
 
 function criarUnidade(session, dados) {

@@ -470,7 +470,14 @@ function listarNotasEmpenho(session, params) {
     if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;
     return a.numero_ne < b.numero_ne ? -1 : 1;
   });
-  return ok_(resultado);
+
+  var pageSize = Number(params.pageSize) || 20;
+  var page = Number(params.page) || 1;
+  var total = resultado.length;
+  var start = (page - 1) * pageSize;
+  var pageRows = resultado.slice(start, start + pageSize);
+
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
 }
 
 function totalEmpenhadoSof_(sofId) {
