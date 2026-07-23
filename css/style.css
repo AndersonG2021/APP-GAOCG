@@ -357,9 +357,9 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-unidade.inativa { opacity: 0.6; }
 .cartao-unidade-acoes { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 .cartao-unidade-corpo { flex: 1; min-width: 0; cursor: pointer; }
-.cartao-unidade-cabecalho { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.cartao-unidade-cabecalho { display: flex; flex-direction: column; gap: 4px; }
 .cartao-unidade-cabecalho h3 { margin: 0; min-width: 0; overflow-wrap: break-word; font-size: 16px; color: var(--azul-escuro); }
-.cartao-unidade-parcela { font-weight: 700; font-size: 13.5px; color: var(--verde); white-space: nowrap; flex-shrink: 0; }
+.cartao-unidade-parcela { font-weight: 700; font-size: 13.5px; color: var(--verde); }
 .cartao-unidade-meta { font-size: 12.5px; color: var(--cinza-700); margin: 6px 0; overflow-wrap: break-word; }
 .cartao-unidade-detalhe { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cinza-200); font-size: 13px; }
 .cartao-unidade-detalhe-linha { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; color: var(--cinza-700); }
