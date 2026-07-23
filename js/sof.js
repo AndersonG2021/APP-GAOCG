@@ -547,7 +547,12 @@ const TelaSof = (function () {
           data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, valor: dadosNe.valor,
             arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
         });
-        if (dadosNe.tipo === 'original') resposta.possui_ne = true;
+        if (dadosNe.tipo === 'original') {
+          resposta.possui_ne = true;
+          const idxAtual = ETAPAS_ANDAMENTO.indexOf(resposta.andamento);
+          const idxNeEmitida = ETAPAS_ANDAMENTO.indexOf('NE EMITIDA');
+          if (idxAtual < idxNeEmitida) resposta.andamento = 'NE EMITIDA';
+        }
       }
 
       UI.toast(dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.', 'sucesso');
