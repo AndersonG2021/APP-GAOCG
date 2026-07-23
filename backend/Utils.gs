@@ -26,7 +26,19 @@ var HEADERS = {
     'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta', 'observacao', 'planilha_poas',
     'ceo', 'contrato', 'completo', 'criado_por',
     'data_criacao', 'data_ultima_alteracao_andamento', 'visualizado_apos_alerta', 'possui_ne',
-    'excluido', 'excluido_por', 'excluido_em'],
+    'excluido', 'excluido_por', 'excluido_em',
+    // Campos do documento "Criar SOF - SEI" (sessão 2026-07-23) - ver
+    // camposEditaveis em Sof.gs para a lista comentada por grupo.
+    'sei_numero_documento', 'sei_data', 'sei_tipo_solicitacao', 'sei_previsto_pca', 'sei_numero_pca', 'sei_numero_dfd',
+    'sei_tipo_pleito', 'sei_justificativa_pleito', 'sei_area_setor_solicitante', 'sei_tema_poas', 'sei_objeto_despesa',
+    'sei_destinacao', 'sei_credor', 'sei_credor_cnpj', 'sei_acao', 'sei_subacao', 'sei_grupo_despesa',
+    'sei_medida_compensatoria_poas', 'sei_manutencao_linhas',
+    'sei_convenio_numero', 'sei_convenio_efisco', 'sei_convenio_conta', 'sei_convenio_banco',
+    'sei_contrapartida_convenio', 'sei_contrapartida_conta', 'sei_contrapartida_banco',
+    'sei_solicitante_nome', 'sei_solicitante_cargo',
+    'sei_ordenador_nome', 'sei_ordenador_cargo', 'sei_ordenador_setor',
+    'sei_assinatura_ne_nome', 'sei_assinatura_ne_cargo',
+    'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo'],
   SofFontes: ['id', 'sof_id', 'fonte', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
   UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'criado_por', 'data_criacao'],
   // fonte/arquivo_drive_id/arquivo_url/mes_referencia: colunas que já existem

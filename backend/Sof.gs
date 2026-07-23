@@ -223,7 +223,20 @@ function atualizarSof(session, id, dados) {
   var camposEditaveis = ['tipo', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta', 'observacao',
     'planilha_poas', 'ceo', 'contrato', 'completo',
     'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
-    'acao_snapshot', 'subacao_snapshot', 'gd_snapshot'];
+    'acao_snapshot', 'subacao_snapshot', 'gd_snapshot',
+    // Campos do documento "Criar SOF - SEI" (formulário à parte, botão na edição do
+    // SOF) - todos opcionais, sem validação de formato (é um documento administrativo,
+    // não dado estruturado usado em cálculo/filtro em nenhum outro lugar do app).
+    'sei_numero_documento', 'sei_data', 'sei_tipo_solicitacao', 'sei_previsto_pca', 'sei_numero_pca', 'sei_numero_dfd',
+    'sei_tipo_pleito', 'sei_justificativa_pleito', 'sei_area_setor_solicitante', 'sei_tema_poas', 'sei_objeto_despesa',
+    'sei_destinacao', 'sei_credor', 'sei_credor_cnpj', 'sei_acao', 'sei_subacao', 'sei_grupo_despesa',
+    'sei_medida_compensatoria_poas', 'sei_manutencao_linhas',
+    'sei_convenio_numero', 'sei_convenio_efisco', 'sei_convenio_conta', 'sei_convenio_banco',
+    'sei_contrapartida_convenio', 'sei_contrapartida_conta', 'sei_contrapartida_banco',
+    'sei_solicitante_nome', 'sei_solicitante_cargo',
+    'sei_ordenador_nome', 'sei_ordenador_cargo', 'sei_ordenador_setor',
+    'sei_assinatura_ne_nome', 'sei_assinatura_ne_cargo',
+    'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo'];
 
   camposEditaveis.forEach(function (campo) {
     if (!dados.hasOwnProperty(campo)) return;
