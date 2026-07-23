@@ -31,6 +31,7 @@ const TelaSof = (function () {
   let sofEmEdicaoId = null;
   let abrindoLinha = false;
   let linhasFontes = [];
+  let ultimoFiltroJson = null;
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
@@ -73,8 +74,10 @@ const TelaSof = (function () {
         <div class="paginacao" id="paginacaoSof"></div>
       </div>`;
 
-    document.getElementById('btnFiltrarSof').addEventListener('click', () => { paginaAtual = 1; carregar(); });
-    document.getElementById('sofBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { paginaAtual = 1; carregar(); } });
+    document.getElementById('btnFiltrarSof').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
+    document.getElementById('sofBusca').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+    });
     document.getElementById('btnNovoSof').addEventListener('click', async function () {
       this.disabled = true;
       try { await abrirFormulario(); } finally { this.disabled = false; }
@@ -86,8 +89,16 @@ const TelaSof = (function () {
     UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade);
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
-    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => { document.getElementById('sofBusca').value = ''; paginaAtual = 1; carregar(); });
+    UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
+      document.getElementById('sofBusca').value = '';
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+    });
     await carregar();
+  }
+
+  /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
+  function filtrosMudaram_() {
+    return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
   }
 
   function filtrosAtuais() {
@@ -103,7 +114,9 @@ const TelaSof = (function () {
   }
 
   async function carregar() {
-    const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtrosAtuais()));
+    const filtros = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(filtros);
+    const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
     itens = resposta.items;
     totalRegistros = resposta.total;
     renderCards();
