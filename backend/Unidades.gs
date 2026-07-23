@@ -118,6 +118,9 @@ function listarUnidades(session, params) {
     rows = rows.filter(function (u) { return toBool_(u.ativo); });
   }
 
+  var idsValores = paraArrayFiltro_(params.unidade_id);
+  if (idsValores.length) rows = rows.filter(function (u) { return idsValores.indexOf(String(u.id)) !== -1; });
+
   var tipoValores = paraArrayFiltro_(params.tipo);
   if (tipoValores.length) rows = rows.filter(function (u) { return tipoValores.indexOf(u.tipo) !== -1; });
 
