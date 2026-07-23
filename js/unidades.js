@@ -6,6 +6,7 @@
 const TelaUnidades = (function () {
   const OPCOES_TIPO = ['UPA', 'UPAE', 'Hospital', 'Carreta', 'Outro'];
   let unidades = [];
+  let todasUnidades = []; // sem filtro nenhum - só pra popular o dropdown do filtro "Unidade", separado da lista filtrada exibida nos cartões
   let linhasTas = [];
   let ultimoFiltroJson = null;
 
@@ -14,13 +15,20 @@ const TelaUnidades = (function () {
   const ICONE_RESTAURAR = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
   async function render() {
-    const opcoesOss = await TelaListas.obterOpcoes('OSS');
+    const [opcoesOss, todasUnidadesCarregadas] = await Promise.all([
+      TelaListas.obterOpcoes('OSS'),
+      Api.chamar('listarUnidades', {}, { cache: true })
+    ]);
+    todasUnidades = todasUnidadesCarregadas;
     const container = document.getElementById('conteudo');
     container.innerHTML = `
       <h2 class="titulo-tela">Unidades</h2>
       <div class="painel">
         <div class="barra-filtros">
           <div class="campo"><label>Busca livre</label><input id="uniBusca" placeholder="nome, OSS, CNPJ..." /></div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="uniFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo</label>
             <div id="uniFiltroTipo"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroTipo" title="Limpar filtro de Tipo">&times;</button>
           </div>
@@ -40,6 +48,7 @@ const TelaUnidades = (function () {
     document.getElementById('chkSomenteAtivas').addEventListener('change', carregar);
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) carregar(); });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) carregar(); });
+    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })));
     UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO);
     UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor));
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosUni', () => {
@@ -52,6 +61,7 @@ const TelaUnidades = (function () {
   function filtrosAtuais() {
     return {
       busca: document.getElementById('uniBusca').value.trim(),
+      unidade_id: UI.valoresFiltroMultiplo('uniFiltroUnidade'),
       tipo: UI.valoresFiltroMultiplo('uniFiltroTipo'),
       oss: UI.valoresFiltroMultiplo('uniFiltroOss'),
       somenteAtivas: document.getElementById('chkSomenteAtivas').checked
