@@ -772,6 +772,8 @@ Três pedidos pequenos do usuário, todos já colados/reimplantados quando aplic
 
 **Passo manual pendente:** colar `backend/Unidades.gs` atualizado no editor do Apps Script e reimplantar (só esse arquivo mudou no backend; os outros dois itens são só frontend).
 
+**Bug encontrado e corrigido no mesmo dia (ainda não testado):** o "x" individual de um campo (múltipla escolha) disparava recarregamento mesmo quando esse campo específico já estava vazio - por causa da otimização "recarregar só se mudou" (acima), qualquer seleção *pendente* (marcada mas ainda sem clicar em "Filtrar") em **outro** campo fazia o "x" de um campo vazio aplicar essa seleção pendente sem querer. Corrigido em `ligarLimpezaFiltros` (`js/app.js`, usado pelas 4 telas com filtro): o "x" individual só recarrega se o campo que ele mesmo limpa tinha alguma seleção antes do clique - `js/app.js` é o único arquivo que muda, o fix vale pra SOF/Recibos/Notas de Empenho/Unidades ao mesmo tempo.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
