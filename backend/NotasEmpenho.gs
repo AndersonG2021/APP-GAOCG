@@ -396,9 +396,15 @@ function listarNotasEmpenho(session, params) {
     var sof = sofsPorId[grupo.sof_id];
     var unidade = sof ? unidadesPorId[sof.unidade_id] : null;
     var fontesDoSof = fontesPorSof[grupo.sof_id] || [];
-    var parcelaMensalRef = fontesDoSof
-      .filter(function (f) { return f.fonte === grupo.fonte; })
+    var fontesDaMesmaFonte = fontesDoSof.filter(function (f) { return f.fonte === grupo.fonte; });
+    var parcelaMensalRef = fontesDaMesmaFonte
       .reduce(function (soma, f) { return soma + toNumber_(f.parcela_mensal); }, 0);
+    // SOF de pagamento único (só 1 mês preenchido no cronograma da fonte, ou
+    // nenhum) não é um desembolso recorrente - o alerta "abaixo do previsto"
+    // só faz sentido pra fontes com mais de 1 mês no cronograma.
+    var mesesPreenchidosFonte = fontesDaMesmaFonte.reduce(function (soma, f) {
+      return soma + (f.cronograma || []).filter(function (c) { return toNumber_(c.valor) > 0; }).length;
+    }, 0);
     var valorLiquidado = valorLiquidadoPorNe[numeroNe] || 0;
     var valorAtual = grupo.valor - valorLiquidado;
 
@@ -430,7 +436,7 @@ function listarNotasEmpenho(session, params) {
       valor_liquidado: valorLiquidado,
       valor_atual: valorAtual,
       parcela_mensal_referencia: parcelaMensalRef,
-      alerta: parcelaMensalRef > 0 && valorAtual < parcelaMensalRef,
+      alerta: parcelaMensalRef > 0 && valorAtual < parcelaMensalRef && mesesPreenchidosFonte > 1,
       arquivos: grupo.arquivos,
       ano: ano,
       cronograma: cronograma

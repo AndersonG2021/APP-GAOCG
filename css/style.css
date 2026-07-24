@@ -146,6 +146,21 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .linhas-fonte-rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 .linhas-fonte-total { font-size: 13px; color: var(--cinza-700); }
 
+/*
+ * Linha de Fonte do SOF (sessão de fusão do formulário "Criar SOF - SEI" na
+ * criação): ganhou um cronograma de 12 meses, não cabe mais no grid de 4
+ * colunas numa única linha que ".linha-fonte" pressupõe (esse continua
+ * servindo só as linhas de Manutenção, mais simples, sem mudança de layout).
+ */
+.linha-fonte-cronograma { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 40px 12px 12px; background: var(--cinza-100); border-radius: 8px; }
+.linha-fonte-cronograma .campo { margin-bottom: 0; }
+.linha-fonte-cronograma .linha-fonte-remover { position: absolute; top: 8px; right: 8px; margin-top: 0; }
+.linha-fonte-cabecalho { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0 16px; }
+.linha-fonte-total-exibicao { display: block; padding: 8px 10px; background: #fff; border: 1px solid var(--cinza-200); border-radius: 6px; font-size: 14px; }
+.linha-fonte-meses { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 12px; }
+.linha-fonte-mes-campo { margin-bottom: 0; }
+.linha-fonte-mes-campo label { font-size: 11px; }
+
 .linhas-parcela-dividida { display: flex; flex-direction: column; gap: 8px; }
 .linha-parcela-dividida { display: flex; gap: 12px; align-items: flex-start; padding: 8px; background: var(--cinza-100); border-radius: 8px; }
 .linha-parcela-dividida .campo { margin-bottom: 0; }
@@ -427,6 +442,8 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
   .grade-2, .grade-3 { grid-template-columns: 1fr; }
   .linha-fonte { grid-template-columns: 1fr; }
   .linha-fonte-remover { align-self: flex-end; margin-top: 0; }
+  .linha-fonte-cabecalho { grid-template-columns: 1fr; }
+  .linha-fonte-meses { grid-template-columns: repeat(3, 1fr); }
   .linha-parcela-dividida { flex-direction: column; }
 }
 

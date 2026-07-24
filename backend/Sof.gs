@@ -32,6 +32,35 @@ function aplicarSnapshotUnidadeSof_(sof, unidade) {
 }
 
 /**
+ * Campos "livres" do SOF (texto/booleano simples, sem regra de negócio
+ * própria) - reaproveitado por criarSof e atualizarSof pra não duplicar essa
+ * lista enorme duas vezes (antes só atualizarSof tinha; criarSof nunca
+ * gravava nenhum campo sei_*, ver PROGRESS.md sessão de fusão do formulário
+ * "Criar SOF - SEI" na criação). Inclui os campos snapshot (oss_snapshot
+ * etc.) porque atualizarSof sempre tratou eles como texto comum (edição
+ * direta, sem re-derivar de novo da unidade) - criarSof filtra esses campos
+ * fora deste array antes de usar o loop genérico, porque lá eles têm uma
+ * lógica própria (aplicarSnapshotUnidadeSof_ + override, ver abaixo).
+ */
+var CAMPOS_LIVRES_SOF_ = ['tipo', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta',
+  'observacao', 'planilha_poas', 'ceo', 'contrato', 'completo',
+  'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
+  'acao_snapshot', 'subacao_snapshot', 'gd_snapshot',
+  // Campos do documento "Criar SOF - SEI" - todos opcionais, sem validação de
+  // formato (documento administrativo, não usado em cálculo/filtro em nenhum
+  // outro lugar do app). Disponíveis já na criação do SOF a partir desta sessão.
+  'sei_numero_documento', 'sei_data', 'sei_tipo_solicitacao', 'sei_previsto_pca', 'sei_numero_pca', 'sei_numero_dfd',
+  'sei_tipo_pleito', 'sei_justificativa_pleito', 'sei_area_setor_solicitante', 'sei_tema_poas', 'sei_objeto_despesa',
+  'sei_destinacao', 'sei_credor', 'sei_credor_cnpj', 'sei_acao', 'sei_subacao', 'sei_grupo_despesa',
+  'sei_medida_compensatoria_poas', 'sei_manutencao_linhas',
+  'sei_convenio_numero', 'sei_convenio_efisco', 'sei_convenio_conta', 'sei_convenio_banco',
+  'sei_contrapartida_convenio', 'sei_contrapartida_conta', 'sei_contrapartida_banco',
+  'sei_solicitante_nome', 'sei_solicitante_cargo', 'sei_solicitante_setor',
+  'sei_ordenador_nome', 'sei_ordenador_cargo', 'sei_ordenador_setor',
+  'sei_assinatura_ne_nome', 'sei_assinatura_ne_cargo',
+  'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo'];
+
+/**
  * Espelha ETAPAS_ANDAMENTO de js/sof.js (13 etapas fixas do processo, em
  * ordem). Duplicado aqui porque o backend não tinha noção de ordem até agora
  * - qualquer mudança nas etapas precisa ser replicada nos dois arquivos.
@@ -83,59 +112,146 @@ function invalidarCacheFontes_() {
   CacheService.getScriptCache().remove('sof_fontes');
 }
 
-/** Todas as linhas de SofFontes, agrupadas por sof_id. Usado por listarSof/obterSof pra anexar fontes + total calculado. */
+/**
+ * Cronograma mensal (Jan-Dez) por Fonte, com cache de 30s - mesmo padrão de
+ * todoCronogramaComCache_ (NotasEmpenho.gs). Sessão de fusão do formulário
+ * "Criar SOF - SEI" na criação do SOF (ver PROGRESS.md): cada Fonte passa a
+ * ter 12 valores mensais em vez de um único "Total Solicitado" digitado à mão.
+ */
+function todasFontesCronogramaComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'sof_fontes_cronograma';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES_CRONOGRAMA));
+  rows.forEach(function (c) { delete c._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheFontesCronograma_() {
+  CacheService.getScriptCache().remove('sof_fontes_cronograma');
+}
+
+/** Cronograma agrupado por sof_fonte_id, ordenado por mês. */
+function agruparCronogramaPorFonte_() {
+  var mapa = {};
+  todasFontesCronogramaComCache_().forEach(function (c) {
+    (mapa[c.sof_fonte_id] = mapa[c.sof_fonte_id] || []).push({ mes: toNumber_(c.mes), valor: toNumber_(c.valor) });
+  });
+  Object.keys(mapa).forEach(function (id) { mapa[id].sort(function (a, b) { return a.mes - b.mes; }); });
+  return mapa;
+}
+
+/**
+ * Todas as linhas de SofFontes com o cronograma de cada uma já anexado
+ * (fonte.cronograma) - ponto único de junção entre as duas abas, usado tanto
+ * por agruparFontesPorSof_ (listarSof) quanto por listarFontesPorSof_
+ * (obterSof), pra nunca haver dois lugares que podem divergir sobre isso.
+ * Importante: listarSof precisa mesmo trazer o cronograma, porque
+ * abrirSofExistente (js/sof.js) reaproveita o item já carregado por listarSof
+ * pra reabrir a edição, sem chamar obterSof de novo (otimização de
+ * performance de uma sessão anterior) - sem isso, reabrir um SOF pra editar
+ * mostraria os 12 meses em branco mesmo com dado salvo.
+ */
+function fontesComCronograma_() {
+  var cronoPorFonte = agruparCronogramaPorFonte_();
+  return todasFontesComCache_().map(function (f) {
+    return Object.assign({}, f, { cronograma: cronoPorFonte[f.id] || [] });
+  });
+}
+
+/** Todas as linhas de SofFontes (com cronograma), agrupadas por sof_id. Usado por listarSof/obterSof pra anexar fontes + total calculado. */
 function agruparFontesPorSof_() {
   var mapa = {};
-  todasFontesComCache_().forEach(function (f) {
+  fontesComCronograma_().forEach(function (f) {
     (mapa[f.sof_id] = mapa[f.sof_id] || []).push(f);
   });
   return mapa;
 }
 
 function listarFontesPorSof_(sofId) {
-  return todasFontesComCache_().filter(function (f) { return String(f.sof_id) === String(sofId); });
+  return fontesComCronograma_().filter(function (f) { return String(f.sof_id) === String(sofId); });
 }
 
 function totalSolicitadoDeFontes_(fontes) {
   return (fontes || []).reduce(function (soma, f) { return soma + toNumber_(f.total_solicitado); }, 0);
 }
 
+/**
+ * fonte e parcela_mensal continuam obrigatórios por linha; total_solicitado
+ * saiu da validação (deixou de ser digitado, agora é calculado a partir do
+ * cronograma) - no lugar, exige que a soma dos meses preenchidos seja > 0,
+ * pra não deixar passar uma linha de fonte vazia/zerada (que viraria um
+ * "R$0,00 solicitado" silencioso no card e no CSV).
+ */
 function validarFontes_(fontes) {
   if (!fontes || !fontes.length) return 'Informe ao menos uma fonte.';
   for (var i = 0; i < fontes.length; i++) {
     var f = fontes[i] || {};
-    if (!isNonEmpty_(f.fonte) || !isNonEmpty_(f.parcela_mensal) || !isNonEmpty_(f.total_solicitado)) {
-      return 'Preencha fonte, parcela mensal e total solicitado em todas as linhas de fonte.';
+    if (!isNonEmpty_(f.fonte) || !isNonEmpty_(f.parcela_mensal)) {
+      return 'Preencha fonte e parcela mensal em todas as linhas de fonte.';
     }
+    var soma = (f.cronograma || []).reduce(function (s, c) { return s + toNumber_(c.valor); }, 0);
+    if (soma <= 0) return 'Preencha ao menos um mês com valor maior que zero em cada linha de fonte.';
   }
   return null;
 }
 
 /**
  * Substitui por completo as linhas de SofFontes de um SOF (apaga as antigas e
- * recria a partir do array enviado). Mais simples e robusto que tentar
- * diferenciar linha a linha - não há necessidade de preservar o id de uma
- * linha de fonte entre edições.
+ * recria a partir do array enviado), e junto o cronograma mensal de cada uma
+ * (SofFontesCronograma) - mesmo princípio de apagar-e-recriar, um nível
+ * abaixo. total_solicitado é calculado aqui como soma do cronograma, nunca
+ * confiado como veio do frontend. Meses em branco (sem valor) não geram linha
+ * no cronograma - só os meses realmente preenchidos.
  */
 function substituirFontesDoSof_(sofId, fontesArray, session) {
   var sheet = getSheet_(SHEETS.SOF_FONTES);
   var existentes = sheetToObjects_(sheet).filter(function (f) { return String(f.sof_id) === String(sofId); });
+  var idsAntigos = existentes.map(function (f) { return f.id; });
   existentes
     .sort(function (a, b) { return b._row - a._row; })
     .forEach(function (f) { deleteRow_(sheet, f._row); });
 
+  var cronoSheet = getSheet_(SHEETS.SOF_FONTES_CRONOGRAMA);
+  var cronoAntigo = sheetToObjects_(cronoSheet).filter(function (c) { return idsAntigos.indexOf(c.sof_fonte_id) !== -1; });
+  cronoAntigo
+    .sort(function (a, b) { return b._row - a._row; })
+    .forEach(function (c) { deleteRow_(cronoSheet, c._row); });
+
   (fontesArray || []).forEach(function (item) {
+    var cronograma = (item.cronograma || []).filter(function (c) {
+      return Number(c.mes) >= 1 && Number(c.mes) <= 12 && isNonEmpty_(c.valor);
+    });
+    var totalSolicitado = cronograma.reduce(function (s, c) { return s + toNumber_(c.valor); }, 0);
+    var fonteId = proximoId_('SofFontes');
+
     appendObjectRow_(sheet, {
-      id: proximoId_('SofFontes'),
+      id: fonteId,
       sof_id: sofId,
       fonte: sanitizeString_(item.fonte, 50),
+      codigo_poas: sanitizeString_(item.codigo_poas, 50),
       parcela_mensal: toNumber_(item.parcela_mensal),
-      total_solicitado: toNumber_(item.total_solicitado),
+      total_solicitado: totalSolicitado,
       criado_por: session.id,
       data_criacao: nowIso_()
     });
+
+    cronograma.forEach(function (c) {
+      appendObjectRow_(cronoSheet, {
+        id: proximoId_('SofFontesCronograma'),
+        sof_fonte_id: fonteId,
+        mes: Number(c.mes),
+        valor: toNumber_(c.valor),
+        criado_por: session.id,
+        data_criacao: nowIso_()
+      });
+    });
   });
   invalidarCacheFontes_();
+  invalidarCacheFontesCronograma_();
 }
 
 function criarSof(session, dados) {
@@ -159,20 +275,6 @@ function criarSof(session, dados) {
     id: id,
     unidade_id: dados.unidade_id,
     divergente_da_unidade: false,
-    tipo: sanitizeString_(dados.tipo, 50),
-    sei: sanitizeString_(dados.sei, 30),
-    sof_numero: sanitizeString_(dados.sof_numero, 20),
-    periodo_inicio: sanitizeString_(dados.periodo_inicio, 10),
-    periodo_fim: sanitizeString_(dados.periodo_fim, 10),
-    andamento: sanitizeString_(dados.andamento, 200),
-    dea: sanitizeString_(dados.dea, 200),
-    objeto: sanitizeString_(dados.objeto, 2000),
-    ta: sanitizeString_(dados.ta, 50),
-    observacao: sanitizeString_(dados.observacao, 2000),
-    planilha_poas: sanitizeString_(dados.planilha_poas, 200),
-    ceo: sanitizeString_(dados.ceo, 200),
-    contrato: sanitizeString_(dados.contrato, 100),
-    completo: toBool_(dados.completo),
     criado_por: session.id,
     data_criacao: nowIso_(),
     data_ultima_alteracao_andamento: nowIso_(),
@@ -180,6 +282,16 @@ function criarSof(session, dados) {
     possui_ne: false,
     excluido: false
   };
+
+  // Todos os campos "livres" (inclusive os sei_* do documento SEI, já
+  // disponíveis na criação a partir desta sessão) exceto os snapshot, que têm
+  // lógica própria logo abaixo (default a partir da unidade + override manual).
+  var camposSnapshotValores_ = Object.keys(SOF_SNAPSHOT_MAP).map(function (k) { return SOF_SNAPSHOT_MAP[k]; });
+  CAMPOS_LIVRES_SOF_.forEach(function (campo) {
+    if (camposSnapshotValores_.indexOf(campo) !== -1) return;
+    if (campo === 'completo') novo[campo] = toBool_(dados[campo]);
+    else novo[campo] = sanitizeString_(dados[campo], 2000);
+  });
 
   // Autopreenchimento por snapshot; se o usuário já digitou um valor manual, ele prevalece
   // e o sistema calcula divergência em relação ao cadastro atual da unidade.
@@ -220,25 +332,7 @@ function atualizarSof(session, id, dados) {
   var antigo = Object.assign({}, existente);
   var atualizado = Object.assign({}, existente);
 
-  var camposEditaveis = ['tipo', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'dea', 'objeto', 'ta', 'observacao',
-    'planilha_poas', 'ceo', 'contrato', 'completo',
-    'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
-    'acao_snapshot', 'subacao_snapshot', 'gd_snapshot',
-    // Campos do documento "Criar SOF - SEI" (formulário à parte, botão na edição do
-    // SOF) - todos opcionais, sem validação de formato (é um documento administrativo,
-    // não dado estruturado usado em cálculo/filtro em nenhum outro lugar do app).
-    'sei_numero_documento', 'sei_data', 'sei_tipo_solicitacao', 'sei_previsto_pca', 'sei_numero_pca', 'sei_numero_dfd',
-    'sei_tipo_pleito', 'sei_justificativa_pleito', 'sei_area_setor_solicitante', 'sei_tema_poas', 'sei_objeto_despesa',
-    'sei_destinacao', 'sei_credor', 'sei_credor_cnpj', 'sei_acao', 'sei_subacao', 'sei_grupo_despesa',
-    'sei_medida_compensatoria_poas', 'sei_manutencao_linhas',
-    'sei_convenio_numero', 'sei_convenio_efisco', 'sei_convenio_conta', 'sei_convenio_banco',
-    'sei_contrapartida_convenio', 'sei_contrapartida_conta', 'sei_contrapartida_banco',
-    'sei_solicitante_nome', 'sei_solicitante_cargo',
-    'sei_ordenador_nome', 'sei_ordenador_cargo', 'sei_ordenador_setor',
-    'sei_assinatura_ne_nome', 'sei_assinatura_ne_cargo',
-    'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo'];
-
-  camposEditaveis.forEach(function (campo) {
+  CAMPOS_LIVRES_SOF_.forEach(function (campo) {
     if (!dados.hasOwnProperty(campo)) return;
     if (campo === 'completo') atualizado[campo] = toBool_(dados[campo]);
     else atualizado[campo] = sanitizeString_(dados[campo], 2000);

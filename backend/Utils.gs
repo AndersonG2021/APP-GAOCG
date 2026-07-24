@@ -8,6 +8,7 @@ var SHEETS = {
   LISTAS: 'ListasPersonalizadas',
   SOF: 'SOF',
   SOF_FONTES: 'SofFontes',
+  SOF_FONTES_CRONOGRAMA: 'SofFontesCronograma',
   UNIDADES_TA: 'UnidadesTA',
   NOTAS_EMPENHO: 'NotasEmpenho',
   NOTAS_EMPENHO_CRONOGRAMA: 'NotasEmpenhoCronograma',
@@ -38,8 +39,20 @@ var HEADERS = {
     'sei_solicitante_nome', 'sei_solicitante_cargo',
     'sei_ordenador_nome', 'sei_ordenador_cargo', 'sei_ordenador_setor',
     'sei_assinatura_ne_nome', 'sei_assinatura_ne_cargo',
-    'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo'],
-  SofFontes: ['id', 'sof_id', 'fonte', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
+    'sei_assinatura_nl_nome', 'sei_assinatura_nl_cargo',
+    // Setor do Solicitante (sessão de fusão do formulário SEI na criação) - campo
+    // próprio, distinto de sei_area_setor_solicitante (seção "Contexto"); o
+    // frontend só usa esse último como valor inicial sugerido, sem travar os dois juntos.
+    'sei_solicitante_setor'],
+  // codigo_poas: novo (mesma sessão) - coluna "CÓDIGO POAS" da tabela de cronograma
+  // de desembolso do documento SEI, opcional, sem entrar em nenhum cálculo.
+  SofFontes: ['id', 'sof_id', 'fonte', 'codigo_poas', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
+  // Cronograma mensal (Jan-Dez) por Fonte do SOF - mesmo padrão child-table de
+  // NotasEmpenhoCronograma. total_solicitado (em SofFontes) passa a ser a soma
+  // destas linhas, calculada no backend (substituirFontesDoSof_), não mais
+  // confiada como veio do frontend. parcela_mensal (em SofFontes) continua
+  // independente disso - não é derivada do cronograma.
+  SofFontesCronograma: ['id', 'sof_fonte_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
   UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'criado_por', 'data_criacao'],
   // fonte/arquivo_drive_id/arquivo_url/mes_referencia: colunas que já existem
   // na aba real (criarNotaEmpenho já grava nelas há tempo - HEADERS não
@@ -71,6 +84,7 @@ var HEADERS = {
 var COLUNAS_NUMERICAS = {
   Unidades: ['valor_contrato_gestao'],
   SofFontes: ['parcela_mensal', 'total_solicitado'],
+  SofFontesCronograma: ['mes', 'valor'],
   UnidadesTA: ['valor_ta'],
   NotasEmpenho: ['valor', 'mes_referencia'],
   NotasEmpenhoCronograma: ['mes', 'valor'],

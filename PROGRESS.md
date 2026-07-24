@@ -855,6 +855,47 @@ Usuário enviou um documento real do SEI/GOVPE ("Solicitação Orçamentária e 
 
 **Ainda não testado:** o fluxo inteiro (abrir "Criar SOF - SEI", conferir prefill, salvar, conferir a aba nova + o download do `.html`, reabrir e conferir persistência, conferir log de auditoria).
 
+## "Criar SOF - SEI" virou o próprio formulário de criação (sessão 2026-07-23, CÓDIGO CONCLUÍDO, aguardando o usuário criar colunas/aba/colar/implantar e testar)
+
+O usuário testou a sessão anterior ("Criar SOF - SEI" como modal separado, só na edição) e pediu para inverter: o formulário do documento SEI passa a ser o próprio "+ Nova SOF", disponível já na criação, não um passo extra depois. Junto vieram 4 ajustes, alinhados em plan mode antes de implementar (duas perguntas de esclarecimento feitas ao usuário, respostas abaixo já incorporadas):
+
+1. Cada Fonte ganha **12 campos mensais (Jan-Dez)**, preenchidos manualmente (pode ser só 1 mês, pagamento único, ou vários, recorrente) — a soma vira o Total Solicitado (deixou de ser digitado). Mantido um campo **Parcela Mensal separado**, que não entra no documento e continua sendo só a base do alerta da Nota de Empenho.
+2. **Ajuste pedido durante a revisão do plano:** o alerta "abaixo do previsto" da NE só dispara quando a Fonte tiver **mais de 1 mês preenchido** no cronograma — SOF de pagamento único (só 1 mês) nunca aciona o alerta, mesmo com valor abaixo da Parcela Mensal.
+3. "Número do Contrato" e "CEO E-fisco" (seção Licitações) viraram campos editáveis de verdade (antes eram somente-leitura). Achado durante o plano: o backend (`criarSof`/`atualizarSof`) já aceitava `sof.contrato` há tempo — o campo aparecer sempre vazio era só falta de `<input>` no formulário, não um problema de backend.
+4. "Setor" do Solicitante virou campo próprio e editável (`sei_solicitante_setor`, novo) — antes era um espelho somente-leitura de "Área/setor solicitante" (campo diferente, seção Contexto). Pré-preenchido a partir desse valor ao abrir o formulário, mas editável e gravado à parte depois disso.
+5. A seção "Destinação e classificação" passou a incluir o campo **OSS** (reaproveitando o `oss_snapshot` que já existia solto no topo do formulário — sem duplicar dado, só mudou de lugar no layout).
+6. Autopreenchimento ao escolher a Unidade continua funcionando (OSS/CNPJ/Contrato de Gestão/Ação/Subação/G.D., mais Destinação/Credor/CPF-CNPJ/Ação/Subação do documento).
+
+**Dados novos:**
+- Aba **SofFontes**: nova coluna `codigo_poas` (opcional, texto — coluna "CÓDIGO POAS" do documento real, sem entrar em nenhum cálculo).
+- Nova aba **SofFontesCronograma** (`id, sof_fonte_id, mes, valor, criado_por, data_criacao`) — mesmo padrão child-table de `NotasEmpenhoCronograma`. `total_solicitado` (em SofFontes) passa a ser calculado no backend como soma dessas linhas, nunca mais confiado como veio do frontend.
+- Aba **SOF**: nova coluna `sei_solicitante_setor`.
+- `backend/Contadores.gs`: novo `SofFontesCronograma: 'SFC'` em `PREFIXOS_ID`.
+
+**Backend (`backend/Sof.gs`):**
+- Novo bloco de cache de 30s pro cronograma (`todasFontesCronogramaComCache_`/`invalidarCacheFontesCronograma_`/`agruparCronogramaPorFonte_`), mesmo padrão de `todoCronogramaComCache_` em `NotasEmpenho.gs`. Novo `fontesComCronograma_()` — ponto único que junta `SofFontes` com o cronograma, usado tanto por `agruparFontesPorSof_` (listagem) quanto por `listarFontesPorSof_` (obter um SOF), pra nunca haver dois lugares que podem divergir sobre isso — importante porque `listarSof` precisa trazer o cronograma: `abrirSofExistente` (frontend) reaproveita o item já carregado por `listarSof` pra reabrir a edição sem chamar `obterSof` de novo (otimização de performance de uma sessão anterior).
+- `validarFontes_`: `fonte`/`parcela_mensal` continuam obrigatórios; `total_solicitado` saiu da validação (calculado); nova regra — soma do cronograma da linha precisa ser `> 0`.
+- `substituirFontesDoSof_`: além de recriar as linhas de `SofFontes`, agora também recria o cronograma de cada uma (apagar-e-recriar, mesmo princípio de sempre) e calcula `total_solicitado` como soma dos meses. Meses em branco não geram linha.
+- Nova constante `CAMPOS_LIVRES_SOF_` (~40 campos: os de sempre + `contrato`/`ceo` + todos os `sei_*`, agora com `sei_solicitante_setor`), reaproveitada por `criarSof` **e** `atualizarSof` — antes só `atualizarSof` tinha essa lista; `criarSof` nunca gravava nenhum campo `sei_*`. `criarSof` filtra os campos snapshot (`oss_snapshot` etc.) desse array antes de usar o loop genérico, porque esses continuam com a lógica própria de autopreenchimento-a-partir-da-unidade-com-override-manual (sem mudança nessa parte).
+
+**Backend (`backend/NotasEmpenho.gs`):** `listarNotasEmpenho` — o cálculo de `alerta` ganhou a condição extra `mesesPreenchidosFonte > 1` (conta quantos meses do cronograma daquela fonte têm valor `> 0`), implementando o ajuste 2 acima. `parcela_mensal` continua sendo o valor de referência, sem mudança.
+
+**Frontend (`js/sof.js`):**
+- `abrirFormularioSeiSof_` (modal separado) deixou de existir — suas seções (`<h4 class="sei-secao-titulo">`) entraram dentro de `abrirFormulario`, sempre visíveis (criação e edição), modal sempre `{ grande: true }`. `coletarDadosFormularioSei_`/`salvarEGerarDocumentoSei_` foram absorvidas por `coletarDadosFormulario()`/`salvarSof(sofExistente, opcoes)`.
+- Nova organização: Unidade → Dados do cadastro (CNPJ/Contrato de Gestão/Ação/Subação/G.D./T.A.) → Identificação do processo (Número do Processo/Nº SOF/DEA/Período + campos SEI de identificação) → Pleito → Contexto → Destinação e classificação (com OSS) → Fontes de recurso (grade de 12 meses) → Medida compensatória POAS → Manutenção de Geres... → Despesas SUS/Portaria ou Convênio → Licitações (Número do Contrato/CEO, agora editáveis) → Solicitante (com Setor editável) → Ordenador → Assinatura NE → Assinatura NL → Observação.
+- Rodapé com duas ações de salvar, as duas disponíveis em criação e edição: "Salvar" (sem gerar documento) e "Salvar e gerar documento SEI" (salva e baixa/abre o HTML na sequência — exige "Número do documento (SEI)" preenchido).
+- Linha de Fonte (`linhaFonteHtml`/`renderFontesFormulario`/`lerLinhasFontesDoDom_`) reescrita: Fonte + Código POAS + Parcela Mensal numa linha, 12 campos mensais (Jan-Dez, grid de 6 colunas) embaixo, Total Solicitado virou somente leitura (soma ao vivo). Ganhou classe própria `linha-fonte-cronograma` (em vez de reaproveitar `.linha-fonte`, que continua servindo só as linhas de Manutenção — CSS novo em `css/style.css`).
+- `montarDocumentoSeiHtml_`: a tabela de fontes do documento agora imprime os valores reais dos 12 meses e o Código POAS (antes sempre em branco); "SETOR" do Solicitante no documento passou a ler `sei_solicitante_setor` (antes lia `sei_area_setor_solicitante` por engano/limitação).
+
+**Passos manuais pendentes do usuário:**
+1. Aba **SOF**: nova coluna `sei_solicitante_setor`.
+2. Aba **SofFontes**: nova coluna `codigo_poas`.
+3. Nova aba **SofFontesCronograma**: cabeçalho `id, sof_fonte_id, mes, valor, criado_por, data_criacao`.
+4. Aba **Contadores**: nova linha com prefixo `SFC`, próximo = 1.
+5. Colar `backend/Sof.gs`, `backend/Utils.gs`, `backend/Contadores.gs`, `backend/NotasEmpenho.gs` no editor do Apps Script e reimplantar.
+
+**Ainda não testado** (nenhum teste real feito ainda): criar uma SOF do zero com o formulário completo, incluindo 2-3 meses de cronograma numa Fonte, e conferir persistência ao reabrir; "Salvar e gerar documento SEI" gerando o HTML com os meses/Código POAS reais e os campos de Licitações/Setor preenchidos; alerta da NE aparecendo só quando a fonte tem 2+ meses preenchidos (e não aparecendo com só 1 mês); abrir um SOF criado antes desta sessão (sem os campos novos) sem erro.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

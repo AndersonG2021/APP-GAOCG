@@ -314,16 +314,28 @@ const TelaSof = (function () {
     return resultado;
   }
 
+  /**
+   * Formulário único de SOF - fundiu o antigo "+ Nova SOF" (simples) com o
+   * que era o modal separado "Criar SOF - SEI" (só disponível editando).
+   * Pedido do usuário: o formulário do documento SEI passou a ser o próprio
+   * formulário de criação, não um passo extra depois. Ver PROGRESS.md.
+   */
   async function abrirFormulario(sof, notasPromise) {
     const editando = !!sof;
     sofEmEdicaoId = editando ? sof.id : null;
     linhasFontes = (sof && sof.fontes && sof.fontes.length)
-      ? sof.fontes.map(f => ({ fonte: f.fonte, parcela_mensal: f.parcela_mensal, total_solicitado: f.total_solicitado }))
-      : [{ fonte: '', parcela_mensal: '', total_solicitado: '' }];
+      ? sof.fontes.map(f => ({ fonte: f.fonte, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [] }))
+      : [{ fonte: '', codigo_poas: '', parcela_mensal: '', cronograma: [] }];
+    linhasManutencaoSei_ = parseManutencaoSei_(sof ? sof.sei_manutencao_linhas : null);
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
     const opcoesObjeto = await TelaListas.obterOpcoes('OBJETO');
     const opcoesOss = await TelaListas.obterOpcoes('OSS');
+
+    const opt = (valorAtual, valor) => `<option value="${UI.escaparHtml(valor)}" ${valorAtual === valor ? 'selected' : ''}>${UI.escaparHtml(valor)}</option>`;
+    const selectSimNao = (id, valorAtual) => `<select id="${id}"><option value="">-</option><option ${valorAtual === 'SIM' ? 'selected' : ''}>SIM</option><option ${valorAtual === 'NÃO' ? 'selected' : ''}>NÃO</option></select>`;
+    const v = campo => UI.escaparHtml(sof ? sof[campo] || '' : '');
+
     const corpo = `
       <form id="formSof">
         <div class="campo"><label>Unidade *</label>
@@ -333,56 +345,153 @@ const TelaSof = (function () {
           </select>
         </div>
         ${sof && sof.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ Um ou mais campos abaixo divergem do cadastro atual da unidade.</p>' : ''}
+
+        <h4 class="sei-secao-titulo">Dados do cadastro</h4>
         <div class="grade-3">
-          <div class="campo"><label>OSS</label>${selectOssHtml_(opcoesOss, snapshot.oss_snapshot)}</div>
           <div class="campo"><label>CNPJ</label><input id="sofCnpj" value="${UI.escaparHtml(snapshot.cnpj_snapshot)}" /></div>
           <div class="campo"><label>Contrato de Gestão</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
           <div class="campo"><label>Ação</label><input id="sofAcao" value="${UI.escaparHtml(snapshot.acao_snapshot)}" /></div>
           <div class="campo"><label>Subação</label><input id="sofSubacao" value="${UI.escaparHtml(snapshot.subacao_snapshot)}" /></div>
           <div class="campo"><label>G.D.</label><input id="sofGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
-          <div class="campo"><label>Número do Processo</label><input id="sofSei" value="${UI.escaparHtml(sof ? sof.sei : '')}" placeholder="0000000000.000000/0000-00" /></div>
-          <div class="campo"><label>Nº SOF</label><input id="sofNumero" value="${UI.escaparHtml(sof ? sof.sof_numero : '')}" placeholder="000/0000" /></div>
-          <div class="campo"><label>Período - início</label><input type="date" id="sofPeriodoInicio" value="${UI.escaparHtml(sof ? sof.periodo_inicio : '')}" /></div>
-          <div class="campo"><label>Período - fim</label><input type="date" id="sofPeriodoFim" value="${UI.escaparHtml(sof ? sof.periodo_fim : '')}" /></div>
-          <div class="campo"><label>DEA</label>
+          <div class="campo"><label>T.A.</label><input id="sofTa" value="${v('ta')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Identificação do processo</h4>
+        <div class="grade-3">
+          <div class="campo"><label>Número do Processo *</label><input id="sofSei" value="${v('sei')}" placeholder="0000000000.000000/0000-00" /></div>
+          <div class="campo"><label>Nº SOF *</label><input id="sofNumero" value="${v('sof_numero')}" placeholder="000/0000" /></div>
+          <div class="campo"><label>DEA *</label>
             <select id="sofDea">
               <option value="">-</option>
               <option ${sof && sof.dea === 'SIM' ? 'selected' : ''}>SIM</option>
               <option ${sof && sof.dea === 'NÃO' ? 'selected' : ''}>NÃO</option>
             </select>
           </div>
-          <div class="campo"><label>T.A.</label><input id="sofTa" value="${UI.escaparHtml(sof ? sof.ta : '')}" /></div>
-          <div class="campo"><label>CEO</label><input id="sofCeo" value="${UI.escaparHtml(sof ? sof.ceo : '')}" /></div>
+          <div class="campo"><label>Período - início *</label><input type="date" id="sofPeriodoInicio" value="${v('periodo_inicio')}" /></div>
+          <div class="campo"><label>Período - fim *</label><input type="date" id="sofPeriodoFim" value="${v('periodo_fim')}" /></div>
         </div>
-        <div class="campo">
-          <label>Fontes de recurso *</label>
-          <div id="sofFontesContainer" class="linhas-fonte"></div>
-          <div class="linhas-fonte-rodape">
-            <button type="button" class="botao" id="btnAdicionarFonte">+ Adicionar fonte</button>
-            <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
-          </div>
+        <div class="grade-3">
+          <div class="campo"><label>Número do documento (SEI)</label><input id="seiNumeroDocumento" value="${v('sei_numero_documento')}" placeholder="Ex.: 419/2026" /></div>
+          <div class="campo"><label>Data</label><input type="date" id="seiData" value="${sof && sof.sei_data ? sof.sei_data : hojeIso_()}" /></div>
+          <div class="campo"><label>Solicito</label><select id="seiTipoSolicitacao"><option value="">Selecione...</option>${OPCOES_SEI_SOLICITACAO.map(o => opt(sof ? sof.sei_tipo_solicitacao : '', o)).join('')}</select></div>
         </div>
-        <div class="campo"><label>Objeto *</label>
+        <div class="grade-3">
+          <div class="campo"><label>Previsto no PCA?</label>${selectSimNao('seiPrevistoPca', sof ? sof.sei_previsto_pca : '')}</div>
+          <div class="campo"><label>Nº do PCA</label><input id="seiNumeroPca" value="${v('sei_numero_pca')}" /></div>
+          <div class="campo"><label>Nº do DFD</label><input id="seiNumeroDfd" value="${v('sei_numero_dfd')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Pleito</h4>
+        <div class="campo"><label>Assinalar o pleito</label><select id="seiTipoPleito"><option value="">Selecione...</option>${OPCOES_SEI_PLEITO.map(o => opt(sof ? sof.sei_tipo_pleito : '', o)).join('')}</select></div>
+        <div class="campo"><label>Justificativa do pleito para a CPF/SAD</label><textarea id="seiJustificativaPleito" rows="3">${v('sei_justificativa_pleito')}</textarea></div>
+
+        <h4 class="sei-secao-titulo">Contexto</h4>
+        <div class="grade-2">
+          <div class="campo"><label>Área/setor solicitante</label><input id="seiAreaSetorSolicitante" value="${v('sei_area_setor_solicitante')}" /></div>
+          <div class="campo"><label>Tema POAS</label><input id="seiTemaPoas" value="${v('sei_tema_poas')}" /></div>
+        </div>
+        <div class="campo"><label>Objeto (lista) *</label>
           <select id="sofObjeto">
             <option value="">Selecione...</option>
             ${opcoesObjeto.map(o => `<option ${sof && sof.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
           </select>
         </div>
-        <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${UI.escaparHtml(sof ? sof.observacao : '')}</textarea></div>
-        <p class="ajuda">O andamento do processo agora é editado direto no card da listagem (stepper), sem precisar abrir esta tela.</p>
+        <div class="campo"><label>Objeto da despesa (texto completo p/ documento SEI)</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${v('sei_objeto_despesa')}</textarea></div>
+
+        <h4 class="sei-secao-titulo">Destinação e classificação</h4>
+        <div class="grade-3">
+          <div class="campo"><label>OSS</label>${selectOssHtml_(opcoesOss, snapshot.oss_snapshot)}</div>
+          <div class="campo"><label>Destinação (Hospital, Geres etc.)</label><input id="seiDestinacao" value="${UI.escaparHtml((sof && sof.sei_destinacao) || (unidadeAtual ? unidadeAtual.tipo : '') || '')}" /></div>
+          <div class="campo"><label>Credor</label><input id="seiCredor" value="${UI.escaparHtml((sof && sof.sei_credor) || (unidadeAtual ? unidadeAtual.nome : '') || '')}" /></div>
+          <div class="campo"><label>CPF/CNPJ</label><input id="seiCredorCnpj" value="${UI.escaparHtml((sof && sof.sei_credor_cnpj) || snapshot.cnpj_snapshot || '')}" /></div>
+          <div class="campo"><label>Ação (documento)</label><input id="seiAcao" value="${UI.escaparHtml((sof && sof.sei_acao) || snapshot.acao_snapshot || '')}" /></div>
+          <div class="campo"><label>Subação (documento)</label><input id="seiSubacao" value="${UI.escaparHtml((sof && sof.sei_subacao) || snapshot.subacao_snapshot || '')}" /></div>
+          <div class="campo"><label>Grupo de despesa</label><input id="seiGrupoDespesa" value="${v('sei_grupo_despesa')}" placeholder="Ex.: 3.3.50" /></div>
+        </div>
+
+        <div class="campo">
+          <label>Fontes de recurso e cronograma de desembolso *</label>
+          <div id="sofFontesContainer" class="linhas-fonte"></div>
+          <div class="linhas-fonte-rodape">
+            <button type="button" class="botao" id="btnAdicionarFonte">+ Adicionar fonte</button>
+            <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
+          </div>
+          <p class="ajuda">Preencha só os meses que se aplicam - pagamento único usa 1 mês, pagamento recorrente usa vários.</p>
+        </div>
+
+        <h4 class="sei-secao-titulo">Medida compensatória POAS</h4>
+        <div class="campo"><textarea id="seiMedidaCompensatoriaPoas" rows="2">${v('sei_medida_compensatoria_poas')}</textarea></div>
+
+        <h4 class="sei-secao-titulo">Manutenção de Geres, Hospitais Regionais e Suprimento Individual</h4>
+        <div id="seiManutencaoContainer" class="linhas-fonte"></div>
+        <button type="button" class="botao" id="btnAdicionarLinhaManutencaoSei">+ Adicionar linha</button>
+
+        <h4 class="sei-secao-titulo">Despesas SUS/Portaria ou Convênio/Recursos Próprios</h4>
+        <div class="grade-2">
+          <div class="campo"><label>Nº do Convênio ou Portaria</label><input id="seiConvenioNumero" value="${v('sei_convenio_numero')}" /></div>
+          <div class="campo"><label>Nº do E-fisco</label><input id="seiConvenioEfisco" value="${v('sei_convenio_efisco')}" /></div>
+          <div class="campo"><label>Nº da Conta</label><input id="seiConvenioConta" value="${v('sei_convenio_conta')}" /></div>
+          <div class="campo"><label>Banco</label><input id="seiConvenioBanco" value="${v('sei_convenio_banco')}" /></div>
+          <div class="campo"><label>Contrapartida do Convênio Nº</label><input id="seiContrapartidaConvenio" value="${v('sei_contrapartida_convenio')}" /></div>
+          <div class="campo"><label>Nº da Conta (contrapartida)</label><input id="seiContrapartidaConta" value="${v('sei_contrapartida_conta')}" /></div>
+          <div class="campo"><label>Banco (contrapartida)</label><input id="seiContrapartidaBanco" value="${v('sei_contrapartida_banco')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Licitações</h4>
+        <div class="grade-2">
+          <div class="campo"><label>Número do Contrato</label><input id="sofNumeroContrato" value="${v('contrato')}" /></div>
+          <div class="campo"><label>CEO E-fisco</label><input id="sofCeo" value="${v('ceo')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Solicitante</h4>
+        <div class="grade-3">
+          <div class="campo"><label>Nome</label><input id="seiSolicitanteNome" value="${v('sei_solicitante_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiSolicitanteCargo" value="${v('sei_solicitante_cargo')}" /></div>
+          <div class="campo"><label>Setor</label><input id="seiSolicitanteSetor" value="${UI.escaparHtml((sof && sof.sei_solicitante_setor) || (sof && sof.sei_area_setor_solicitante) || '')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Ordenador</h4>
+        <div class="grade-3">
+          <div class="campo"><label>Nome</label><input id="seiOrdenadorNome" value="${v('sei_ordenador_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiOrdenadorCargo" value="${v('sei_ordenador_cargo')}" /></div>
+          <div class="campo"><label>Setor</label><input id="seiOrdenadorSetor" value="${v('sei_ordenador_setor')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Assinatura da Nota de Empenho</h4>
+        <div class="grade-2">
+          <div class="campo"><label>Nome</label><input id="seiAssinaturaNeNome" value="${v('sei_assinatura_ne_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNeCargo" value="${v('sei_assinatura_ne_cargo')}" /></div>
+        </div>
+
+        <h4 class="sei-secao-titulo">Assinatura da Nota de Liquidação</h4>
+        <div class="grade-2">
+          <div class="campo"><label>Nome</label><input id="seiAssinaturaNlNome" value="${v('sei_assinatura_nl_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNlCargo" value="${v('sei_assinatura_nl_cargo')}" /></div>
+        </div>
+
+        <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${v('observacao')}</textarea></div>
+        <p class="ajuda">O andamento do processo é editado direto no card da listagem (stepper), sem precisar abrir esta tela.</p>
         <p id="sofErro" class="erro-campo oculto"></p>
       </form>
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
 
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
-      `${editando ? '<button class="botao" id="btnCriarSofSei">Criar SOF - SEI</button>' : ''}<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`);
+      `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnGerarDocumentoSei">Salvar e gerar documento SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
+      { grande: true });
     if (editando) UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('SOF', sof.id));
 
     renderFontesFormulario();
     document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
       linhasFontes = lerLinhasFontesDoDom_();
-      linhasFontes.push({ fonte: '', parcela_mensal: '', total_solicitado: '' });
+      linhasFontes.push({ fonte: '', codigo_poas: '', parcela_mensal: '', cronograma: [] });
       renderFontesFormulario();
+    });
+
+    renderManutencaoSeiFormulario_();
+    document.getElementById('btnAdicionarLinhaManutencaoSei').addEventListener('click', () => {
+      linhasManutencaoSei_ = lerLinhasManutencaoSeiDoDom_();
+      linhasManutencaoSei_.push({ codigo: '', elemento: '', valor: '' });
+      renderManutencaoSeiFormulario_();
     });
 
     document.getElementById('sofUnidade').addEventListener('change', function () {
@@ -395,16 +504,16 @@ const TelaSof = (function () {
       document.getElementById('sofAcao').value = preenchido.acao_snapshot;
       document.getElementById('sofSubacao').value = preenchido.subacao_snapshot;
       document.getElementById('sofGd').value = preenchido.gd_snapshot;
+      document.getElementById('seiDestinacao').value = unidade ? unidade.tipo || '' : '';
+      document.getElementById('seiCredor').value = unidade ? unidade.nome || '' : '';
+      document.getElementById('seiCredorCnpj').value = preenchido.cnpj_snapshot;
+      document.getElementById('seiAcao').value = preenchido.acao_snapshot;
+      document.getElementById('seiSubacao').value = preenchido.subacao_snapshot;
     });
 
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
-
-    document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof));
-
-    if (editando) {
-      const unidadeParaSei = unidadeAtual;
-      document.getElementById('btnCriarSofSei').addEventListener('click', () => abrirFormularioSeiSof_(sof, unidadeParaSei));
-    }
+    document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
+    document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
 
     ['sofUnidade', 'sofOss', 'sofObjeto'].forEach(id => UI.tornarPesquisavel(id));
 
@@ -424,33 +533,65 @@ const TelaSof = (function () {
     </select>`;
   }
 
+  const NOMES_MESES_ABREV_FONTE_ = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
   /** Lê as linhas de fonte direto do DOM (fonte da verdade entre re-renders). */
   function lerLinhasFontesDoDom_() {
-    return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte')).map(linha => ({
+    return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma')).map(linha => ({
       fonte: linha.querySelector('.linha-fonte-select').value,
+      codigo_poas: linha.querySelector('.linha-fonte-codigo-poas').value.trim(),
       parcela_mensal: linha.querySelector('.linha-fonte-parcela').value,
-      total_solicitado: linha.querySelector('.linha-fonte-total').value
+      cronograma: Array.from(linha.querySelectorAll('.linha-fonte-mes')).map(i => ({ mes: Number(i.dataset.mes), valor: i.value }))
     }));
   }
 
+  /**
+   * Cada Fonte virou um mini-cronograma: Fonte/Código POAS/Parcela Mensal numa
+   * linha, e 12 valores mensais (Jan-Dez) preenchidos manualmente embaixo -
+   * pode ter só 1 mês (pagamento único) ou vários (pagamento recorrente).
+   * Total Solicitado deixou de ser digitado - vira somente leitura, soma dos
+   * meses. Parcela Mensal continua separada, não entra no documento gerado e
+   * segue sendo só a base do alerta da Nota de Empenho.
+   * Classe própria "linha-fonte-cronograma" (em vez de reaproveitar
+   * ".linha-fonte") porque essa linha não cabe mais no grid de 4 colunas numa
+   * única linha que ".linha-fonte" pressupõe (usado também pelas linhas de
+   * Manutenção, que continuam simples e não podem mudar de layout).
+   */
   function linhaFonteHtml(item, indice, podeRemover) {
+    const porMes = {};
+    (item.cronograma || []).forEach(c => { porMes[c.mes] = c.valor; });
+    const mesesHtml = NOMES_MESES_ABREV_FONTE_.map((nome, i) => {
+      const mes = i + 1;
+      return `<div class="campo linha-fonte-mes-campo"><label>${nome}</label><input class="linha-fonte-mes" type="number" step="0.01" data-mes="${mes}" value="${porMes[mes] || ''}" /></div>`;
+    }).join('');
     return `
-      <div class="linha-fonte" data-indice="${indice}">
-        <div class="campo"><label>Fonte</label>
-          <select class="linha-fonte-select">
-            <option value="">-</option>
-            ${OPCOES_FONTE.map(f => `<option ${item.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}
-          </select>
-        </div>
-        <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela" type="number" step="0.01" value="${item.parcela_mensal || ''}" /></div>
-        <div class="campo"><label>Total Solicitado</label><input class="linha-fonte-total" type="number" step="0.01" value="${item.total_solicitado || ''}" /></div>
+      <div class="linha-fonte-cronograma" data-indice="${indice}">
         ${podeRemover ? '<button type="button" class="botao-icone linha-fonte-remover" title="Remover fonte">&times;</button>' : ''}
+        <div class="linha-fonte-cabecalho">
+          <div class="campo"><label>Fonte</label>
+            <select class="linha-fonte-select">
+              <option value="">-</option>
+              ${OPCOES_FONTE.map(f => `<option ${item.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}
+            </select>
+          </div>
+          <div class="campo"><label>Código POAS</label><input class="linha-fonte-codigo-poas" value="${UI.escaparHtml(item.codigo_poas || '')}" /></div>
+          <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela" type="number" step="0.01" value="${item.parcela_mensal || ''}" /></div>
+          <div class="campo"><label>Total Solicitado</label><strong class="linha-fonte-total-exibicao">R$ 0,00</strong></div>
+        </div>
+        <div class="linha-fonte-meses">${mesesHtml}</div>
       </div>`;
   }
 
+  function atualizarTotalLinhaFonte_(linhaEl) {
+    const soma = Array.from(linhaEl.querySelectorAll('.linha-fonte-mes')).reduce((s, i) => s + (Number(i.value) || 0), 0);
+    const alvo = linhaEl.querySelector('.linha-fonte-total-exibicao');
+    if (alvo) alvo.textContent = UI.formatarMoeda(soma);
+    return soma;
+  }
+
   function atualizarTotalGeralFormulario() {
-    const totais = Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-total')).map(i => Number(i.value) || 0);
-    const soma = totais.reduce((a, b) => a + b, 0);
+    const linhas = Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma'));
+    const soma = linhas.reduce((total, linha) => total + atualizarTotalLinhaFonte_(linha), 0);
     const alvo = document.getElementById('sofFontesTotalGeral');
     if (alvo) alvo.textContent = UI.formatarMoeda(soma);
   }
@@ -462,7 +603,7 @@ const TelaSof = (function () {
     alvo.querySelectorAll('.linha-fonte-remover').forEach(btn => {
       btn.addEventListener('click', () => {
         linhasFontes = lerLinhasFontesDoDom_();
-        const indice = Number(btn.closest('.linha-fonte').dataset.indice);
+        const indice = Number(btn.closest('.linha-fonte-cronograma').dataset.indice);
         linhasFontes.splice(indice, 1);
         renderFontesFormulario();
       });
@@ -475,13 +616,15 @@ const TelaSof = (function () {
         }
       });
     });
-    alvo.querySelectorAll('.linha-fonte-total').forEach(input => {
+    alvo.querySelectorAll('.linha-fonte-mes').forEach(input => {
       input.addEventListener('input', atualizarTotalGeralFormulario);
     });
     atualizarTotalGeralFormulario();
   }
 
+  /** Junta os campos "de sempre" do SOF com os ~34 campos do documento SEI (formulário único desde a fusão). */
   function coletarDadosFormulario() {
+    const linhasManutencao = lerLinhasManutencaoSeiDoDom_().filter(l => l.codigo || l.elemento || l.valor);
     return {
       unidade_id: document.getElementById('sofUnidade').value,
       oss_snapshot: document.getElementById('sofOss').value.trim(),
@@ -497,10 +640,48 @@ const TelaSof = (function () {
       dea: document.getElementById('sofDea').value.trim(),
       ta: document.getElementById('sofTa').value.trim(),
       ceo: document.getElementById('sofCeo').value.trim(),
+      contrato: document.getElementById('sofNumeroContrato').value.trim(),
       fontes: lerLinhasFontesDoDom_(),
       objeto: document.getElementById('sofObjeto').value.trim(),
       observacao: document.getElementById('sofObservacao').value.trim(),
-      completo: true
+      completo: true,
+
+      sei_numero_documento: document.getElementById('seiNumeroDocumento').value.trim(),
+      sei_data: document.getElementById('seiData').value,
+      sei_tipo_solicitacao: document.getElementById('seiTipoSolicitacao').value,
+      sei_previsto_pca: document.getElementById('seiPrevistoPca').value,
+      sei_numero_pca: document.getElementById('seiNumeroPca').value.trim(),
+      sei_numero_dfd: document.getElementById('seiNumeroDfd').value.trim(),
+      sei_tipo_pleito: document.getElementById('seiTipoPleito').value,
+      sei_justificativa_pleito: document.getElementById('seiJustificativaPleito').value.trim(),
+      sei_area_setor_solicitante: document.getElementById('seiAreaSetorSolicitante').value.trim(),
+      sei_tema_poas: document.getElementById('seiTemaPoas').value.trim(),
+      sei_objeto_despesa: document.getElementById('seiObjetoDespesa').value.trim(),
+      sei_destinacao: document.getElementById('seiDestinacao').value.trim(),
+      sei_credor: document.getElementById('seiCredor').value.trim(),
+      sei_credor_cnpj: document.getElementById('seiCredorCnpj').value.trim(),
+      sei_acao: document.getElementById('seiAcao').value.trim(),
+      sei_subacao: document.getElementById('seiSubacao').value.trim(),
+      sei_grupo_despesa: document.getElementById('seiGrupoDespesa').value.trim(),
+      sei_medida_compensatoria_poas: document.getElementById('seiMedidaCompensatoriaPoas').value.trim(),
+      sei_manutencao_linhas: JSON.stringify(linhasManutencao),
+      sei_convenio_numero: document.getElementById('seiConvenioNumero').value.trim(),
+      sei_convenio_efisco: document.getElementById('seiConvenioEfisco').value.trim(),
+      sei_convenio_conta: document.getElementById('seiConvenioConta').value.trim(),
+      sei_convenio_banco: document.getElementById('seiConvenioBanco').value.trim(),
+      sei_contrapartida_convenio: document.getElementById('seiContrapartidaConvenio').value.trim(),
+      sei_contrapartida_conta: document.getElementById('seiContrapartidaConta').value.trim(),
+      sei_contrapartida_banco: document.getElementById('seiContrapartidaBanco').value.trim(),
+      sei_solicitante_nome: document.getElementById('seiSolicitanteNome').value.trim(),
+      sei_solicitante_cargo: document.getElementById('seiSolicitanteCargo').value.trim(),
+      sei_solicitante_setor: document.getElementById('seiSolicitanteSetor').value.trim(),
+      sei_ordenador_nome: document.getElementById('seiOrdenadorNome').value.trim(),
+      sei_ordenador_cargo: document.getElementById('seiOrdenadorCargo').value.trim(),
+      sei_ordenador_setor: document.getElementById('seiOrdenadorSetor').value.trim(),
+      sei_assinatura_ne_nome: document.getElementById('seiAssinaturaNeNome').value.trim(),
+      sei_assinatura_ne_cargo: document.getElementById('seiAssinaturaNeCargo').value.trim(),
+      sei_assinatura_nl_nome: document.getElementById('seiAssinaturaNlNome').value.trim(),
+      sei_assinatura_nl_cargo: document.getElementById('seiAssinaturaNlCargo').value.trim()
     };
   }
 
@@ -534,13 +715,23 @@ const TelaSof = (function () {
     return { tipo, numero_ne: numero, fonte, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
   }
 
-  async function salvarSof(sofExistente) {
+  /**
+   * Salva o SOF - opcoes.gerarDocumento (novo, sessão de fusão do formulário
+   * SEI) também monta/baixa/abre o documento HTML na sequência, disponível
+   * tanto na criação quanto na edição (antes só existia editando).
+   */
+  async function salvarSof(sofExistente, opcoes) {
+    opcoes = opcoes || {};
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
     const dados = coletarDadosFormulario();
     if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
     const mensagemObrigatorio = validarCamposObrigatorios();
     if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
+    if (opcoes.gerarDocumento && !dados.sei_numero_documento) {
+      UI.mostrarErro(erroEl, 'Informe o "Número do documento (SEI)" pra gerar o documento.');
+      return;
+    }
 
     let dadosNe;
     try {
@@ -568,7 +759,16 @@ const TelaSof = (function () {
         }
       }
 
-      UI.toast(dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.', 'sucesso');
+      if (opcoes.gerarDocumento) {
+        const html = montarDocumentoSeiHtml_(Object.assign({}, sofExistente, resposta, dados));
+        baixarArquivo(`SOF_SEI_${resposta.sof_numero || resposta.id}.html`, html, 'text/html;charset=utf-8');
+        abrirDocumentoEmNovaAba_(html);
+      }
+
+      UI.toast(
+        opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.' : (dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.'),
+        'sucesso'
+      );
       if (sofExistente) {
         UI.fecharModal();
         await carregar();
@@ -715,19 +915,23 @@ const TelaSof = (function () {
     const fontes = lerLinhasFontesDoDom_();
     if (!fontes.length) return 'Informe ao menos uma fonte.';
     for (const linha of fontes) {
-      if (!String(linha.fonte || '').trim() || !String(linha.parcela_mensal || '').trim() || !String(linha.total_solicitado || '').trim()) {
-        return 'Preencha fonte, parcela mensal e total solicitado em todas as linhas de fonte.';
+      if (!String(linha.fonte || '').trim() || !String(linha.parcela_mensal || '').trim()) {
+        return 'Preencha fonte e parcela mensal em todas as linhas de fonte.';
       }
+      const soma = linha.cronograma.reduce((s, c) => s + (Number(c.valor) || 0), 0);
+      if (soma <= 0) return 'Preencha ao menos um mês com valor maior que zero em cada linha de fonte.';
     }
     return null;
   }
 
-  // ===================== Criar SOF - SEI =====================
-  // Documento "Solicitação Orçamentária e Financeira" (modelo SEI/GOVPE) - botão
-  // dentro da edição de um SOF existente. Os campos ficam salvos no próprio SOF
-  // (via atualizarSof, mesmo endpoint genérico - ganha log de auditoria de graça)
-  // e o documento é gerado como HTML autocontido (sem o timbre nem o rodapé de
-  // endereço da Secretaria, por pedido do usuário).
+  // ===================== Documento SEI =====================
+  // Documento "Solicitação Orçamentária e Financeira" (modelo SEI/GOVPE) - os
+  // campos vivem no formulário único de SOF (abrirFormulario, acima; até uma
+  // sessão anterior isso era um modal separado, só disponível editando -
+  // ver PROGRESS.md, sessão de fusão do formulário na criação). Os campos
+  // ficam salvos no próprio SOF (via criarSof/atualizarSof) e o documento é
+  // gerado como HTML autocontido (sem o timbre nem o rodapé de endereço da
+  // Secretaria, por pedido do usuário) pelo botão "Salvar e gerar documento SEI".
 
   const OPCOES_SEI_SOLICITACAO = [
     'CLASSIFICAÇÃO DA DESPESA',
@@ -807,172 +1011,6 @@ const TelaSof = (function () {
     });
   }
 
-  function abrirFormularioSeiSof_(sof, unidade) {
-    linhasManutencaoSei_ = parseManutencaoSei_(sof.sei_manutencao_linhas);
-
-    const opt = (valorAtual, valor, rotulo) => `<option value="${UI.escaparHtml(valor)}" ${valorAtual === valor ? 'selected' : ''}>${UI.escaparHtml(rotulo || valor)}</option>`;
-    const selectSimNao = (id, valorAtual) => `<select id="${id}"><option value="">-</option><option ${valorAtual === 'SIM' ? 'selected' : ''}>SIM</option><option ${valorAtual === 'NÃO' ? 'selected' : ''}>NÃO</option></select>`;
-
-    const corpo = `
-      <form id="formSeiSof">
-        <h4 class="sei-secao-titulo">Identificação do documento</h4>
-        <div class="grade-3">
-          <div class="campo"><label>Número do documento</label><input id="seiNumeroDocumento" value="${UI.escaparHtml(sof.sei_numero_documento || '')}" placeholder="Ex.: 419/2026" /></div>
-          <div class="campo"><label>Data</label><input type="date" id="seiData" value="${sof.sei_data || hojeIso_()}" /></div>
-          <div class="campo"><label>Solicito</label><select id="seiTipoSolicitacao"><option value="">Selecione...</option>${OPCOES_SEI_SOLICITACAO.map(o => opt(sof.sei_tipo_solicitacao, o)).join('')}</select></div>
-        </div>
-        <div class="grade-3">
-          <div class="campo"><label>Previsto no PCA?</label>${selectSimNao('seiPrevistoPca', sof.sei_previsto_pca)}</div>
-          <div class="campo"><label>Nº do PCA</label><input id="seiNumeroPca" value="${UI.escaparHtml(sof.sei_numero_pca || '')}" /></div>
-          <div class="campo"><label>Nº do DFD</label><input id="seiNumeroDfd" value="${UI.escaparHtml(sof.sei_numero_dfd || '')}" /></div>
-        </div>
-
-        <h4 class="sei-secao-titulo">Pleito</h4>
-        <div class="campo"><label>Assinalar o pleito</label><select id="seiTipoPleito"><option value="">Selecione...</option>${OPCOES_SEI_PLEITO.map(o => opt(sof.sei_tipo_pleito, o)).join('')}</select></div>
-        <div class="campo"><label>Justificativa do pleito para a CPF/SAD</label><textarea id="seiJustificativaPleito" rows="3">${UI.escaparHtml(sof.sei_justificativa_pleito || '')}</textarea></div>
-
-        <h4 class="sei-secao-titulo">Contexto</h4>
-        <div class="grade-2">
-          <div class="campo"><label>Área/setor solicitante</label><input id="seiAreaSetorSolicitante" value="${UI.escaparHtml(sof.sei_area_setor_solicitante || '')}" /></div>
-          <div class="campo"><label>Tema POAS</label><input id="seiTemaPoas" value="${UI.escaparHtml(sof.sei_tema_poas || '')}" /></div>
-        </div>
-        <div class="campo"><label>Objeto da despesa (texto completo)</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${UI.escaparHtml(sof.sei_objeto_despesa || '')}</textarea></div>
-
-        <h4 class="sei-secao-titulo">Destinação e classificação</h4>
-        <div class="grade-3">
-          <div class="campo"><label>Destinação (Hospital, Geres etc.)</label><input id="seiDestinacao" value="${UI.escaparHtml(sof.sei_destinacao || (unidade ? unidade.tipo : '') || '')}" /></div>
-          <div class="campo"><label>Credor</label><input id="seiCredor" value="${UI.escaparHtml(sof.sei_credor || (unidade ? unidade.nome : '') || '')}" /></div>
-          <div class="campo"><label>CPF/CNPJ</label><input id="seiCredorCnpj" value="${UI.escaparHtml(sof.sei_credor_cnpj || sof.cnpj_snapshot || '')}" /></div>
-          <div class="campo"><label>Ação</label><input id="seiAcao" value="${UI.escaparHtml(sof.sei_acao || sof.acao_snapshot || '')}" /></div>
-          <div class="campo"><label>Subação</label><input id="seiSubacao" value="${UI.escaparHtml(sof.sei_subacao || sof.subacao_snapshot || '')}" /></div>
-          <div class="campo"><label>Grupo de despesa</label><input id="seiGrupoDespesa" value="${UI.escaparHtml(sof.sei_grupo_despesa || '')}" placeholder="Ex.: 3.3.50" /></div>
-        </div>
-        <p class="ajuda">A tabela de "Valor total com cronograma de desembolso" do documento é montada com as Fontes já cadastradas neste SOF (fonte + total solicitado) — os meses individuais saem em branco no documento gerado, pra preencher manualmente depois (o SOF não rastreia em qual mês cada valor cai).</p>
-
-        <h4 class="sei-secao-titulo">Medida compensatória POAS</h4>
-        <div class="campo"><textarea id="seiMedidaCompensatoriaPoas" rows="2">${UI.escaparHtml(sof.sei_medida_compensatoria_poas || '')}</textarea></div>
-
-        <h4 class="sei-secao-titulo">Manutenção de Geres, Hospitais Regionais e Suprimento Individual</h4>
-        <div id="seiManutencaoContainer" class="linhas-fonte"></div>
-        <button type="button" class="botao" id="btnAdicionarLinhaManutencaoSei">+ Adicionar linha</button>
-
-        <h4 class="sei-secao-titulo">Despesas SUS/Portaria ou Convênio/Recursos Próprios</h4>
-        <div class="grade-2">
-          <div class="campo"><label>Nº do Convênio ou Portaria</label><input id="seiConvenioNumero" value="${UI.escaparHtml(sof.sei_convenio_numero || '')}" /></div>
-          <div class="campo"><label>Nº do E-fisco</label><input id="seiConvenioEfisco" value="${UI.escaparHtml(sof.sei_convenio_efisco || '')}" /></div>
-          <div class="campo"><label>Nº da Conta</label><input id="seiConvenioConta" value="${UI.escaparHtml(sof.sei_convenio_conta || '')}" /></div>
-          <div class="campo"><label>Banco</label><input id="seiConvenioBanco" value="${UI.escaparHtml(sof.sei_convenio_banco || '')}" /></div>
-          <div class="campo"><label>Contrapartida do Convênio Nº</label><input id="seiContrapartidaConvenio" value="${UI.escaparHtml(sof.sei_contrapartida_convenio || '')}" /></div>
-          <div class="campo"><label>Nº da Conta (contrapartida)</label><input id="seiContrapartidaConta" value="${UI.escaparHtml(sof.sei_contrapartida_conta || '')}" /></div>
-          <div class="campo"><label>Banco (contrapartida)</label><input id="seiContrapartidaBanco" value="${UI.escaparHtml(sof.sei_contrapartida_banco || '')}" /></div>
-        </div>
-
-        <h4 class="sei-secao-titulo">Licitações</h4>
-        <div class="grade-2">
-          <div class="campo"><label>Número do Contrato</label><input value="${UI.escaparHtml(sof.contrato || '')}" disabled /></div>
-          <div class="campo"><label>CEO E-fisco</label><input value="${UI.escaparHtml(sof.ceo || '')}" disabled /></div>
-        </div>
-        <p class="ajuda">Esses dois campos vêm do próprio cadastro do SOF ("Contrato" e "CEO") — edite no formulário principal do SOF se precisar mudar.</p>
-
-        <h4 class="sei-secao-titulo">Solicitante</h4>
-        <div class="grade-3">
-          <div class="campo"><label>Nome</label><input id="seiSolicitanteNome" value="${UI.escaparHtml(sof.sei_solicitante_nome || '')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiSolicitanteCargo" value="${UI.escaparHtml(sof.sei_solicitante_cargo || '')}" /></div>
-          <div class="campo"><label>Setor</label><input value="${UI.escaparHtml(sof.sei_area_setor_solicitante || '')}" disabled /></div>
-        </div>
-
-        <h4 class="sei-secao-titulo">Ordenador</h4>
-        <div class="grade-3">
-          <div class="campo"><label>Nome</label><input id="seiOrdenadorNome" value="${UI.escaparHtml(sof.sei_ordenador_nome || '')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiOrdenadorCargo" value="${UI.escaparHtml(sof.sei_ordenador_cargo || '')}" /></div>
-          <div class="campo"><label>Setor</label><input id="seiOrdenadorSetor" value="${UI.escaparHtml(sof.sei_ordenador_setor || '')}" /></div>
-        </div>
-
-        <h4 class="sei-secao-titulo">Assinatura da Nota de Empenho</h4>
-        <div class="grade-2">
-          <div class="campo"><label>Nome</label><input id="seiAssinaturaNeNome" value="${UI.escaparHtml(sof.sei_assinatura_ne_nome || '')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNeCargo" value="${UI.escaparHtml(sof.sei_assinatura_ne_cargo || '')}" /></div>
-        </div>
-
-        <h4 class="sei-secao-titulo">Assinatura da Nota de Liquidação</h4>
-        <div class="grade-2">
-          <div class="campo"><label>Nome</label><input id="seiAssinaturaNlNome" value="${UI.escaparHtml(sof.sei_assinatura_nl_nome || '')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNlCargo" value="${UI.escaparHtml(sof.sei_assinatura_nl_cargo || '')}" /></div>
-        </div>
-        <p id="seiErro" class="erro-campo oculto"></p>
-      </form>`;
-
-    UI.abrirModal('Criar SOF - SEI', corpo,
-      `<button class="botao" id="btnCancelarSei">Cancelar</button><button class="botao primario" id="btnSalvarSei">Salvar e gerar documento</button>`,
-      { grande: true });
-
-    renderManutencaoSeiFormulario_();
-    document.getElementById('btnAdicionarLinhaManutencaoSei').addEventListener('click', () => {
-      linhasManutencaoSei_ = lerLinhasManutencaoSeiDoDom_();
-      linhasManutencaoSei_.push({ codigo: '', elemento: '', valor: '' });
-      renderManutencaoSeiFormulario_();
-    });
-    document.getElementById('btnCancelarSei').addEventListener('click', UI.fecharModal);
-    document.getElementById('btnSalvarSei').addEventListener('click', () => salvarEGerarDocumentoSei_(sof));
-  }
-
-  function coletarDadosFormularioSei_() {
-    const linhasManutencao = lerLinhasManutencaoSeiDoDom_().filter(l => l.codigo || l.elemento || l.valor);
-    return {
-      sei_numero_documento: document.getElementById('seiNumeroDocumento').value.trim(),
-      sei_data: document.getElementById('seiData').value,
-      sei_tipo_solicitacao: document.getElementById('seiTipoSolicitacao').value,
-      sei_previsto_pca: document.getElementById('seiPrevistoPca').value,
-      sei_numero_pca: document.getElementById('seiNumeroPca').value.trim(),
-      sei_numero_dfd: document.getElementById('seiNumeroDfd').value.trim(),
-      sei_tipo_pleito: document.getElementById('seiTipoPleito').value,
-      sei_justificativa_pleito: document.getElementById('seiJustificativaPleito').value.trim(),
-      sei_area_setor_solicitante: document.getElementById('seiAreaSetorSolicitante').value.trim(),
-      sei_tema_poas: document.getElementById('seiTemaPoas').value.trim(),
-      sei_objeto_despesa: document.getElementById('seiObjetoDespesa').value.trim(),
-      sei_destinacao: document.getElementById('seiDestinacao').value.trim(),
-      sei_credor: document.getElementById('seiCredor').value.trim(),
-      sei_credor_cnpj: document.getElementById('seiCredorCnpj').value.trim(),
-      sei_acao: document.getElementById('seiAcao').value.trim(),
-      sei_subacao: document.getElementById('seiSubacao').value.trim(),
-      sei_grupo_despesa: document.getElementById('seiGrupoDespesa').value.trim(),
-      sei_medida_compensatoria_poas: document.getElementById('seiMedidaCompensatoriaPoas').value.trim(),
-      sei_manutencao_linhas: JSON.stringify(linhasManutencao.length ? linhasManutencao : []),
-      sei_convenio_numero: document.getElementById('seiConvenioNumero').value.trim(),
-      sei_convenio_efisco: document.getElementById('seiConvenioEfisco').value.trim(),
-      sei_convenio_conta: document.getElementById('seiConvenioConta').value.trim(),
-      sei_convenio_banco: document.getElementById('seiConvenioBanco').value.trim(),
-      sei_contrapartida_convenio: document.getElementById('seiContrapartidaConvenio').value.trim(),
-      sei_contrapartida_conta: document.getElementById('seiContrapartidaConta').value.trim(),
-      sei_contrapartida_banco: document.getElementById('seiContrapartidaBanco').value.trim(),
-      sei_solicitante_nome: document.getElementById('seiSolicitanteNome').value.trim(),
-      sei_solicitante_cargo: document.getElementById('seiSolicitanteCargo').value.trim(),
-      sei_ordenador_nome: document.getElementById('seiOrdenadorNome').value.trim(),
-      sei_ordenador_cargo: document.getElementById('seiOrdenadorCargo').value.trim(),
-      sei_ordenador_setor: document.getElementById('seiOrdenadorSetor').value.trim(),
-      sei_assinatura_ne_nome: document.getElementById('seiAssinaturaNeNome').value.trim(),
-      sei_assinatura_ne_cargo: document.getElementById('seiAssinaturaNeCargo').value.trim(),
-      sei_assinatura_nl_nome: document.getElementById('seiAssinaturaNlNome').value.trim(),
-      sei_assinatura_nl_cargo: document.getElementById('seiAssinaturaNlCargo').value.trim()
-    };
-  }
-
-  async function salvarEGerarDocumentoSei_(sof) {
-    const erroEl = document.getElementById('seiErro');
-    erroEl.classList.add('oculto');
-    const dados = coletarDadosFormularioSei_();
-    try {
-      const atualizado = await Api.chamar('atualizarSof', { id: sof.id, data: dados });
-      const html = montarDocumentoSeiHtml_(Object.assign({}, sof, atualizado, dados));
-      baixarArquivo(`SOF_SEI_${sof.sof_numero || sof.id}.html`, html, 'text/html;charset=utf-8');
-      abrirDocumentoEmNovaAba_(html);
-      UI.fecharModal();
-      UI.toast('Documento SEI gerado com sucesso.', 'sucesso');
-    } catch (err) {
-      UI.mostrarErro(erroEl, err.message);
-    }
-  }
-
   /** Divide um array em grupos de N (usado só pra montar a tabela de "Assinalar o pleito" no documento gerado, 4 colunas por linha). */
   function agruparEm_(lista, tamanho) {
     const grupos = [];
@@ -982,7 +1020,7 @@ const TelaSof = (function () {
 
   /**
    * Monta o HTML autocontido do documento "Criar SOF - SEI" - `sof` aqui já
-   * deve vir mesclado com os dados recém-salvos (ver salvarEGerarDocumentoSei_).
+   * deve vir mesclado com os dados recém-salvos (ver salvarSof, opção gerarDocumento).
    * Não reproduz a marcação bagunçada de spans aninhados do export original do
    * SEI - usa HTML/CSS limpo com o mesmo layout visual, sem o timbre (imagem)
    * nem o rodapé de endereço da Secretaria (pedido explícito do usuário).
@@ -1002,7 +1040,12 @@ const TelaSof = (function () {
       `<tr>${linha.map(op => `<td>( ${marcado_(sof.sei_tipo_pleito, op)} ) ${UI.escaparHtml(op)}</td>`).join('')}</tr>`).join('');
 
     const fontesHtml = fontes.length
-      ? fontes.map(f => `<tr><td></td><td>${UI.escaparHtml(f.fonte || '')}</td>${'<td></td>'.repeat(12)}<td>${UI.formatarMoeda(f.total_solicitado)}</td></tr>`).join('')
+      ? fontes.map(f => {
+          const porMes = {};
+          (f.cronograma || []).forEach(c => { porMes[c.mes] = c.valor; });
+          const celulasMeses = Array.from({ length: 12 }, (_, i) => `<td>${porMes[i + 1] ? UI.formatarMoeda(porMes[i + 1]) : ''}</td>`).join('');
+          return `<tr><td>${UI.escaparHtml(f.codigo_poas || '')}</td><td>${UI.escaparHtml(f.fonte || '')}</td>${celulasMeses}<td>${UI.formatarMoeda(f.total_solicitado)}</td></tr>`;
+        }).join('')
       : `<tr><td colspan="15" style="text-align:center">Nenhuma fonte cadastrada no SOF.</td></tr>`;
 
     const manutencaoHtml = linhasManutencao.length
@@ -1090,7 +1133,7 @@ const TelaSof = (function () {
     <tr><th colspan="2">SOLICITANTE</th></tr>
     <tr><td>NOME</td><td>${UI.escaparHtml(sof.sei_solicitante_nome || '')}</td></tr>
     <tr><td>CARGO</td><td>${UI.escaparHtml(sof.sei_solicitante_cargo || '')}</td></tr>
-    <tr><td>SETOR</td><td>${UI.escaparHtml(sof.sei_area_setor_solicitante || '')}</td></tr>
+    <tr><td>SETOR</td><td>${UI.escaparHtml(sof.sei_solicitante_setor || '')}</td></tr>
   </table>
 
   <table class="sei-tabela">

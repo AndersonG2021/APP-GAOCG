@@ -13,6 +13,7 @@ var PREFIXOS_ID = {
   Recibos: 'REC',
   LogAuditoria: 'LOG',
   SofFontes: 'SFT',
+  SofFontesCronograma: 'SFC',
   UnidadesTA: 'UTA',
   NotasEmpenhoCronograma: 'NEC'
 };
