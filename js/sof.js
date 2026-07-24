@@ -138,7 +138,6 @@ const TelaSof = (function () {
     return `
       <div class="cartao-sof ${s.destacar_parado ? 'parado' : ''}" data-id="${s.id}">
         <div class="cartao-sof-topo">
-          <span class="cartao-sof-id">${UI.escaparHtml(s.id)}</span>
           <div class="cartao-sof-topo-acoes">
             ${s.destacar_parado ? `<span class="selo amarelo">${s.dias_parado} dia(s) parado</span>` : ''}
             <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
