@@ -855,7 +855,7 @@ Usuário enviou um documento real do SEI/GOVPE ("Solicitação Orçamentária e 
 
 **Ainda não testado:** o fluxo inteiro (abrir "Criar SOF - SEI", conferir prefill, salvar, conferir a aba nova + o download do `.html`, reabrir e conferir persistência, conferir log de auditoria).
 
-## "Criar SOF - SEI" virou o próprio formulário de criação (sessão 2026-07-23, CÓDIGO CONCLUÍDO, aguardando o usuário criar colunas/aba/colar/implantar e testar)
+## "Criar SOF - SEI" virou o próprio formulário de criação (sessão 2026-07-23, backend colado/planilha ajustada e frontend publicado — aguardando teste real do usuário)
 
 O usuário testou a sessão anterior ("Criar SOF - SEI" como modal separado, só na edição) e pediu para inverter: o formulário do documento SEI passa a ser o próprio "+ Nova SOF", disponível já na criação, não um passo extra depois. Junto vieram 4 ajustes, alinhados em plan mode antes de implementar (duas perguntas de esclarecimento feitas ao usuário, respostas abaixo já incorporadas):
 
@@ -887,17 +887,15 @@ O usuário testou a sessão anterior ("Criar SOF - SEI" como modal separado, só
 - Linha de Fonte (`linhaFonteHtml`/`renderFontesFormulario`/`lerLinhasFontesDoDom_`) reescrita: Fonte + Código POAS + Parcela Mensal numa linha, 12 campos mensais (Jan-Dez, grid de 6 colunas) embaixo, Total Solicitado virou somente leitura (soma ao vivo). Ganhou classe própria `linha-fonte-cronograma` (em vez de reaproveitar `.linha-fonte`, que continua servindo só as linhas de Manutenção — CSS novo em `css/style.css`).
 - `montarDocumentoSeiHtml_`: a tabela de fontes do documento agora imprime os valores reais dos 12 meses e o Código POAS (antes sempre em branco); "SETOR" do Solicitante no documento passou a ler `sei_solicitante_setor` (antes lia `sei_area_setor_solicitante` por engano/limitação).
 
-**Passos manuais pendentes do usuário:**
-1. Aba **SOF**: nova coluna `sei_solicitante_setor`.
-2. Aba **SofFontes**: nova coluna `codigo_poas`.
-3. Nova aba **SofFontesCronograma**: cabeçalho `id, sof_fonte_id, mes, valor, criado_por, data_criacao`.
-4. Aba **Contadores**: nova linha com prefixo `SFC`, próximo = 1.
-5. Colar `backend/Sof.gs`, `backend/Utils.gs`, `backend/Contadores.gs`, `backend/NotasEmpenho.gs` no editor do Apps Script e reimplantar.
+**CONFIRMADO (sessão 2026-07-23):** usuário concluiu os passos manuais - criou a coluna `sei_solicitante_setor` (aba SOF), a coluna `codigo_poas` (aba SofFontes), a aba nova **SofFontesCronograma** e a linha de prefixo `SFC` em Contadores, colou `backend/Sof.gs`/`backend/Utils.gs`/`backend/Contadores.gs`/`backend/NotasEmpenho.gs` e reimplantou.
 
-**Ainda não testado** (nenhum teste real feito ainda): criar uma SOF do zero com o formulário completo, incluindo 2-3 meses de cronograma numa Fonte, e conferir persistência ao reabrir; "Salvar e gerar documento SEI" gerando o HTML com os meses/Código POAS reais e os campos de Licitações/Setor preenchidos; alerta da NE aparecendo só quando a fonte tem 2+ meses preenchidos (e não aparecendo com só 1 mês); abrir um SOF criado antes desta sessão (sem os campos novos) sem erro.
+**Incidente no meio do caminho:** depois de colar o backend, o usuário testou e "não apareceu o botão" - causa raiz era mais simples que parecia: o frontend (`js/sof.js`/`css/style.css`) só tinha sido editado localmente neste repositório, nunca commitado nem enviado ao GitHub, então o GitHub Pages ainda servia a versão antiga do site (só o backend, no Apps Script, já estava atualizado). Corrigido com `git commit` + `git push` (commit `2e139fb`, branch `main`). **Lição reforçada:** diferente do backend (que precisa de colar manual + reimplantar), o frontend só atualiza no site publicado depois de commitado e enviado ao GitHub - uma sessão só editar os arquivos locais não é suficiente, e o cache do GitHub Pages (`max-age=600`, já visto antes) pode atrasar a atualização em até ~10 minutos mesmo depois do push.
+
+**Ainda não testado** (nenhum teste real confirmado ainda, mas backend + frontend já publicados): criar uma SOF do zero com o formulário completo, incluindo 2-3 meses de cronograma numa Fonte, e conferir persistência ao reabrir; "Salvar e gerar documento SEI" gerando o HTML com os meses/Código POAS reais e os campos de Licitações/Setor preenchidos; alerta da NE aparecendo só quando a fonte tem 2+ meses preenchidos (e não aparecendo com só 1 mês); abrir um SOF criado antes desta sessão (sem os campos novos) sem erro.
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
+- Frontend (`js/`, `css/`, `index.html`) só atualiza no site publicado depois de **commitado e enviado (`git push`) pro GitHub** - editar os arquivos locais não é suficiente (incidente real: sessão 2026-07-23, usuário testou o formulário novo de SOF e "não apareceu nada" porque o commit/push ainda não tinha sido feito, só o backend já estava colado/reimplantado). Depois do push, o GitHub Pages ainda pode levar até ~10 min pra refletir (`Cache-Control: max-age=600`) - hard refresh (Ctrl+Shift+R) ajuda a confirmar se já propagou.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
 - `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Contadores.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs` — todos os `.gs` do backend agora estão cobertos (o usuário colou `Contadores.gs`, coletado pela primeira vez em 2026-07-18). Sempre que precisar editar um `.gs`, conferir se a cópia local está atualizada antes (cópias antigas do histórico do git podem estar desatualizadas).
