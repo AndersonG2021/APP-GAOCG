@@ -415,22 +415,33 @@ const UI = (function () {
   /**
    * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
    * e o botão maior de "Limpar filtros" (se existir, via seu id) de uma barra
-   * de filtros recém-renderizada. `aoLimpar` roda depois de limpar tudo
-   * (tipicamente recarrega a lista com paginaAtual = 1).
+   * de filtros recém-renderizada.
+   *
+   * `aoLimpar` roda depois do botão "Limpar filtros" (limpa tudo) - recarrega
+   * lendo o estado atual de todos os campos, já que nesse ponto todos foram
+   * zerados mesmo.
+   *
+   * `aoLimparIndividual(idCampo)` (opcional, senão cai em `aoLimpar`) roda
+   * depois de um "x" individual. Só o campo `idCampo` foi limpo - nenhum
+   * outro widget é tocado aqui. É responsabilidade de quem implementa
+   * `aoLimparIndividual` recarregar usando o último filtro realmente
+   * aplicado com só esse campo zerado por cima (não o estado ao vivo dos
+   * outros campos, que pode ter seleções ainda não confirmadas em
+   * "Filtrar") - ver aoLimparFiltroIndividual_/CHAVE_POR_FILTRO_ em
+   * js/sof.js para o padrão usado por cada tela.
    */
-  function ligarLimpezaFiltros(raizOuSeletor, botaoLimparTodosId, aoLimpar) {
+  function ligarLimpezaFiltros(raizOuSeletor, botaoLimparTodosId, aoLimpar, aoLimparIndividual) {
     const raiz = typeof raizOuSeletor === 'string' ? document.querySelector(raizOuSeletor) : raizOuSeletor;
     if (!raiz) return;
     raiz.querySelectorAll('.filtro-multiplo-x').forEach(btn => {
       btn.addEventListener('click', () => {
         // Só recarrega se ESTE campo tinha algo selecionado - clicar no "x" de
-        // um campo vazio não pode disparar a aplicação de outros filtros que
-        // o usuário ainda não confirmou em "Filtrar" (ex.: marcou opções em
-        // Tipo mas não clicou Filtrar, e clica no "x" de OSS, que já estava
-        // vazio - nada deveria acontecer).
+        // um campo vazio não deve mexer em nada.
         const tinhaSelecao = valoresFiltroMultiplo(btn.dataset.alvo).length > 0;
         limparFiltroMultiplo(btn.dataset.alvo);
-        if (tinhaSelecao && aoLimpar) aoLimpar();
+        if (!tinhaSelecao) return;
+        if (aoLimparIndividual) aoLimparIndividual(btn.dataset.alvo);
+        else if (aoLimpar) aoLimpar();
       });
     });
     if (botaoLimparTodosId) {
