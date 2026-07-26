@@ -5,12 +5,14 @@
 
 const TelaSof = (function () {
   const OPCOES_FONTE = ['TESOURO', 'SUS', 'Outra'];
+  const OPCOES_SOF_TIPO = ['Emenda Parlamentar Federal/Estadual', 'Investimento', 'Pagamentos Regulares'];
   const ETAPAS_ANDAMENTO = [
     'SES-NP_DGPO', 'SES-DGPO', 'SES', 'NAP_POAS', 'SES-GPOAS', 'SES-GORC', 'SES-GPF',
     'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
   ];
   const CAMPOS_OBRIGATORIOS = [
     { id: 'sofUnidade', rotulo: 'Unidade' },
+    { id: 'sofTipoSof', rotulo: 'Tipo de SOF' },
     { id: 'seiCredorCnpj', rotulo: 'CNPJ' },
     { id: 'sofContrato', rotulo: 'Contrato de Gestão' },
     { id: 'seiAcao', rotulo: 'Ação' },
@@ -343,6 +345,108 @@ const TelaSof = (function () {
   }
 
   /**
+   * Mapeamento campo do formulário -> chave do SOF, usado só para aplicar um
+   * SOF "modelo" (autopreenchimento por Tipo de SOF, ver aplicarTemplateSof_
+   * abaixo). Cobre todo campo simples (texto/select/textarea) do formulário -
+   * Fontes de recurso e Manutenção SEI são arrays dinâmicos, tratados à parte.
+   * CNPJ/Ação/Subação usam altCampo porque, num SOF salvo antes da sessão que
+   * unificou esses campos, o valor pode estar só no par sei_* ou só no
+   * snapshot - depois dessa sessão os dois sempre vêm iguais.
+   */
+  const CAMPOS_TEMPLATE_SOF_ = [
+    { id: 'sofContrato', campo: 'contrato_snapshot' },
+    { id: 'sofTa', campo: 'ta' },
+    { id: 'sofSei', campo: 'sei' },
+    { id: 'sofNumero', campo: 'sof_numero' },
+    { id: 'sofDea', campo: 'dea' },
+    { id: 'sofPeriodoInicio', campo: 'periodo_inicio' },
+    { id: 'sofPeriodoFim', campo: 'periodo_fim' },
+    { id: 'seiData', campo: 'sei_data' },
+    { id: 'seiTipoSolicitacao', campo: 'sei_tipo_solicitacao' },
+    { id: 'seiPrevistoPca', campo: 'sei_previsto_pca' },
+    { id: 'seiNumeroPca', campo: 'sei_numero_pca' },
+    { id: 'seiNumeroDfd', campo: 'sei_numero_dfd' },
+    { id: 'seiTipoPleito', campo: 'sei_tipo_pleito' },
+    { id: 'seiJustificativaPleito', campo: 'sei_justificativa_pleito' },
+    { id: 'seiAreaSetorSolicitante', campo: 'sei_area_setor_solicitante' },
+    { id: 'seiTemaPoas', campo: 'sei_tema_poas' },
+    { id: 'sofObjeto', campo: 'objeto' },
+    { id: 'seiObjetoDespesa', campo: 'sei_objeto_despesa' },
+    { id: 'sofOss', campo: 'oss_snapshot' },
+    { id: 'seiDestinacao', campo: 'sei_destinacao' },
+    { id: 'seiCredor', campo: 'sei_credor' },
+    { id: 'seiCredorCnpj', campo: 'sei_credor_cnpj', altCampo: 'cnpj_snapshot' },
+    { id: 'seiAcao', campo: 'sei_acao', altCampo: 'acao_snapshot' },
+    { id: 'seiSubacao', campo: 'sei_subacao', altCampo: 'subacao_snapshot' },
+    { id: 'seiGd', campo: 'gd_snapshot' },
+    { id: 'seiGrupoDespesa', campo: 'sei_grupo_despesa' },
+    { id: 'seiMedidaCompensatoriaPoas', campo: 'sei_medida_compensatoria_poas' },
+    { id: 'seiConvenioNumero', campo: 'sei_convenio_numero' },
+    { id: 'seiConvenioEfisco', campo: 'sei_convenio_efisco' },
+    { id: 'seiConvenioConta', campo: 'sei_convenio_conta' },
+    { id: 'seiConvenioBanco', campo: 'sei_convenio_banco' },
+    { id: 'seiContrapartidaConvenio', campo: 'sei_contrapartida_convenio' },
+    { id: 'seiContrapartidaConta', campo: 'sei_contrapartida_conta' },
+    { id: 'seiContrapartidaBanco', campo: 'sei_contrapartida_banco' },
+    { id: 'sofNumeroContrato', campo: 'contrato' },
+    { id: 'sofCeo', campo: 'ceo' },
+    { id: 'seiSolicitanteNome', campo: 'sei_solicitante_nome' },
+    { id: 'seiSolicitanteCargo', campo: 'sei_solicitante_cargo' },
+    { id: 'seiSolicitanteSetor', campo: 'sei_solicitante_setor' },
+    { id: 'seiOrdenadorNome', campo: 'sei_ordenador_nome' },
+    { id: 'seiOrdenadorCargo', campo: 'sei_ordenador_cargo' },
+    { id: 'seiOrdenadorSetor', campo: 'sei_ordenador_setor' },
+    { id: 'seiAssinaturaNeNome', campo: 'sei_assinatura_ne_nome' },
+    { id: 'seiAssinaturaNeCargo', campo: 'sei_assinatura_ne_cargo' },
+    { id: 'seiAssinaturaNlNome', campo: 'sei_assinatura_nl_nome' },
+    { id: 'seiAssinaturaNlCargo', campo: 'sei_assinatura_nl_cargo' },
+    { id: 'sofObservacao', campo: 'observacao' }
+  ];
+
+  /**
+   * Aplica um SOF "modelo" (o mais recente do mesmo Tipo de SOF) nos campos do
+   * formulário em criação, destacando (classe .destaque-repeticao) tudo que
+   * foi preenchido automaticamente - o usuário decide o que muda e o que
+   * repete. Unidade não entra no mapeamento acima porque troca-la já dispara
+   * seu próprio autopreenchimento (listener de sofUnidade); aqui só a marcamos
+   * como destacada. O destaque de um campo some sozinho assim que o usuário
+   * mexe nele (input/change, uma vez).
+   */
+  function aplicarTemplateSof_(template) {
+    const destacar = el => {
+      el.classList.add('destaque-repeticao');
+      const remover = () => el.classList.remove('destaque-repeticao');
+      el.addEventListener('input', remover, { once: true });
+      el.addEventListener('change', remover, { once: true });
+    };
+
+    if (template.unidade_id) {
+      const elUnidade = document.getElementById('sofUnidade');
+      elUnidade.value = template.unidade_id;
+      elUnidade.dispatchEvent(new Event('change', { bubbles: true }));
+      destacar(elUnidade);
+    }
+
+    CAMPOS_TEMPLATE_SOF_.forEach(item => {
+      const el = document.getElementById(item.id);
+      const valor = template[item.campo] || (item.altCampo && template[item.altCampo]) || '';
+      if (!el || !valor) return;
+      el.value = valor;
+      destacar(el);
+    });
+    document.getElementById('sofOss').dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (template.fontes && template.fontes.length) {
+      linhasFontes = template.fontes.map(f => ({ fonte: f.fonte, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [] }));
+      renderFontesFormulario();
+    }
+    linhasManutencaoSei_ = parseManutencaoSei_(template.sei_manutencao_linhas);
+    renderManutencaoSeiFormulario_();
+
+    UI.toast('Campos preenchidos com os dados do último SOF desse tipo - revise os destacados em amarelo.', 'aviso');
+  }
+
+  /**
    * Formulário único de SOF - fundiu o antigo "+ Nova SOF" (simples) com o
    * que era o modal separado "Criar SOF - SEI" (só disponível editando).
    * Pedido do usuário: o formulário do documento SEI passou a ser o próprio
@@ -371,6 +475,13 @@ const TelaSof = (function () {
             <option value="">Selecione...</option>
             ${unidades.map(u => `<option value="${u.id}" ${sof && sof.unidade_id === u.id ? 'selected' : ''}>${UI.escaparHtml(u.nome)}</option>`).join('')}
           </select>
+        </div>
+        <div class="campo"><label>Tipo de SOF *</label>
+          <select id="sofTipoSof">
+            <option value="">Selecione...</option>
+            ${OPCOES_SOF_TIPO.map(o => opt(sof ? sof.tipo : '', o)).join('')}
+          </select>
+          ${!editando ? '<p class="ajuda">Ao escolher, os campos são preenchidos com os dados do último SOF desse tipo (destacados em amarelo) - revise antes de salvar.</p>' : ''}
         </div>
         ${sof && sof.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ Um ou mais campos abaixo divergem do cadastro atual da unidade.</p>' : ''}
 
@@ -530,6 +641,19 @@ const TelaSof = (function () {
       document.getElementById('seiGd').value = preenchido.gd_snapshot;
     });
 
+    if (!editando) {
+      document.getElementById('sofTipoSof').addEventListener('change', async function () {
+        const tipo = this.value;
+        if (!tipo) return;
+        try {
+          const resposta = await Api.chamar('listarSof', { tipo: [tipo], page: 1, pageSize: 1 });
+          if (resposta.items && resposta.items.length) aplicarTemplateSof_(resposta.items[0]);
+        } catch (err) {
+          // Autopreenchimento é conveniência, não deve travar o cadastro - falha silenciosa, usuário preenche na mão.
+        }
+      });
+    }
+
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
     document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
@@ -646,6 +770,7 @@ const TelaSof = (function () {
     const linhasManutencao = lerLinhasManutencaoSeiDoDom_().filter(l => l.codigo || l.elemento || l.valor);
     return {
       unidade_id: document.getElementById('sofUnidade').value,
+      tipo: document.getElementById('sofTipoSof').value,
       oss_snapshot: document.getElementById('sofOss').value.trim(),
       cnpj_snapshot: document.getElementById('seiCredorCnpj').value.trim(),
       contrato_snapshot: document.getElementById('sofContrato').value.trim(),

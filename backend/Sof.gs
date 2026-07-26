@@ -451,6 +451,9 @@ function listarSof(session, params) {
   var deaValores = paraArrayFiltro_(params.dea);
   if (deaValores.length) rows = rows.filter(function (r) { return deaValores.indexOf(r.dea) !== -1; });
 
+  var tipoValores = paraArrayFiltro_(params.tipo);
+  if (tipoValores.length) rows = rows.filter(function (r) { return tipoValores.indexOf(r.tipo) !== -1; });
+
   var tipoUnidadeValores = paraArrayFiltro_(params.tipo_unidade);
   if (tipoUnidadeValores.length) {
     var unidadesDosTipos = todasUnidadesComCache_()
