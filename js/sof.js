@@ -10,18 +10,37 @@ const TelaSof = (function () {
     'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
   ];
   const CAMPOS_OBRIGATORIOS = [
-    { id: 'sofOss', rotulo: 'OSS' },
-    { id: 'sofCnpj', rotulo: 'CNPJ' },
+    { id: 'sofUnidade', rotulo: 'Unidade' },
+    { id: 'seiCredorCnpj', rotulo: 'CNPJ' },
     { id: 'sofContrato', rotulo: 'Contrato de Gestão' },
-    { id: 'sofAcao', rotulo: 'Ação' },
-    { id: 'sofSubacao', rotulo: 'Subação' },
-    { id: 'sofGd', rotulo: 'G.D.' },
+    { id: 'seiAcao', rotulo: 'Ação' },
+    { id: 'seiSubacao', rotulo: 'Subação' },
+    { id: 'seiGd', rotulo: 'G.D.' },
+    { id: 'sofTa', rotulo: 'T.A.' },
     { id: 'sofSei', rotulo: 'Número do Processo' },
     { id: 'sofNumero', rotulo: 'Nº SOF' },
+    { id: 'sofDea', rotulo: 'DEA' },
     { id: 'sofPeriodoInicio', rotulo: 'Período (início)' },
     { id: 'sofPeriodoFim', rotulo: 'Período (fim)' },
-    { id: 'sofDea', rotulo: 'DEA' },
-    { id: 'sofObjeto', rotulo: 'Objeto' }
+    { id: 'seiTipoSolicitacao', rotulo: 'Solicito' },
+    { id: 'seiTipoPleito', rotulo: 'Assinalar o pleito' },
+    { id: 'seiAreaSetorSolicitante', rotulo: 'Área/setor solicitante' },
+    { id: 'seiTemaPoas', rotulo: 'Tema POAS' },
+    { id: 'sofObjeto', rotulo: 'Objeto' },
+    { id: 'seiObjetoDespesa', rotulo: 'Objeto da despesa (texto completo p/ documento SEI)' },
+    { id: 'sofOss', rotulo: 'OSS' },
+    { id: 'seiDestinacao', rotulo: 'Destinação' },
+    { id: 'seiCredor', rotulo: 'Credor' },
+    { id: 'seiSolicitanteNome', rotulo: 'Solicitante - Nome' },
+    { id: 'seiSolicitanteCargo', rotulo: 'Solicitante - Cargo' },
+    { id: 'seiSolicitanteSetor', rotulo: 'Solicitante - Setor' },
+    { id: 'seiOrdenadorNome', rotulo: 'Ordenador - Nome' },
+    { id: 'seiOrdenadorCargo', rotulo: 'Ordenador - Cargo' },
+    { id: 'seiOrdenadorSetor', rotulo: 'Ordenador - Setor' },
+    { id: 'seiAssinaturaNeNome', rotulo: 'Assinatura da Nota de Empenho - Nome' },
+    { id: 'seiAssinaturaNeCargo', rotulo: 'Assinatura da Nota de Empenho - Cargo' },
+    { id: 'seiAssinaturaNlNome', rotulo: 'Assinatura da Nota de Liquidação - Nome' },
+    { id: 'seiAssinaturaNlCargo', rotulo: 'Assinatura da Nota de Liquidação - Cargo' }
   ];
   let unidades = [];
   let itens = [];
@@ -357,12 +376,8 @@ const TelaSof = (function () {
 
         <h4 class="sei-secao-titulo">Dados do cadastro</h4>
         <div class="grade-3">
-          <div class="campo"><label>CNPJ</label><input id="sofCnpj" value="${UI.escaparHtml(snapshot.cnpj_snapshot)}" /></div>
-          <div class="campo"><label>Contrato de Gestão</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
-          <div class="campo"><label>Ação</label><input id="sofAcao" value="${UI.escaparHtml(snapshot.acao_snapshot)}" /></div>
-          <div class="campo"><label>Subação</label><input id="sofSubacao" value="${UI.escaparHtml(snapshot.subacao_snapshot)}" /></div>
-          <div class="campo"><label>G.D.</label><input id="sofGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
-          <div class="campo"><label>T.A.</label><input id="sofTa" value="${v('ta')}" /></div>
+          <div class="campo"><label>Contrato de Gestão *</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
+          <div class="campo"><label>T.A. *</label><input id="sofTa" value="${v('ta')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Identificação do processo</h4>
@@ -379,25 +394,22 @@ const TelaSof = (function () {
           <div class="campo"><label>Período - início *</label><input type="date" id="sofPeriodoInicio" value="${v('periodo_inicio')}" /></div>
           <div class="campo"><label>Período - fim *</label><input type="date" id="sofPeriodoFim" value="${v('periodo_fim')}" /></div>
         </div>
-        <div class="grade-3">
-          <div class="campo"><label>Número do documento (SEI)</label><input id="seiNumeroDocumento" value="${v('sei_numero_documento')}" placeholder="Ex.: 419/2026" /></div>
+        <div class="grade-2">
           <div class="campo"><label>Data</label><input type="date" id="seiData" value="${sof && sof.sei_data ? sof.sei_data : hojeIso_()}" /></div>
-          <div class="campo"><label>Solicito</label><select id="seiTipoSolicitacao"><option value="">Selecione...</option>${OPCOES_SEI_SOLICITACAO.map(o => opt(sof ? sof.sei_tipo_solicitacao : '', o)).join('')}</select></div>
+          <div class="campo"><label>Solicito *</label><select id="seiTipoSolicitacao"><option value="">Selecione...</option>${OPCOES_SEI_SOLICITACAO.map(o => opt(sof ? sof.sei_tipo_solicitacao : '', o)).join('')}</select></div>
         </div>
         <div class="grade-3">
           <div class="campo"><label>Previsto no PCA?</label>${selectSimNao('seiPrevistoPca', sof ? sof.sei_previsto_pca : '')}</div>
           <div class="campo"><label>Nº do PCA</label><input id="seiNumeroPca" value="${v('sei_numero_pca')}" /></div>
           <div class="campo"><label>Nº do DFD</label><input id="seiNumeroDfd" value="${v('sei_numero_dfd')}" /></div>
         </div>
-
-        <h4 class="sei-secao-titulo">Pleito</h4>
-        <div class="campo"><label>Assinalar o pleito</label><select id="seiTipoPleito"><option value="">Selecione...</option>${OPCOES_SEI_PLEITO.map(o => opt(sof ? sof.sei_tipo_pleito : '', o)).join('')}</select></div>
-        <div class="campo"><label>Justificativa do pleito para a CPF/SAD</label><textarea id="seiJustificativaPleito" rows="3">${v('sei_justificativa_pleito')}</textarea></div>
+        <div class="campo"><label>Assinalar o pleito *</label><select id="seiTipoPleito"><option value="">Selecione...</option>${OPCOES_SEI_PLEITO.map(o => opt(sof ? sof.sei_tipo_pleito : '', o)).join('')}</select></div>
 
         <h4 class="sei-secao-titulo">Contexto</h4>
+        <div class="campo"><label>Justificativa do pleito para a CPF/SAD</label><textarea id="seiJustificativaPleito" rows="3">${v('sei_justificativa_pleito')}</textarea></div>
         <div class="grade-2">
-          <div class="campo"><label>Área/setor solicitante</label><input id="seiAreaSetorSolicitante" value="${v('sei_area_setor_solicitante')}" /></div>
-          <div class="campo"><label>Tema POAS</label><input id="seiTemaPoas" value="${v('sei_tema_poas')}" /></div>
+          <div class="campo"><label>Área/setor solicitante *</label><input id="seiAreaSetorSolicitante" value="${v('sei_area_setor_solicitante')}" /></div>
+          <div class="campo"><label>Tema POAS *</label><input id="seiTemaPoas" value="${v('sei_tema_poas')}" /></div>
         </div>
         <div class="campo"><label>Objeto (lista) *</label>
           <select id="sofObjeto">
@@ -405,16 +417,17 @@ const TelaSof = (function () {
             ${opcoesObjeto.map(o => `<option ${sof && sof.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
           </select>
         </div>
-        <div class="campo"><label>Objeto da despesa (texto completo p/ documento SEI)</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${v('sei_objeto_despesa')}</textarea></div>
+        <div class="campo"><label>Objeto da despesa (texto completo p/ documento SEI) *</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${v('sei_objeto_despesa')}</textarea></div>
 
         <h4 class="sei-secao-titulo">Destinação e classificação</h4>
         <div class="grade-3">
-          <div class="campo"><label>OSS</label>${selectOssHtml_(opcoesOss, snapshot.oss_snapshot)}</div>
-          <div class="campo"><label>Destinação (Hospital, Geres etc.)</label><input id="seiDestinacao" value="${UI.escaparHtml((sof && sof.sei_destinacao) || (unidadeAtual ? unidadeAtual.tipo : '') || '')}" /></div>
-          <div class="campo"><label>Credor</label><input id="seiCredor" value="${UI.escaparHtml((sof && sof.sei_credor) || (unidadeAtual ? unidadeAtual.nome : '') || '')}" /></div>
-          <div class="campo"><label>CPF/CNPJ</label><input id="seiCredorCnpj" value="${UI.escaparHtml((sof && sof.sei_credor_cnpj) || snapshot.cnpj_snapshot || '')}" /></div>
-          <div class="campo"><label>Ação (documento)</label><input id="seiAcao" value="${UI.escaparHtml((sof && sof.sei_acao) || snapshot.acao_snapshot || '')}" /></div>
-          <div class="campo"><label>Subação (documento)</label><input id="seiSubacao" value="${UI.escaparHtml((sof && sof.sei_subacao) || snapshot.subacao_snapshot || '')}" /></div>
+          <div class="campo"><label>OSS *</label>${selectOssHtml_(opcoesOss, snapshot.oss_snapshot)}</div>
+          <div class="campo"><label>Destinação (Hospital, Geres etc.) *</label><input id="seiDestinacao" value="${UI.escaparHtml((sof && sof.sei_destinacao) || (unidadeAtual ? unidadeAtual.tipo : '') || '')}" /></div>
+          <div class="campo"><label>Credor *</label><input id="seiCredor" value="${UI.escaparHtml((sof && sof.sei_credor) || (unidadeAtual ? unidadeAtual.nome : '') || '')}" /></div>
+          <div class="campo"><label>CNPJ *</label><input id="seiCredorCnpj" value="${UI.escaparHtml((sof && sof.sei_credor_cnpj) || snapshot.cnpj_snapshot || '')}" /></div>
+          <div class="campo"><label>Ação *</label><input id="seiAcao" value="${UI.escaparHtml((sof && sof.sei_acao) || snapshot.acao_snapshot || '')}" /></div>
+          <div class="campo"><label>Subação *</label><input id="seiSubacao" value="${UI.escaparHtml((sof && sof.sei_subacao) || snapshot.subacao_snapshot || '')}" /></div>
+          <div class="campo"><label>G.D. *</label><input id="seiGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
           <div class="campo"><label>Grupo de despesa</label><input id="seiGrupoDespesa" value="${v('sei_grupo_despesa')}" placeholder="Ex.: 3.3.50" /></div>
         </div>
 
@@ -454,28 +467,28 @@ const TelaSof = (function () {
 
         <h4 class="sei-secao-titulo">Solicitante</h4>
         <div class="grade-3">
-          <div class="campo"><label>Nome</label><input id="seiSolicitanteNome" value="${v('sei_solicitante_nome')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiSolicitanteCargo" value="${v('sei_solicitante_cargo')}" /></div>
-          <div class="campo"><label>Setor</label><input id="seiSolicitanteSetor" value="${UI.escaparHtml((sof && sof.sei_solicitante_setor) || (sof && sof.sei_area_setor_solicitante) || '')}" /></div>
+          <div class="campo"><label>Nome *</label><input id="seiSolicitanteNome" value="${v('sei_solicitante_nome')}" /></div>
+          <div class="campo"><label>Cargo *</label><input id="seiSolicitanteCargo" value="${v('sei_solicitante_cargo')}" /></div>
+          <div class="campo"><label>Setor *</label><input id="seiSolicitanteSetor" value="${UI.escaparHtml((sof && sof.sei_solicitante_setor) || (sof && sof.sei_area_setor_solicitante) || '')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Ordenador</h4>
         <div class="grade-3">
-          <div class="campo"><label>Nome</label><input id="seiOrdenadorNome" value="${v('sei_ordenador_nome')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiOrdenadorCargo" value="${v('sei_ordenador_cargo')}" /></div>
-          <div class="campo"><label>Setor</label><input id="seiOrdenadorSetor" value="${v('sei_ordenador_setor')}" /></div>
+          <div class="campo"><label>Nome *</label><input id="seiOrdenadorNome" value="${v('sei_ordenador_nome')}" /></div>
+          <div class="campo"><label>Cargo *</label><input id="seiOrdenadorCargo" value="${v('sei_ordenador_cargo')}" /></div>
+          <div class="campo"><label>Setor *</label><input id="seiOrdenadorSetor" value="${v('sei_ordenador_setor')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Assinatura da Nota de Empenho</h4>
         <div class="grade-2">
-          <div class="campo"><label>Nome</label><input id="seiAssinaturaNeNome" value="${v('sei_assinatura_ne_nome')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNeCargo" value="${v('sei_assinatura_ne_cargo')}" /></div>
+          <div class="campo"><label>Nome *</label><input id="seiAssinaturaNeNome" value="${v('sei_assinatura_ne_nome')}" /></div>
+          <div class="campo"><label>Cargo *</label><input id="seiAssinaturaNeCargo" value="${v('sei_assinatura_ne_cargo')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Assinatura da Nota de Liquidação</h4>
         <div class="grade-2">
-          <div class="campo"><label>Nome</label><input id="seiAssinaturaNlNome" value="${v('sei_assinatura_nl_nome')}" /></div>
-          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNlCargo" value="${v('sei_assinatura_nl_cargo')}" /></div>
+          <div class="campo"><label>Nome *</label><input id="seiAssinaturaNlNome" value="${v('sei_assinatura_nl_nome')}" /></div>
+          <div class="campo"><label>Cargo *</label><input id="seiAssinaturaNlCargo" value="${v('sei_assinatura_nl_cargo')}" /></div>
         </div>
 
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${v('observacao')}</textarea></div>
@@ -508,16 +521,13 @@ const TelaSof = (function () {
       const preenchido = camposAutopreenchimento(unidade, null);
       document.getElementById('sofOss').value = preenchido.oss_snapshot;
       document.getElementById('sofOss').dispatchEvent(new Event('change', { bubbles: true }));
-      document.getElementById('sofCnpj').value = preenchido.cnpj_snapshot;
       document.getElementById('sofContrato').value = preenchido.contrato_snapshot;
-      document.getElementById('sofAcao').value = preenchido.acao_snapshot;
-      document.getElementById('sofSubacao').value = preenchido.subacao_snapshot;
-      document.getElementById('sofGd').value = preenchido.gd_snapshot;
       document.getElementById('seiDestinacao').value = unidade ? unidade.tipo || '' : '';
       document.getElementById('seiCredor').value = unidade ? unidade.nome || '' : '';
       document.getElementById('seiCredorCnpj').value = preenchido.cnpj_snapshot;
       document.getElementById('seiAcao').value = preenchido.acao_snapshot;
       document.getElementById('seiSubacao').value = preenchido.subacao_snapshot;
+      document.getElementById('seiGd').value = preenchido.gd_snapshot;
     });
 
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
@@ -637,11 +647,11 @@ const TelaSof = (function () {
     return {
       unidade_id: document.getElementById('sofUnidade').value,
       oss_snapshot: document.getElementById('sofOss').value.trim(),
-      cnpj_snapshot: document.getElementById('sofCnpj').value.trim(),
+      cnpj_snapshot: document.getElementById('seiCredorCnpj').value.trim(),
       contrato_snapshot: document.getElementById('sofContrato').value.trim(),
-      acao_snapshot: document.getElementById('sofAcao').value.trim(),
-      subacao_snapshot: document.getElementById('sofSubacao').value.trim(),
-      gd_snapshot: document.getElementById('sofGd').value.trim(),
+      acao_snapshot: document.getElementById('seiAcao').value.trim(),
+      subacao_snapshot: document.getElementById('seiSubacao').value.trim(),
+      gd_snapshot: document.getElementById('seiGd').value.trim(),
       sei: document.getElementById('sofSei').value.trim(),
       sof_numero: document.getElementById('sofNumero').value.trim(),
       periodo_inicio: document.getElementById('sofPeriodoInicio').value,
@@ -655,7 +665,6 @@ const TelaSof = (function () {
       observacao: document.getElementById('sofObservacao').value.trim(),
       completo: true,
 
-      sei_numero_documento: document.getElementById('seiNumeroDocumento').value.trim(),
       sei_data: document.getElementById('seiData').value,
       sei_tipo_solicitacao: document.getElementById('seiTipoSolicitacao').value,
       sei_previsto_pca: document.getElementById('seiPrevistoPca').value,
@@ -737,10 +746,6 @@ const TelaSof = (function () {
     if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
     const mensagemObrigatorio = validarCamposObrigatorios();
     if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
-    if (opcoes.gerarDocumento && !dados.sei_numero_documento) {
-      UI.mostrarErro(erroEl, 'Informe o "Número do documento (SEI)" pra gerar o documento.');
-      return;
-    }
 
     let dadosNe;
     try {
@@ -1068,7 +1073,7 @@ const TelaSof = (function () {
 <html lang="pt-br">
 <head>
 <meta charset="utf-8" />
-<title>${UI.escaparHtml(sof.sei_numero_documento || sof.sof_numero || sof.id)} - Solicitação Orçamentária e Financeira</title>
+<title>${UI.escaparHtml(sof.sof_numero || sof.id)} - Solicitação Orçamentária e Financeira</title>
 <style>
   body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; color: #000; max-width: 900px; margin: 24px auto; padding: 0 16px; }
   p { margin: 6pt 0; text-align: justify; }
@@ -1082,7 +1087,7 @@ const TelaSof = (function () {
 </style>
 </head>
 <body>
-  <h2>${UI.escaparHtml(sof.sei_numero_documento || '')} - SES – Secretaria de Saúde - Solicitação Orçamentária e Financeira</h2>
+  <h2>${UI.escaparHtml(sof.sof_numero || '')} - SES – Secretaria de Saúde - Solicitação Orçamentária e Financeira</h2>
   <p class="sei-direita">Em, ${UI.escaparHtml(formatarDataSeiExtenso_(sof.sei_data))}</p>
   <p><strong>Diretoria Geral de Planejamento Orçamentário - DGPO</strong></p>
   <p>Prezado(a), Solicito (assinalar com X):</p>
