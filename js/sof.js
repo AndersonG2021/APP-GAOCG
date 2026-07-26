@@ -6,6 +6,7 @@
 const TelaSof = (function () {
   const OPCOES_FONTE = ['TESOURO', 'SUS', 'Outra'];
   const OPCOES_SOF_TIPO = ['Emenda Parlamentar Federal/Estadual', 'Investimento', 'Pagamentos Regulares'];
+  const NOVO_OBJETO_VALOR_ = '__novo_objeto__';
   const ETAPAS_ANDAMENTO = [
     'SES-NP_DGPO', 'SES-DGPO', 'SES', 'NAP_POAS', 'SES-GPOAS', 'SES-GORC', 'SES-GPF',
     'SES-CEO_GAOCG', 'SES-DGMCG', 'SES-GEMP', 'NE EMITIDA', 'SES-CJCG', 'C.G./T.A. FORMALIZADO'
@@ -53,6 +54,7 @@ const TelaSof = (function () {
   let abrindoLinha = false;
   let linhasFontes = [];
   let ultimoFiltroJson = null;
+  let opcoesObjetoAtuais = [];
 
   async function render() {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
@@ -111,9 +113,8 @@ const TelaSof = (function () {
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
-      document.getElementById('sofBusca').value = '';
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
-    });
+    }, aoLimparFiltroIndividual_);
     await carregar();
   }
 
@@ -134,8 +135,35 @@ const TelaSof = (function () {
     };
   }
 
+  /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
+  const CHAVE_POR_FILTRO_ = {
+    sofFiltroUnidade: 'unidade_id', sofFiltroOss: 'oss', sofFiltroObjeto: 'objeto',
+    sofFiltroTipoUnidade: 'tipo_unidade', sofFiltroDea: 'dea', sofFiltroFonte: 'fonte'
+  };
+
+  /**
+   * "x" individual de um filtro: recarrega usando o ÚLTIMO FILTRO REALMENTE
+   * APLICADO (ultimoFiltroJson), só com este campo zerado por cima - nunca o
+   * estado ao vivo dos outros campos (filtrosAtuais()), que pode ter seleções
+   * feitas mas ainda não confirmadas em "Filtrar". Nenhum outro widget é
+   * tocado - se outro campo tinha uma seleção pendente, ela continua
+   * marcada na tela, só não entra nesta recarga (o usuário ainda pode
+   * clicar "Filtrar" pra aplicá-la quando quiser).
+   */
+  function aoLimparFiltroIndividual_(idCampo) {
+    const chave = CHAVE_POR_FILTRO_[idCampo];
+    if (!chave) return;
+    const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
+    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    paginaAtual = 1;
+    carregarComFiltros_(filtros);
+  }
+
   async function carregar() {
-    const filtros = filtrosAtuais();
+    await carregarComFiltros_(filtrosAtuais());
+  }
+
+  async function carregarComFiltros_(filtros) {
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     const resposta = await CacheAbas.comRevalidacao('sof', params,
@@ -462,6 +490,7 @@ const TelaSof = (function () {
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
     const opcoesObjeto = await TelaListas.obterOpcoes('OBJETO');
+    opcoesObjetoAtuais = opcoesObjeto.map(o => o.valor);
     const opcoesOss = await TelaListas.obterOpcoes('OSS');
 
     const opt = (valorAtual, valor) => `<option value="${UI.escaparHtml(valor)}" ${valorAtual === valor ? 'selected' : ''}>${UI.escaparHtml(valor)}</option>`;
@@ -483,6 +512,7 @@ const TelaSof = (function () {
           </select>
           ${!editando ? '<p class="ajuda">Ao escolher, os campos são preenchidos com os dados do último SOF desse tipo (destacados em amarelo) - revise antes de salvar.</p>' : ''}
         </div>
+        <div class="campo"><label>Objeto (lista) *</label>${selectObjetoHtml_(opcoesObjeto, sof ? sof.objeto : '')}</div>
         ${sof && sof.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ Um ou mais campos abaixo divergem do cadastro atual da unidade.</p>' : ''}
 
         <h4 class="sei-secao-titulo">Dados do cadastro</h4>
@@ -521,12 +551,6 @@ const TelaSof = (function () {
         <div class="grade-2">
           <div class="campo"><label>Área/setor solicitante *</label><input id="seiAreaSetorSolicitante" value="${v('sei_area_setor_solicitante')}" /></div>
           <div class="campo"><label>Tema POAS *</label><input id="seiTemaPoas" value="${v('sei_tema_poas')}" /></div>
-        </div>
-        <div class="campo"><label>Objeto (lista) *</label>
-          <select id="sofObjeto">
-            <option value="">Selecione...</option>
-            ${opcoesObjeto.map(o => `<option ${sof && sof.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
-          </select>
         </div>
         <div class="campo"><label>Objeto da despesa (texto completo p/ documento SEI) *</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${v('sei_objeto_despesa')}</textarea></div>
 
@@ -654,6 +678,28 @@ const TelaSof = (function () {
       });
     }
 
+    // "+ Adicionar novo objeto..." (última opção do select, ver selectObjetoHtml_): não persiste
+    // nada aqui - só entra como opção local nova, selecionada. A gravação em Listas
+    // Personalizadas (criarOpcao) só acontece em salvarSof, e só se o SOF for salvo de fato.
+    document.getElementById('sofObjeto').addEventListener('change', function () {
+      if (this.value !== NOVO_OBJETO_VALOR_) return;
+      const novoValor = (prompt('Digite o novo objeto:') || '').trim();
+      if (!novoValor) {
+        this.value = '';
+      } else {
+        const existente = opcoesObjetoAtuais.find(v => v.toLowerCase() === novoValor.toLowerCase());
+        if (existente) {
+          this.value = existente;
+        } else {
+          const opcaoNova = document.createElement('option');
+          opcaoNova.textContent = novoValor;
+          opcaoNova.selected = true;
+          this.insertBefore(opcaoNova, this.querySelector(`option[value="${NOVO_OBJETO_VALOR_}"]`));
+        }
+      }
+      this.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
     document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
@@ -673,6 +719,18 @@ const TelaSof = (function () {
     return `<select id="sofOss">
       <option value="">Selecione...</option>
       ${todas.map(v => `<option ${v === valorAtual ? 'selected' : ''}>${UI.escaparHtml(v)}</option>`).join('')}
+    </select>`;
+  }
+
+  /** Igual a selectOssHtml_, mas com uma opção extra no fim pra cadastrar um novo Objeto sem sair do formulário (ver ligarSelectObjeto_). */
+  function selectObjetoHtml_(opcoesObjeto, valorAtual) {
+    const valores = opcoesObjeto.map(o => o.valor);
+    const extra = valorAtual && valores.indexOf(valorAtual) === -1 ? [valorAtual] : [];
+    const todas = extra.concat(valores);
+    return `<select id="sofObjeto">
+      <option value="">Selecione...</option>
+      ${todas.map(v => `<option ${v === valorAtual ? 'selected' : ''}>${UI.escaparHtml(v)}</option>`).join('')}
+      <option value="${NOVO_OBJETO_VALOR_}">+ Adicionar novo objeto...</option>
     </select>`;
   }
 
@@ -884,6 +942,19 @@ const TelaSof = (function () {
       let resposta;
       if (sofExistente) resposta = await Api.chamar('atualizarSof', { id: sofExistente.id, data: dados });
       else resposta = await Api.chamar('criarSof', { data: dados });
+
+      // Objeto novo (digitado via "+ Adicionar novo objeto..." no <select>, abaixo) só
+      // vira opção de verdade em Listas Personalizadas depois que o SOF salvou com sucesso.
+      if (dados.objeto && !opcoesObjetoAtuais.includes(dados.objeto)) {
+        try {
+          await Api.chamar('criarOpcao', { data: { tipo_lista: 'OBJETO', valor: dados.objeto } });
+          Api.invalidarCache('listarOpcoes');
+          CacheAbas.invalidar('listas');
+          opcoesObjetoAtuais.push(dados.objeto);
+        } catch (err) {
+          // Falha aqui é secundária - o SOF já foi salvo. Não interrompe o fluxo de sucesso.
+        }
+      }
 
       if (dadosNe) {
         await Api.chamar('criarNotaEmpenho', {

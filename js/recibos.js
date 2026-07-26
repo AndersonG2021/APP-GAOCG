@@ -90,12 +90,8 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosRec', () => {
-      document.getElementById('recBusca').value = '';
-      document.getElementById('recFiltroInstrumento').value = '';
-      document.getElementById('recFiltroNotaEmpenho').value = '';
-      document.getElementById('recFiltroNumeroProcesso').value = '';
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
-    });
+    }, aoLimparFiltroIndividual_);
     await carregar();
   }
 
@@ -121,8 +117,32 @@ const TelaRecibos = (function () {
     };
   }
 
+  /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
+  const CHAVE_POR_FILTRO_ = {
+    recFiltroUnidade: 'unidade_id', recFiltroOss: 'oss', recFiltroObjeto: 'objeto',
+    recFiltroTipoUnidade: 'tipo_unidade', recFiltroDea: 'dea', recFiltroCompetencia: 'competencia',
+    recFiltroFonte: 'fonte', recFiltroStatus: 'status'
+  };
+
+  /**
+   * "x" individual de um filtro: recarrega usando o último filtro realmente
+   * aplicado (ultimoFiltroJson), só com este campo zerado por cima - ver
+   * mesma função em js/sof.js para a explicação completa.
+   */
+  function aoLimparFiltroIndividual_(idCampo) {
+    const chave = CHAVE_POR_FILTRO_[idCampo];
+    if (!chave) return;
+    const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
+    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    paginaAtual = 1;
+    carregarComFiltros_(filtros);
+  }
+
   async function carregar() {
-    const filtros = filtrosAtuais();
+    await carregarComFiltros_(filtrosAtuais());
+  }
+
+  async function carregarComFiltros_(filtros) {
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
