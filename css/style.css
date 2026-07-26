@@ -350,8 +350,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cronograma-ne-grade { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 12px; margin: 6px 0; }
 .cronograma-ne-item { display: flex; justify-content: space-between; font-size: 12.5px; background: var(--cinza-100); border-radius: 6px; padding: 4px 8px; }
 
-.cartao-sof-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.cartao-sof-id { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--cinza-500); }
+.cartao-sof-topo { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 .cartao-sof-topo-acoes { display: flex; align-items: center; gap: 8px; }
 .cartao-sof-titulo { margin: 0; font-size: 22px; color: var(--azul-escuro); }
 .cartao-sof-subtitulo { margin: -4px 0 4px; font-size: 13.5px; color: var(--cinza-700); }
