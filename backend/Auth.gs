@@ -155,6 +155,7 @@ function alterarMeuNome(session, novoNome) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUsuario_(session.id);
+  bumpVersao_('usuarios');
   return ok_({ nome: nome });
 }
 
@@ -172,5 +173,6 @@ function alterarMinhaSenha(session, senhaAtual, novaSenha) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUsuario_(session.id);
+  bumpVersao_('usuarios');
   return ok_({ sucesso: true });
 }

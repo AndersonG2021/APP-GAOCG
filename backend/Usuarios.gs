@@ -47,6 +47,7 @@ function criarUsuario(session, dados) {
     data_inativacao: ''
   };
   appendObjectRow_(sheet, novo);
+  bumpVersao_('usuarios');
 
   var resposta = Object.assign({}, novo);
   delete resposta.senha_hash;
@@ -68,6 +69,7 @@ function atualizarUsuario(session, id, dados) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUsuario_(id);
+  bumpVersao_('usuarios');
 
   var resposta = Object.assign({}, atualizado);
   delete resposta.senha_hash;
@@ -86,6 +88,7 @@ function inativarUsuario(session, id) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUsuario_(id);
+  bumpVersao_('usuarios');
   return ok_({ id: id, ativo: false });
 }
 
@@ -103,5 +106,6 @@ function redefinirSenha(session, id, novaSenha) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUsuario_(id);
+  bumpVersao_('usuarios');
   return ok_({ id: id });
 }

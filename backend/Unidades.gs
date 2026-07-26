@@ -198,6 +198,7 @@ function criarUnidade(session, dados) {
   };
   appendObjectRow_(sheet, novo);
   invalidarCacheUnidades_();
+  bumpVersao_('unidades');
   substituirTasDaUnidade_(id, dados.tas, session);
 
   var tas = listarTasPorUnidade_(id);
@@ -234,6 +235,7 @@ function atualizarUnidade(session, id, dados) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUnidades_();
+  bumpVersao_('unidades');
 
   if (dados.hasOwnProperty('tas')) substituirTasDaUnidade_(id, dados.tas, session);
 
@@ -254,6 +256,7 @@ function inativarUnidade(session, id) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUnidades_();
+  bumpVersao_('unidades');
   return ok_({ id: id, ativo: false });
 }
 
@@ -267,5 +270,6 @@ function reativarUnidade(session, id) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheUnidades_();
+  bumpVersao_('unidades');
   return ok_({ id: id, ativo: true });
 }

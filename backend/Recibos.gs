@@ -165,6 +165,7 @@ function criarRecibo(session, dados) {
   appendObjectRow_(getSheet_(SHEETS.RECIBOS), novo);
   registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
   if (novo.parcela_dividida_grupo_id) recalcularAlertaRecibo_(novo.parcela_dividida_grupo_id);
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_(novo);
 }
 
@@ -216,6 +217,7 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   });
 
   recalcularAlertaRecibo_(parcelaDivididaGrupoId);
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_(criados);
 }
 
@@ -296,6 +298,7 @@ function atualizarRecibo(session, id, dados) {
     }
   }
 
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_(atualizado);
 }
 
@@ -321,6 +324,7 @@ function excluirRecibo(session, id) {
   updateObjectRow_(sheet, rowIndex, atualizado);
 
   registrarLog_(session, 'Recibo', id, existente.criado_por, 'EXCLUSAO', '', 'Recibo excluído (lógico)');
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_({ id: id });
 }
 
@@ -332,6 +336,7 @@ function marcarReciboVisualizado(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_({ id: id });
 }
 
@@ -486,5 +491,6 @@ function migrarRecibosHistorico(session, linhas) {
   });
 
   Object.keys(grupos).forEach(function (grupoId) { recalcularAlertaRecibo_(grupoId); });
+  bumpVersao_(['recibos', 'dashboard']);
   return ok_({ importados: criados.length });
 }

@@ -294,6 +294,7 @@ function criarNotaEmpenho(session, dados) {
     }
   }
 
+  bumpVersao_(['notasEmpenho', 'sof', 'dashboard']);
   return ok_(nova);
 }
 

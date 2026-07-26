@@ -104,6 +104,9 @@ function handleRequest_(params) {
       // Dashboard (Funcionalidade 8)
       case 'obterDashboard': return jsonOut_(obterDashboard(session, params));
 
+      // Versões (cache client-side por aba)
+      case 'getVersoes': return jsonOut_(getVersoes(session, params));
+
       default:
         return jsonOut_(fail_('Ação desconhecida: ' + action));
     }

@@ -21,7 +21,11 @@ const Dashboard = (function () {
 
   async function carregar() {
     const competencia = document.getElementById('dashCompetencia').value || undefined;
-    const dados = await Api.chamar('obterDashboard', { competencia });
+    const params = { competencia };
+    const dados = await CacheAbas.comRevalidacao('dashboard', params,
+      () => Api.chamar('obterDashboard', params),
+      renderConteudo
+    );
     if (!document.getElementById('dashCompetencia').value) {
       document.getElementById('dashCompetencia').value = dados.recibos.competencia;
       UI.tornarPesquisavel('dashCompetencia');

@@ -64,6 +64,7 @@ function criarOpcao(session, dados) {
   };
   appendObjectRow_(sheet, novo);
   invalidarCacheListas_();
+  bumpVersao_('listas');
   return ok_(novo);
 }
 
@@ -84,6 +85,7 @@ function atualizarOpcao(session, id, dados) {
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
   invalidarCacheListas_();
+  bumpVersao_('listas');
   return ok_(atualizado);
 }
 
@@ -100,6 +102,7 @@ function excluirOpcao(session, id) {
   if (!existente) return fail_('Opção não encontrada.');
   deleteRow_(sheet, existente._row);
   invalidarCacheListas_();
+  bumpVersao_('listas');
   return ok_({ id: id });
 }
 

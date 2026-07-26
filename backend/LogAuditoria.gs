@@ -34,6 +34,7 @@ function montarLinhaLog_(id, session, tipoProcesso, processoId, donoProcesso, ca
 function registrarLog_(session, tipoProcesso, processoId, donoProcesso, campo, valorAnterior, valorNovo) {
   var id = proximoId_('LogAuditoria');
   appendObjectRow_(getSheet_(SHEETS.LOG_AUDITORIA), montarLinhaLog_(id, session, tipoProcesso, processoId, donoProcesso, campo, valorAnterior, valorNovo));
+  bumpVersao_('logAuditoria');
 }
 
 /**
@@ -67,6 +68,7 @@ function registrarDiferencas_(session, tipoProcesso, processoId, donoProcesso, a
     return montarLinhaLog_(ids[i], session, tipoProcesso, processoId, donoProcesso, m.campo, m.valorAntigo, m.valorNovo);
   });
   appendObjectRows_(getSheet_(SHEETS.LOG_AUDITORIA), linhas);
+  bumpVersao_('logAuditoria');
 }
 
 /**

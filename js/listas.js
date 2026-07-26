@@ -41,7 +41,11 @@ const TelaListas = (function () {
 
   async function carregar() {
     marcarTabAtiva();
-    opcoes = await Api.chamar('listarOpcoes', { tipo_lista: tipoAtual });
+    const params = { tipo_lista: tipoAtual };
+    opcoes = await CacheAbas.comRevalidacao('listas', params,
+      () => Api.chamar('listarOpcoes', params),
+      (novasOpcoes) => { opcoes = novasOpcoes; renderTabela(); }
+    );
     renderTabela();
   }
 
@@ -92,6 +96,7 @@ const TelaListas = (function () {
       try {
         await Api.chamar('excluirOpcao', { id: opcao.id });
         Api.invalidarCache('listarOpcoes');
+        CacheAbas.invalidar('listas');
         UI.toast('Opção excluída.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -132,6 +137,7 @@ const TelaListas = (function () {
           UI.toast('Opção criada.', 'sucesso');
         }
         Api.invalidarCache('listarOpcoes');
+        CacheAbas.invalidar('listas');
         UI.fecharModal();
         await carregar();
       } catch (err) {

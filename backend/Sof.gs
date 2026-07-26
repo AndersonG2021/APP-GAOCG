@@ -305,6 +305,7 @@ function criarSof(session, dados) {
   appendObjectRow_(getSheet_(SHEETS.SOF), novo);
   substituirFontesDoSof_(id, dados.fontes, session);
   registrarLog_(session, 'SOF', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
+  bumpVersao_(['sof', 'dashboard']);
 
   var fontes = listarFontesPorSof_(id);
   novo.fontes = fontes;
@@ -356,6 +357,7 @@ function atualizarSof(session, id, dados) {
   // de auditoria extras (e 2 escritas a mais no Sheets) a cada troca de andamento.
   registrarDiferencas_(session, 'SOF', id, existente.criado_por, antigo, atualizado,
     ['_row', 'data_ultima_alteracao_andamento', 'visualizado_apos_alerta']);
+  bumpVersao_(['sof', 'dashboard']);
 
   var fontes = listarFontesPorSof_(id);
   atualizado.fontes = fontes;
@@ -372,6 +374,7 @@ function marcarSofVisualizado(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  bumpVersao_(['sof', 'dashboard']);
   return ok_({ id: id });
 }
 
@@ -396,6 +399,7 @@ function excluirSof(session, id) {
   updateObjectRow_(sheet, rowIndex, atualizado);
 
   registrarLog_(session, 'SOF', id, existente.criado_por, 'EXCLUSAO', '', 'Processo excluído (lógico)');
+  bumpVersao_(['sof', 'dashboard']);
   return ok_({ id: id });
 }
 
