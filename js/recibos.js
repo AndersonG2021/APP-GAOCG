@@ -124,9 +124,17 @@ const TelaRecibos = (function () {
   async function carregar() {
     const filtros = filtrosAtuais();
     ultimoFiltroJson = JSON.stringify(filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
     // (evita reler a aba Recibos inteira duas vezes numa única troca de aba).
-    const resposta = await Api.chamar('listarRecibos', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
+    const resposta = await CacheAbas.comRevalidacao('recibos', params,
+      () => Api.chamar('listarRecibos', params),
+      aplicarResposta_
+    );
+    aplicarResposta_(resposta);
+  }
+
+  function aplicarResposta_(resposta) {
     itens = resposta.items;
     totalRegistros = resposta.total;
     renderTabela();
@@ -232,6 +240,7 @@ const TelaRecibos = (function () {
     document.getElementById('btnConfirmarExclusaoRec').addEventListener('click', async () => {
       try {
         await Api.chamar('excluirRecibo', { id });
+        CacheAbas.invalidar('recibos');
         UI.toast('Recibo excluído.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -562,6 +571,7 @@ const TelaRecibos = (function () {
         if (ob) Object.assign(dadosBase, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
         await Api.chamar('criarRecibo', { data: dadosBase });
       }
+      CacheAbas.invalidar('recibos');
       UI.toast('Recibo salvo com sucesso.', 'sucesso');
       UI.fecharModal();
       await carregar();
@@ -669,6 +679,7 @@ const TelaRecibos = (function () {
       if (ob) Object.assign(dados, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
 
       await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
+      CacheAbas.invalidar('recibos');
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
       UI.fecharModal();
       await carregar();

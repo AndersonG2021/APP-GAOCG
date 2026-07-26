@@ -116,7 +116,15 @@ const TelaSof = (function () {
   async function carregar() {
     const filtros = filtrosAtuais();
     ultimoFiltroJson = JSON.stringify(filtros);
-    const resposta = await Api.chamar('listarSof', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
+    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const resposta = await CacheAbas.comRevalidacao('sof', params,
+      () => Api.chamar('listarSof', params),
+      aplicarResposta_
+    );
+    aplicarResposta_(resposta);
+  }
+
+  function aplicarResposta_(resposta) {
     itens = resposta.items;
     totalRegistros = resposta.total;
     renderCards();
@@ -205,6 +213,7 @@ const TelaSof = (function () {
     }
     try {
       await Api.chamar('atualizarSof', { id: sof.id, data: { andamento: etapa } });
+      CacheAbas.invalidar('sof');
       sof.andamento = etapa;
       sof.dias_parado = 0;
       sof.destacar_parado = false;
@@ -220,6 +229,7 @@ const TelaSof = (function () {
     if (!confirm('Excluir este processo de SOF? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.')) return;
     try {
       await Api.chamar('excluirSof', { id: sof.id });
+      CacheAbas.invalidar('sof');
       UI.toast('SOF excluído.', 'sucesso');
       await carregar();
     } catch (err) {
@@ -765,6 +775,8 @@ const TelaSof = (function () {
         abrirDocumentoEmNovaAba_(html);
       }
 
+      CacheAbas.invalidar('sof');
+      if (dadosNe) CacheAbas.invalidar('notasEmpenho');
       UI.toast(
         opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.' : (dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.'),
         'sucesso'

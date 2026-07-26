@@ -23,7 +23,10 @@ const TelaUsuarios = (function () {
   }
 
   async function carregar() {
-    usuarios = await Api.chamar('listarUsuarios', {});
+    usuarios = await CacheAbas.comRevalidacao('usuarios', {},
+      () => Api.chamar('listarUsuarios', {}),
+      (novosUsuarios) => { usuarios = novosUsuarios; renderTabela(); }
+    );
     renderTabela();
   }
 
@@ -79,6 +82,7 @@ const TelaUsuarios = (function () {
         } else {
           await Api.chamar('atualizarUsuario', { id: usuario.id, data: { ativo: true } });
         }
+        CacheAbas.invalidar('usuarios');
         UI.toast('Usuário atualizado.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -88,6 +92,7 @@ const TelaUsuarios = (function () {
         if (!novaSenha) return;
         try {
           await Api.chamar('redefinirSenha', { id: usuario.id, novaSenha });
+          CacheAbas.invalidar('usuarios');
           UI.toast('Senha redefinida.', 'sucesso');
         } catch (err) {
           UI.toast(err.message, 'erro');
@@ -109,6 +114,7 @@ const TelaUsuarios = (function () {
       try {
         if (editando) await Api.chamar('atualizarUsuario', { id: usuario.id, data: dados });
         else await Api.chamar('criarUsuario', { data: dados });
+        CacheAbas.invalidar('usuarios');
         UI.toast('Usuário salvo com sucesso.', 'sucesso');
         UI.fecharModal();
         await carregar();

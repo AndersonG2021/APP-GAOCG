@@ -80,7 +80,15 @@ const TelaUnidades = (function () {
   async function carregar() {
     const filtros = filtrosAtuais();
     ultimoFiltroJson = JSON.stringify(filtros);
-    const resposta = await Api.chamar('listarUnidades', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros));
+    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const resposta = await CacheAbas.comRevalidacao('unidades', params,
+      () => Api.chamar('listarUnidades', params),
+      aplicarResposta_
+    );
+    aplicarResposta_(resposta);
+  }
+
+  function aplicarResposta_(resposta) {
     unidades = resposta.items;
     totalRegistros = resposta.total;
     renderCards();
@@ -152,6 +160,7 @@ const TelaUnidades = (function () {
         e.stopPropagation();
         await Api.chamar('reativarUnidade', { id: unidade.id });
         Api.invalidarCache('listarUnidades');
+        CacheAbas.invalidar('unidades');
         UI.toast('Unidade restaurada.', 'sucesso');
         await carregar();
       });
@@ -170,6 +179,7 @@ const TelaUnidades = (function () {
       try {
         await Api.chamar('inativarUnidade', { id: unidade.id });
         Api.invalidarCache('listarUnidades');
+        CacheAbas.invalidar('unidades');
         UI.toast('Unidade excluída.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -274,6 +284,7 @@ const TelaUnidades = (function () {
         if (editando) await Api.chamar('atualizarUnidade', { id: unidade.id, data: dados });
         else await Api.chamar('criarUnidade', { data: dados });
         Api.invalidarCache('listarUnidades');
+        CacheAbas.invalidar('unidades');
         UI.toast('Unidade salva com sucesso.', 'sucesso');
         UI.fecharModal();
         await carregar();

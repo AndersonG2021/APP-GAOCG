@@ -1,0 +1,64 @@
+/**
+ * GAOCG App - Cache-first com revalidação por versão, para trocar de aba
+ * parecer instantâneo depois da primeira carga.
+ *
+ * Cada recurso (sof, recibos, notasEmpenho, unidades, logAuditoria, listas,
+ * usuarios, dashboard) tem um contador de versão no backend (Versoes.gs),
+ * incrementado a cada escrita. Ao voltar pra uma aba já visitada nesta
+ * sessão, mostra o último snapshot na hora e confere em paralelo se a versão
+ * mudou (inclusive por outro usuário); só refaz a chamada pesada se mudou.
+ *
+ * Nome escolhido para não colidir com o Map interno privado `cache` de
+ * js/api.js - são dois caches diferentes (referência/dropdowns vs. payload
+ * principal das abas).
+ */
+const CacheAbas = (function () {
+  const snapshots = new Map(); // 'recurso:paramsJson' -> { versao, dados }
+  let emVoo = null; // dedup de chamadas concorrentes a getVersoes
+
+  function chave(recurso, params) {
+    return recurso + ':' + JSON.stringify(params || {});
+  }
+
+  function obterVersoes() {
+    if (!emVoo) {
+      emVoo = Api.chamar('getVersoes', {}, { silencioso: true })
+        .catch(() => ({}))
+        .finally(() => { emVoo = null; });
+    }
+    return emVoo;
+  }
+
+  /**
+   * carregarFn: () => Promise<dados>  (a mesma chamada Api.chamar que já existia em carregar())
+   * aoRevalidar: (dados) => void       (reaplica dados + re-renderiza; só chamado se algo mudou)
+   */
+  async function comRevalidacao(recurso, params, carregarFn, aoRevalidar) {
+    const k = chave(recurso, params);
+    const snap = snapshots.get(k);
+
+    if (snap) {
+      obterVersoes().then(async (versoes) => {
+        if (versoes[recurso] !== snap.versao) {
+          const dados = await carregarFn();
+          snapshots.set(k, { versao: versoes[recurso], dados });
+          aoRevalidar(dados);
+        }
+      });
+      return snap.dados; // mostra na hora, sem esperar rede
+    }
+
+    const [dados, versoes] = await Promise.all([carregarFn(), obterVersoes()]);
+    snapshots.set(k, { versao: versoes[recurso], dados });
+    return dados;
+  }
+
+  /** Chamar logo após uma escrita bem-sucedida do próprio usuário, pra refletir na hora (sem esperar getVersoes). */
+  function invalidar(recurso) {
+    Array.from(snapshots.keys()).forEach(k => {
+      if (k.indexOf(recurso + ':') === 0) snapshots.delete(k);
+    });
+  }
+
+  return { comRevalidacao, invalidar };
+})();

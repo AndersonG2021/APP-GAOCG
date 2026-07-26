@@ -97,9 +97,17 @@ const TelaNotasEmpenho = (function () {
     // ele é buscado sem filtro na primeira vez que esse tipo é selecionado no
     // modal, e precisa refletir qualquer NE criada desde o último carregar().
     gruposTodos = [];
-    const params = filtrosAtuais();
-    ultimoFiltroJson = JSON.stringify(params);
-    const resposta = await Api.chamar('listarNotasEmpenho', Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, params));
+    const filtros = filtrosAtuais();
+    ultimoFiltroJson = JSON.stringify(filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const resposta = await CacheAbas.comRevalidacao('notasEmpenho', params,
+      () => Api.chamar('listarNotasEmpenho', params),
+      aplicarResposta_
+    );
+    aplicarResposta_(resposta);
+  }
+
+  function aplicarResposta_(resposta) {
     grupos = resposta.items;
     totalRegistros = resposta.total;
     renderCards();
@@ -237,6 +245,7 @@ const TelaNotasEmpenho = (function () {
             mes_referencia: mesReferencia, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
           }
         });
+        CacheAbas.invalidar('notasEmpenho');
         UI.toast('Reforço adicionado.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -418,6 +427,7 @@ const TelaNotasEmpenho = (function () {
               mes_referencia: mesReferencia, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
             }
           });
+          CacheAbas.invalidar('notasEmpenho');
           UI.toast('Reforço adicionado.', 'sucesso');
           UI.fecharModal();
           await carregar();
@@ -440,6 +450,8 @@ const TelaNotasEmpenho = (function () {
             arquivoBase64: leituraOcr.arquivoBase64, arquivoNome: leituraOcr.arquivoNome, arquivoTipo: leituraOcr.arquivoTipo
           }
         });
+        CacheAbas.invalidar('notasEmpenho');
+        CacheAbas.invalidar('sof');
         UI.toast('Nota de Empenho criada.', 'sucesso');
         UI.fecharModal();
         await carregar();

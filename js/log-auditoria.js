@@ -37,7 +37,14 @@ const TelaLogAuditoria = (function () {
       params.processo_id = document.getElementById('logProcessoId').value.trim();
       params.fora_do_dono = document.getElementById('logForaDono').checked;
     }
-    const resposta = await Api.chamar('listarLogAuditoria', params);
+    const resposta = await CacheAbas.comRevalidacao('logAuditoria', params,
+      () => Api.chamar('listarLogAuditoria', params),
+      aplicarResposta_
+    );
+    aplicarResposta_(resposta);
+  }
+
+  function aplicarResposta_(resposta) {
     renderTabela(resposta.items);
     renderPaginacao(resposta.total);
   }
