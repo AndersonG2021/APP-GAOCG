@@ -907,6 +907,35 @@ Direção escolhida em vez disso: **cache-first com revalidação por versão**,
 
 **CONFIRMADO (2026-07-26):** backend colado/reimplantado, frontend commitado e enviado, testado pelo usuário — troca de aba mostra o cache instantaneamente e revalida sozinha em segundo plano.
 
+## Formulário de SOF: campos duplicados removidos e obrigatoriedade ampliada (sessão 2026-07-26, publicado)
+
+Pedido do usuário: "Número do documento (SEI)" e "Nº SOF" eram o mesmo dado digitado duas vezes — removido o primeiro, `sof_numero` passou a ser a única fonte (inclusive no título do documento SEI gerado). CNPJ, Ação, Subação e G.D. também apareciam duas vezes (uma em "Dados do cadastro", outra — exceto G.D. — em "Destinação e classificação"); ficou só um campo de cada, na seção "Destinação e classificação", alimentando ao mesmo tempo o par de colunas do backend (`cnpj_snapshot`/`sei_credor_cnpj`, `acao_snapshot`/`sei_acao`, `subacao_snapshot`/`sei_subacao`) sem precisar mexer no schema. "Assinalar o pleito" migrou para "Identificação do processo" e "Justificativa do pleito para a CPF/SAD" para "Contexto" — a seção "Pleito", que ficou vazia, foi removida. Lista de campos obrigatórios (`CAMPOS_OBRIGATORIOS`, `js/sof.js`) ampliada bastante: Unidade, CNPJ, Contrato de Gestão, Ação, Subação, G.D., T.A., Solicito, Assinalar o pleito, Área/setor solicitante, Tema POAS, Objeto da despesa (texto completo), Destinação, Credor, e todos os campos de Solicitante/Ordenador/Assinatura da NE/Assinatura da NL, além dos que já eram obrigatórios.
+
+Só `js/sof.js` mudou — sem alteração de backend (os campos removidos simplesmente deixam de ser enviados; `criarSof`/`atualizarSof` continuam aceitando-os se algum dia voltarem).
+
+## Campo "Tipo de SOF" com autopreenchimento destacado (sessão 2026-07-26, publicado, backend precisa reimplantar)
+
+Pedido do usuário: um campo "Tipo de SOF" (Emenda Parlamentar Federal/Estadual, Investimento, Pagamentos Regulares) e, ao escolher um tipo na criação, autopreencher o formulário inteiro com os dados do último SOF daquele tipo, destacando em amarelo tudo que foi preenchido assim, pra usuário revisar o que não deve se repetir.
+
+- **Reaproveitado, não criado do zero:** a coluna `tipo` já existia no schema do SOF (`HEADERS.SOF`/`CAMPOS_LIVRES_SOF_` em `backend/Sof.gs`) desde sessões anteriores, mas nenhuma tela nunca a expunha - virou a base do campo novo, sem precisar de coluna nova na planilha.
+- **`backend/Sof.gs` (`listarSof`):** novo filtro `tipo` (mesmo padrão `paraArrayFiltro_` dos outros filtros). O frontend usa isso pra buscar `{ tipo: [valor], page: 1, pageSize: 1 }` (já ordenado por mais recente) e achar o "SOF modelo".
+- **`js/sof.js`:** `CAMPOS_TEMPLATE_SOF_` mapeia todo campo simples do formulário pra sua chave no SOF; `aplicarTemplateSof_` aplica um SOF "modelo" nos campos, aplica a classe `.destaque-repeticao` (borda/fundo amarelo, `css/style.css`) em cada um, e copia também Fontes de recurso e Manutenção SEI (arrays dinâmicos, sem destaque nesses por ora). O destaque de um campo some sozinho na primeira vez que o usuário mexe nele. Só dispara na criação (não na edição).
+
+**Passo manual pendente:** colar `backend/Sof.gs` atualizado (novo filtro `tipo` em `listarSof`) e reimplantar - sem isso o autopreenchimento não encontra nada (falha silenciosa, formulário só fica sem preencher).
+
+## Objeto reposicionado + cadastro inline, e correção do "x" individual dos filtros (sessão 2026-07-26, publicado)
+
+Dois pedidos separados do usuário, ambos só em frontend:
+
+**Objeto (`js/sof.js`):** o campo "Objeto (lista)" saiu de dentro de "Contexto" (no meio do formulário) e foi para o topo, logo abaixo de "Tipo de SOF". Ganhou também uma opção "+ Adicionar novo objeto..." no fim do `<select>` (`selectObjetoHtml_`/`NOVO_OBJETO_VALOR_`) - ao escolhê-la, um prompt pede o texto novo, que vira uma opção local imediatamente selecionável, mas **só é gravado em Listas Personalizadas depois que o SOF é salvo com sucesso** (`criarOpcao` chamado logo após `criarSof`/`atualizarSof` retornar, dentro do mesmo `try`) - se o SOF falhar na validação ou na gravação, o objeto novo nunca chega a ser criado na lista; se só a gravação do objeto falhar (rede etc.), o SOF já salvo não é afetado.
+
+**Bug nos filtros de múltipla escolha, achado pelo usuário ao testar** (`js/app.js` + `js/sof.js`/`js/recibos.js`/`js/notas-empenho.js`/`js/unidades.js`): o "x" individual de um filtro (ex.: OSS) recarregava a lista lendo o estado *ao vivo* de **todos** os campos da barra - se outro campo (ex.: Objeto) tinha uma seleção feita mas ainda não confirmada em "Filtrar", ela era aplicada sem querer só por limpar um campo diferente.
+
+- **Primeira tentativa (errada, corrigida na hora pelo usuário testando localmente):** fazer o "x" individual "restaurar" todos os outros campos pro último valor aplicado antes de zerar o campo clicado - só que isso *revertia visualmente* as seleções pendentes dos outros campos (o usuário via suas marcações em OSS/Objeto somem, não só o campo que ele clicou o "x").
+- **Correção final:** `ligarLimpezaFiltros` (`js/app.js`) ganhou um 4º parâmetro opcional, `aoLimparIndividual(idCampo)`, chamado só no "x" individual (nunca no "Limpar filtros" geral). Cada tela implementa `aoLimparFiltroIndividual_` usando um mapa `CHAVE_POR_FILTRO_` (id do widget → chave de `filtrosAtuais()`) pra recarregar com `Object.assign({}, ultimoFiltroAplicado, { [chave]: [] })` - **sem ler nem tocar em nenhum outro campo da tela**. Os outros widgets continuam exatamente como o usuário deixou, prontos pra ele clicar "Filtrar" quando quiser. De brinde, o campo de busca por texto (e, em Recibos, Instrumento/Nota de Empenho/Nº Processo) parou de ser limpo nesse fluxo - só o "Limpar filtros" geral faz isso agora.
+
+Sem alteração de backend nesta seção - só frontend.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
