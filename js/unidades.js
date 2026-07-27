@@ -250,6 +250,8 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Objeto do T.A.</label><input class="linha-ta-objeto" value="${UI.escaparHtml(item.objeto_ta || '')}" placeholder="Ex.: T.E.A. ou Aquisição de Equipamentos" /></div>
           <div class="campo"><label>Nº do T.A.</label><input class="linha-ta-numero" value="${UI.escaparHtml(item.numero_ta || '')}" placeholder="Ex.: 1º" /></div>
           <div class="campo"><label>Valor do T.A.</label><input class="linha-ta-valor" type="number" step="0.01" value="${item.valor_ta || ''}" /></div>
+        </div>
+        <div class="linha-ta-pagamento">
           <div class="campo"><label>Tipo de pagamento</label>
             <select class="linha-ta-tipo-pagamento">
               <option value="regular" ${!sazonal ? 'selected' : ''}>Regular</option>
