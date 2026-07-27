@@ -463,6 +463,10 @@ function listarSof(session, params) {
   }
   if (params.andamento) rows = rows.filter(function (r) { return r.andamento === params.andamento; });
 
+  // Usado só programaticamente pelo indicador "SOFs sem NE emitida" do
+  // Dashboard (js/dashboard.js) - não vira um widget na barra de filtros da tela.
+  if (params.semNe) rows = rows.filter(function (r) { return !toBool_(r.possui_ne); });
+
   var fonteValores = paraArrayFiltro_(params.fonte);
   if (fonteValores.length) {
     rows = rows.filter(function (r) {

@@ -16,7 +16,13 @@ const TelaRecibos = (function () {
 
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 
-  async function render() {
+  /**
+   * filtroInicial (opcional, vindo do Dashboard via App.navegarPara): pré-
+   * seleciona Competência/Status antes da primeira carga, e/ou abre um Recibo
+   * específico direto (abrirId) depois dela - ver definirValoresFiltroMultiplo
+   * (js/app.js) e abrirReciboExistente abaixo.
+   */
+  async function render(filtroInicial) {
     const [unidadesCarregadas, statusFiltroOpcoesBrutas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       carregarOpcoesStatus_(),
@@ -89,10 +95,13 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroCompetencia', UI.listaCompetencias());
     UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
+    if (filtroInicial && filtroInicial.competencia) UI.definirValoresFiltroMultiplo('recFiltroCompetencia', filtroInicial.competencia);
+    if (filtroInicial && filtroInicial.status) UI.definirValoresFiltroMultiplo('recFiltroStatus', filtroInicial.status);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosRec', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
     await carregar();
+    if (filtroInicial && filtroInicial.abrirId) abrirReciboExistente(filtroInicial.abrirId);
   }
 
   /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */

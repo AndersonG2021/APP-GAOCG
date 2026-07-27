@@ -56,7 +56,13 @@ const TelaSof = (function () {
   let ultimoFiltroJson = null;
   let opcoesObjetoAtuais = [];
 
-  async function render() {
+  /**
+   * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
+   * aplica o filtro semNe (listarSof) só na primeira carga desta tela (não
+   * persiste depois de Filtrar/Limpar filtros); `abrirId` abre esse SOF
+   * direto logo após a primeira carga.
+   */
+  async function render(opts) {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),
@@ -115,7 +121,9 @@ const TelaSof = (function () {
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
-    await carregar();
+    if (opts && opts.semNe) await carregarComFiltros_(Object.assign({}, filtrosAtuais(), { semNe: true }));
+    else await carregar();
+    if (opts && opts.abrirId) abrirSofExistente(opts.abrirId);
   }
 
   /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */

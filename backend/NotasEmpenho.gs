@@ -366,11 +366,25 @@ function situacaoCronogramaMes_(numeroNe, mes, ano, mapaRecibos) {
  * atual já calculado (bruto - liquidado nos Recibos) e o alerta de "abaixo
  * da parcela mensal da fonte". Transversal - todos os perfis veem tudo.
  */
-function listarNotasEmpenho(session, params) {
-  params = params || {};
-  var sofs = sheetToObjects_(getSheet_(SHEETS.SOF));
+/**
+ * Monta os grupos por numero_ne (original + reforços), com valor_bruto/
+ * valor_liquidado/valor_atual/parcela_mensal_referencia/alerta já calculados -
+ * antes dos filtros de params e da paginação de listarNotasEmpenho. Extraída
+ * de dentro de listarNotasEmpenho (sessão 2026-07-27) pra ser reaproveitada
+ * também pelo indicador de saldo do Dashboard (dashboardNotasEmpenho_,
+ * Dashboard.gs), sem duplicar essa lógica em dois lugares.
+ *
+ * sofsCarregados é opcional (evita reler a aba SOF quando quem chama já tem
+ * ela em mãos, ex. obterDashboard). Grupos cujo SOF foi excluído (soft
+ * delete) ou não existe mais **saem da lista** - achado real desta sessão: a
+ * versão anterior juntava com todos os SOFs sem checar excluido, então uma NE
+ * de um SOF já excluído continuava aparecendo normalmente na tela de Notas de
+ * Empenho.
+ */
+function montarGruposNotasEmpenho_(session, sofsCarregados) {
+  var sofs = sofsCarregados || sheetToObjects_(getSheet_(SHEETS.SOF));
   var sofsPorId = {};
-  sofs.forEach(function (s) { sofsPorId[s.id] = s; });
+  sofs.forEach(function (s) { if (!toBool_(s.excluido)) sofsPorId[s.id] = s; });
 
   var unidadesPorId = {};
   todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
@@ -392,7 +406,9 @@ function listarNotasEmpenho(session, params) {
     else grupos[chave].reforcos.push({ id: n.id, mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null });
   });
 
-  var resultado = Object.keys(grupos).map(function (numeroNe) {
+  var resultado = Object.keys(grupos)
+    .filter(function (numeroNe) { return !!sofsPorId[grupos[numeroNe].sof_id]; })
+    .map(function (numeroNe) {
     var grupo = grupos[numeroNe];
     var sof = sofsPorId[grupo.sof_id];
     var unidade = sof ? unidadesPorId[sof.unidade_id] : null;
@@ -443,6 +459,13 @@ function listarNotasEmpenho(session, params) {
       cronograma: cronograma
     };
   });
+
+  return resultado;
+}
+
+function listarNotasEmpenho(session, params) {
+  params = params || {};
+  var resultado = montarGruposNotasEmpenho_(session);
 
   var unidadeIds = paraArrayFiltro_(params.unidade_id);
   if (unidadeIds.length) resultado = resultado.filter(function (g) { return unidadeIds.indexOf(String(g.sof_unidade_id)) !== -1; });

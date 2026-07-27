@@ -412,6 +412,11 @@ const UI = (function () {
     if (registroFiltrosMultiplos[id]) registroFiltrosMultiplos[id].limpar();
   }
 
+  /** Pré-seleciona valores num filtro de múltipla escolha já criado - usado pelo Dashboard pra navegar com um filtro inicial já aplicado (ver App.navegarPara). */
+  function definirValoresFiltroMultiplo(id, valores) {
+    if (registroFiltrosMultiplos[id]) registroFiltrosMultiplos[id].definirValores(valores);
+  }
+
   /**
    * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
    * e o botão maior de "Limpar filtros" (se existir, via seu id) de uma barra
@@ -460,16 +465,16 @@ const UI = (function () {
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
-    criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, ligarLimpezaFiltros
+    criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo, ligarLimpezaFiltros
   };
 })();
 
 const App = (function () {
   const TELAS = {
     dashboard: () => Dashboard.render(),
-    sof: () => TelaSof.render(),
+    sof: (opts) => TelaSof.render(opts),
     notasEmpenho: () => TelaNotasEmpenho.render(),
-    recibos: () => TelaRecibos.render(),
+    recibos: (opts) => TelaRecibos.render(opts),
     unidades: () => TelaUnidades.render(),
     listas: () => TelaListas.render(),
     logAuditoria: () => TelaLogAuditoria.render(),
@@ -554,7 +559,7 @@ const App = (function () {
     });
   }
 
-  function navegarPara(tela) {
+  function navegarPara(tela, opts) {
     document.querySelectorAll('#barraLateral nav button').forEach(btn => {
       btn.classList.toggle('ativo', btn.dataset.tela === tela);
     });
@@ -562,7 +567,7 @@ const App = (function () {
       '#barraLateral nav button[data-tela="' + tela + '"]'
     ).textContent;
     document.getElementById('conteudo').innerHTML = '';
-    TELAS[tela]();
+    TELAS[tela](opts);
   }
 
   function fecharMenuMobile() {

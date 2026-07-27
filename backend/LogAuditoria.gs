@@ -102,14 +102,3 @@ function listarLogAuditoria(session, params) {
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
 }
-
-/** Indicador do dashboard do gerente: contagem de edições fora_do_dono no período. */
-function contarEdicoesForaDono_(dataInicio, dataFim) {
-  var rows = sheetToObjects_(getSheet_(SHEETS.LOG_AUDITORIA));
-  return rows.filter(function (r) {
-    if (!toBool_(r.fora_do_dono)) return false;
-    if (dataInicio && r.data_hora < dataInicio) return false;
-    if (dataFim && r.data_hora > dataFim) return false;
-    return true;
-  }).length;
-}
