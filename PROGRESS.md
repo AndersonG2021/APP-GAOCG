@@ -936,6 +936,10 @@ Dois pedidos separados do usuário, ambos só em frontend:
 
 Sem alteração de backend nesta seção - só frontend.
 
+## Coluna "Objeto" na tabela de Recibos (sessão 2026-07-27, publicado)
+
+Pedido do usuário: ver o Objeto do Recibo direto na listagem, sem precisar abrir cada um. `objeto` já existia no schema de Recibos e já era usado nos filtros/formulário - só faltava exibir na tabela. `js/recibos.js` (`renderTabela`): nova coluna "Objeto" entre Unidade e Nº Processo. Sem alteração de backend.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
