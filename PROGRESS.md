@@ -967,6 +967,18 @@ Usuário reportou o card "Edições em processo de outro usuário (histórico)" 
 
 **Ainda não testado:** o dashboard inteiro (os 6 cartões, os cliques de navegação com filtro pré-aplicado, abrir um SOF/Recibo direto da lista de parados/pendentes, excluir um SOF/Recibo e confirmar que some dos números, uma NE de um SOF excluído sumindo também da tela de Notas de Empenho); validar com o usuário se o heurístico de "novos hoje" (processos parados) faz sentido no uso real, já que não é um evento armazenado.
 
+## Lentidão ao salvar Unidades (até ~20s) — corrigido (sessão 2026-07-27, aguardando o usuário colar/implantar e medir)
+
+Usuário relatou até 20s pra salvar uma edição em Unidades, travando o app nesse meio tempo. Achado real, mesma classe de bug já corrigida antes pro log de auditoria (ver "Lentidão ao trocar andamento no SOF" acima): `substituirTasDaUnidade_` (`backend/Unidades.gs`) gerava o ID de cada Termo Aditivo novo com `proximoId_` isolado (1 ciclo de lock+leitura+escrita na aba Contadores **por T.A.**) e gravava cada um com `appendObjectRow_` isolado (1 escrita própria por T.A.) - uma unidade com vários T.A.s virava vários ciclos de lock+escrita sequenciais só nessa etapa, além da própria atualização da linha da Unidade.
+
+**Corrigido:** `substituirTasDaUnidade_` agora reserva todos os IDs de uma vez (`proximosIds_('UnidadesTA', quantidade)`, já existia, criada na correção anterior) e grava todas as linhas novas numa única chamada (`appendObjectRows_`, idem) - vira 1 ciclo de lock + 1 escrita, não importa quantos T.A.s a unidade tenha. As exclusões das linhas antigas (`deleteRow_`) continuam uma por uma (sem lote nativo do Sheets pra linhas não-contíguas) - normalmente poucas por unidade, não deveria ser o gargalo principal depois desta correção.
+
+**Achado relacionado, não corrigido ainda (fora do pedido original):** `substituirFontesDoSof_` (`backend/Sof.gs`, Fontes de recurso do SOF) tem exatamente o mesmo padrão não-lotado - pior ainda, já que cada Fonte também gera até 12 linhas de cronograma mensal, cada uma com seu próprio `proximoId_`/`appendObjectRow_`. Se o usuário confirmar lentidão parecida ao salvar SOF (com várias fontes/meses preenchidos), a mesma correção se aplica lá.
+
+**Passo manual pendente:** colar `backend/Unidades.gs` atualizado no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova na planilha.
+
+**Ainda não testado:** medir o tempo de salvar uma Unidade com vários T.A.s antes/depois da correção.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
