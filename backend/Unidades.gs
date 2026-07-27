@@ -49,6 +49,15 @@ function parcelaMensalTotal_(valorContratoGestao, tas) {
  * partir do array enviado) - mesmo princípio de substituirFontesDoSof_ em
  * Sof.gs. Ao contrário das Fontes do SOF, a lista pode ficar vazia (unidade
  * sem Termo Aditivo ainda).
+ *
+ * Reserva de IDs e gravação em lote (sessão 2026-07-27 - achado real: cada
+ * T.A. novo fazia seu próprio ciclo de proximoId_ (lock+leitura+escrita na
+ * aba Contadores) + seu próprio appendObjectRow_ isolado - uma unidade com
+ * vários T.A.s virava vários ciclos de lock/escrita sequenciais só pra
+ * salvar, explicando a demora de até ~20s relatada ao editar Unidades (mesma
+ * classe de bug já corrigida pro log de auditoria - ver PROGRESS.md "Lentidão
+ * ao trocar andamento no SOF"). Agora é 1 reserva de IDs (proximosIds_) + 1
+ * escrita em lote (appendObjectRows_), não importa quantos T.A.s tenha.
  */
 function substituirTasDaUnidade_(unidadeId, tasArray, session) {
   var sheet = getSheet_(SHEETS.UNIDADES_TA);
@@ -57,17 +66,22 @@ function substituirTasDaUnidade_(unidadeId, tasArray, session) {
     .sort(function (a, b) { return b._row - a._row; })
     .forEach(function (t) { deleteRow_(sheet, t._row); });
 
-  (tasArray || []).forEach(function (item) {
-    appendObjectRow_(sheet, {
-      id: proximoId_('UnidadesTA'),
-      unidade_id: unidadeId,
-      objeto_ta: sanitizeString_(item.objeto_ta, 200),
-      numero_ta: sanitizeString_(item.numero_ta, 20),
-      valor_ta: toNumber_(item.valor_ta),
-      criado_por: session.id,
-      data_criacao: nowIso_()
+  var itens = tasArray || [];
+  if (itens.length) {
+    var ids = proximosIds_('UnidadesTA', itens.length);
+    var novasLinhas = itens.map(function (item, i) {
+      return {
+        id: ids[i],
+        unidade_id: unidadeId,
+        objeto_ta: sanitizeString_(item.objeto_ta, 200),
+        numero_ta: sanitizeString_(item.numero_ta, 20),
+        valor_ta: toNumber_(item.valor_ta),
+        criado_por: session.id,
+        data_criacao: nowIso_()
+      };
     });
-  });
+    appendObjectRows_(sheet, novasLinhas);
+  }
   invalidarCacheTas_();
 }
 
