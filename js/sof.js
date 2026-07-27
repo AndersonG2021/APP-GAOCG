@@ -112,10 +112,16 @@ const TelaSof = (function () {
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
-    UI.criarFiltroMultiplo('sofFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
-    UI.criarFiltroMultiplo('sofFiltroOss', opcoesOss.map(o => o.valor));
+    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
+    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
+    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
+      idUnidade: 'sofFiltroUnidade', idTipo: 'sofFiltroTipoUnidade', idOss: 'sofFiltroOss',
+      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
+    });
+    UI.criarFiltroMultiplo('sofFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('sofFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('sofFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {

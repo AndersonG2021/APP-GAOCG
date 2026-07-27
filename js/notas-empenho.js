@@ -62,10 +62,16 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('btnFiltrarNe').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
-    UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
-    UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor));
+    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
+    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
+    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
+      idUnidade: 'neFiltroUnidade', idTipo: 'neFiltroTipoUnidade', idOss: 'neFiltroOss',
+      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
+    });
+    UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('neFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => {
