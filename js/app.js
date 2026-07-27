@@ -301,7 +301,7 @@ const UI = (function () {
     return (opcoes || []).map(o => (typeof o === 'string' ? { valor: o, rotulo: o } : { valor: o.valor, rotulo: o.rotulo != null ? o.rotulo : o.valor }));
   }
 
-  function criarFiltroMultiplo(id, opcoes) {
+  function criarFiltroMultiplo(id, opcoes, aoMudar) {
     const raiz = document.getElementById(id);
     if (!raiz) return null;
 
@@ -339,6 +339,7 @@ const UI = (function () {
         cb.addEventListener('change', () => {
           if (cb.checked) selecionados.add(cb.value); else selecionados.delete(cb.value);
           atualizarTexto();
+          if (aoMudar) aoMudar();
         });
       });
     }
@@ -417,6 +418,53 @@ const UI = (function () {
     if (registroFiltrosMultiplos[id]) registroFiltrosMultiplos[id].definirValores(valores);
   }
 
+  /** Troca a lista de opções de um filtro de múltipla escolha já criado (poda sozinho qualquer seleção que não exista mais na lista nova) - usado pela cascata Unidade/Tipo de unidade/OSS abaixo. */
+  function atualizarOpcoesFiltroMultiplo(id, novasOpcoes) {
+    if (registroFiltrosMultiplos[id]) registroFiltrosMultiplos[id].atualizarOpcoes(novasOpcoes);
+  }
+
+  function dedupOrdenado_(lista) {
+    return Array.from(new Set((lista || []).filter(Boolean))).sort();
+  }
+
+  /**
+   * Estreita em tempo real os filtros de múltipla escolha Unidade/Tipo de
+   * unidade/OSS entre si (sessão 2026-07-27) - marcar um valor num deles só
+   * deixa nos outros dois as opções que ainda fazem sentido dado o que já
+   * foi marcado (ex.: Tipo de unidade = UPA faz Unidade mostrar só UPAs).
+   * Reaproveitada pelas 4 telas com esse trio de filtros (SOF/Recibos/Notas
+   * de Empenho/Unidades) - cada uma só chama isso no `aoMudar` de cada um dos
+   * 3 widgets, passando a lista de unidades que já carrega sem filtro (usada
+   * hoje só pra popular os dropdowns).
+   *
+   * Quando os outros dois filtros estão vazios, cada dropdown volta pra sua
+   * lista original completa (`unidadesTodas`/`opcoesTipoOriginais`/
+   * `opcoesOssOriginais`) - evita esconder, por exemplo, uma OSS cadastrada
+   * em Listas Personalizadas mas ainda sem nenhuma unidade usando ela.
+   */
+  function recalcularFiltrosCruzadosUnidade(cfg) {
+    const selUnidade = new Set(valoresFiltroMultiplo(cfg.idUnidade));
+    const selTipo = new Set(valoresFiltroMultiplo(cfg.idTipo));
+    const selOss = new Set(valoresFiltroMultiplo(cfg.idOss));
+
+    const bateTipo = u => !selTipo.size || selTipo.has(u.tipo);
+    const bateOss = u => !selOss.size || selOss.has(u.oss);
+    const bateUnidadeSel = u => !selUnidade.size || selUnidade.has(String(u.id));
+
+    const paraUnidade = (!selTipo.size && !selOss.size)
+      ? cfg.unidadesTodas
+      : cfg.unidadesTodas.filter(u => bateTipo(u) && bateOss(u));
+    atualizarOpcoesFiltroMultiplo(cfg.idUnidade, paraUnidade.map(u => ({ valor: u.id, rotulo: u.nome })));
+
+    atualizarOpcoesFiltroMultiplo(cfg.idTipo, (!selUnidade.size && !selOss.size)
+      ? cfg.opcoesTipoOriginais
+      : dedupOrdenado_(cfg.unidadesTodas.filter(u => bateUnidadeSel(u) && bateOss(u)).map(u => u.tipo)));
+
+    atualizarOpcoesFiltroMultiplo(cfg.idOss, (!selUnidade.size && !selTipo.size)
+      ? cfg.opcoesOssOriginais
+      : dedupOrdenado_(cfg.unidadesTodas.filter(u => bateUnidadeSel(u) && bateTipo(u)).map(u => u.oss)));
+  }
+
   /**
    * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
    * e o botão maior de "Limpar filtros" (se existir, via seu id) de uma barra
@@ -465,7 +513,8 @@ const UI = (function () {
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
-    criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo, ligarLimpezaFiltros
+    criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
+    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros
   };
 })();
 

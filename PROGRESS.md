@@ -1023,6 +1023,20 @@ Dois pedidos do usuário depois de testar a sessão anterior:
 
 **Ainda não testado:** o painel novo (rolagem, busca, cor vermelha em NEs com saldo abaixo da parcela mensal); o layout novo da linha de T.A. em telas estreitas.
 
+## Filtros de Unidade/Tipo de unidade/OSS em cascata, nas 4 telas (sessão 2026-07-27, publicado, só frontend)
+
+Usuário mostrou um caso real: em Recibos, filtrando "Tipo de unidade = UPA", o dropdown Unidade continuava oferecendo Carretas e Hospitais. Pedido pra valer em todas as telas - escopo confirmado com o usuário: só entre os 3 filtros que são atributos da própria Unidade (Unidade/Tipo de unidade/OSS), não os outros (Objeto/DEA/Status/Fonte/Competência ficam de fora, já que cascatear esses exigiria o backend calcular valores possíveis a cada mudança - essas telas só carregam uma página por vez).
+
+**Tudo no cliente, em tempo real, sem tocar no backend** - as 4 telas (SOF, Recibos, Notas de Empenho, Unidades) já carregavam a lista completa de unidades só pra popular esses 3 dropdowns.
+
+- **`js/app.js` (`criarFiltroMultiplo`):** ganhou um 3º parâmetro opcional `aoMudar`, chamado a cada marcar/desmarcar de checkbox - `atualizarOpcoes` (já existia) continua sendo o que troca a lista de opções de um widget e poda sozinho qualquer seleção que não exista mais nela; chamar `atualizarOpcoes` programaticamente não dispara `aoMudar` de novo (sem risco de loop entre os 3 widgets). Novo `UI.atualizarOpcoesFiltroMultiplo(id, novasOpcoes)`, espelhando os wrappers que já existiam.
+- **Novo `UI.recalcularFiltrosCruzadosUnidade(cfg)`** (`js/app.js`): função única reaproveitada pelas 4 telas - lê a seleção atual dos 3 filtros, e pra cada um calcula as opções que ainda fazem sentido dado os OUTROS dois (nunca o dele mesmo). Quando os outros dois estão vazios, cada dropdown volta pra lista original completa (evita esconder uma OSS cadastrada em Listas Personalizadas mas ainda sem nenhuma unidade usando).
+- **`js/sof.js`/`js/recibos.js`/`js/notas-empenho.js`/`js/unidades.js`:** cada uma só passou a chamar `UI.recalcularFiltrosCruzadosUnidade` como `aoMudar` dos 3 `UI.criarFiltroMultiplo(...)` já existentes (Unidade/Tipo de unidade ou Tipo/OSS) - sem mudar `filtrosAtuais()`/"Filtrar"/"Limpar filtros"/paginação, que continuam exigindo o clique em "Filtrar" pra de fato recarregar a lista.
+
+Sem alteração de backend, sem coluna/aba nova - nada a colar no Apps Script.
+
+**Ainda não testado:** marcar Tipo de unidade e ver Unidade estreitar sem clicar em Filtrar (nas 4 telas); desmarcar e ver voltar a lista completa; marcar uma Unidade específica e ver Tipo/OSS estreitarem; uma seleção que deixou de fazer sentido sumir sozinha do outro campo sem erro.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

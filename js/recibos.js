@@ -87,10 +87,16 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
-    UI.criarFiltroMultiplo('recFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
-    UI.criarFiltroMultiplo('recFiltroOss', opcoesOss.map(o => o.valor));
+    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
+    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
+    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
+      idUnidade: 'recFiltroUnidade', idTipo: 'recFiltroTipoUnidade', idOss: 'recFiltroOss',
+      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
+    });
+    UI.criarFiltroMultiplo('recFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('recFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('recFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade);
+    UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('recFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('recFiltroCompetencia', UI.listaCompetencias());
     UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);

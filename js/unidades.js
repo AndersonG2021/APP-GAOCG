@@ -54,9 +54,15 @@ const TelaUnidades = (function () {
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
-    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })));
-    UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO);
-    UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor));
+    // Unidade/Tipo/OSS se estreitam entre si em tempo real (sessão
+    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
+    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
+      idUnidade: 'uniFiltroUnidade', idTipo: 'uniFiltroTipo', idOss: 'uniFiltroOss',
+      unidadesTodas: todasUnidades, opcoesTipoOriginais: OPCOES_TIPO, opcoesOssOriginais: opcoesOss.map(o => o.valor)
+    });
+    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO, recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosUni', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
