@@ -116,16 +116,6 @@ const Dashboard = (function () {
       </tr>`;
     }).join('');
 
-    const sofPendenteHtml = sofNe.itens.length ? sofNe.itens.map(s => `
-      <div class="dash-item-lista" data-id="${s.id}">
-        <span class="selo ${s.dias_aguardando > 5 ? 'vermelho' : 'amarelo'}">${s.dias_aguardando}d</span>
-        <div class="dash-item-lista-corpo">
-          <strong>SOF ${UI.escaparHtml(s.sof_numero || s.id)}</strong>
-          <span>${UI.escaparHtml(s.sei || '-')}</span>
-        </div>
-        <span class="dash-item-lista-autor">${UI.escaparHtml(nomeUsuario_(s.criado_por))}</span>
-      </div>`).join('') : '<p class="estado-vazio">Nenhum SOF pendente de NE.</p>';
-
     const paradosHtml = parados.itens.length ? `
       <table class="tabela">
         <thead><tr><th>Tipo</th><th>Identificação</th><th>Criado por</th><th>Dias parado</th></tr></thead>
@@ -164,11 +154,11 @@ const Dashboard = (function () {
         </div>
         <div class="painel">
           <div class="dash-painel-cabecalho">
-            <h3>SOFs pendentes de NE</h3>
-            <a href="#" id="dashVerTodosSofNe">Ver todos &rarr;</a>
+            <h3>Situação das NE's</h3>
+            <a href="#" id="dashVerTodosNe">Ver todas &rarr;</a>
           </div>
-          <p class="ajuda">Prioridade por tempo de espera</p>
-          <div class="dash-lista">${sofPendenteHtml}</div>
+          <input type="text" id="dashBuscaNe" class="dash-busca" placeholder="Buscar por número, unidade ou objeto..." />
+          <div class="dash-lista dash-lista-rolavel" id="dashNeLista"></div>
         </div>
       </div>
 
@@ -176,6 +166,10 @@ const Dashboard = (function () {
         <h3 style="font-size:14px;margin:0 0 8px">Processos parados (5+ dias sem alteração de andamento/status)</h3>
         ${paradosHtml}
       </div>`;
+
+    renderNeLista_(ne.itens, '');
+    document.getElementById('dashBuscaNe').addEventListener('input', function () { renderNeLista_(ne.itens, this.value); });
+    document.getElementById('dashVerTodosNe').addEventListener('click', e => { e.preventDefault(); App.navegarPara('notasEmpenho'); });
 
     document.getElementById('dashCardRecibos').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia] }));
     document.getElementById('dashCardPago').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia] }));
@@ -187,16 +181,37 @@ const Dashboard = (function () {
     document.getElementById('dashCardUnidades').addEventListener('click', () => App.navegarPara('unidades'));
 
     document.getElementById('dashVerTodosRecibos').addEventListener('click', e => { e.preventDefault(); App.navegarPara('recibos', { competencia: [r.competencia] }); });
-    document.getElementById('dashVerTodosSofNe').addEventListener('click', e => { e.preventDefault(); App.navegarPara('sof', { semNe: true }); });
 
     document.querySelectorAll('#dashConteudo tr[data-status]').forEach(tr => {
       tr.addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia], status: [tr.dataset.status] }));
     });
-    document.querySelectorAll('.dash-item-lista[data-id]').forEach(el => {
-      el.addEventListener('click', () => App.navegarPara('sof', { abrirId: el.dataset.id }));
-    });
     document.querySelectorAll('#dashPainelParados tr[data-id]').forEach(tr => {
       tr.addEventListener('click', () => App.navegarPara(tr.dataset.tipo === 'SOF' ? 'sof' : 'recibos', { abrirId: tr.dataset.id }));
+    });
+  }
+
+  /** Lista de "Situação das NE's" (sessão 2026-07-27) - reconstruída a cada busca, sem re-renderizar o resto do dashboard. Vermelho quando `alerta` (saldo atual abaixo da parcela mensal de referência - mesmo critério da tela de Notas de Empenho). */
+  function renderNeLista_(itens, filtroTexto) {
+    const termo = (filtroTexto || '').trim().toLowerCase();
+    const filtrados = termo
+      ? itens.filter(g => (g.numero_ne || '').toLowerCase().includes(termo) || (g.unidade_nome || '').toLowerCase().includes(termo) || (g.sof_objeto || '').toLowerCase().includes(termo))
+      : itens;
+    const alvo = document.getElementById('dashNeLista');
+    if (!alvo) return;
+    alvo.innerHTML = filtrados.length ? filtrados.map(g => `
+      <div class="dash-item-lista dash-item-ne ${g.alerta ? 'alerta' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
+        <div class="dash-item-lista-corpo">
+          <strong>NE ${UI.escaparHtml(g.numero_ne)}</strong>
+          <span>${UI.escaparHtml(g.unidade_nome || '-')} · ${UI.escaparHtml(g.sof_objeto || '-')}</span>
+        </div>
+        <div class="dash-item-ne-valores">
+          <span>Solicitado: ${UI.formatarMoeda(g.valor_bruto)}</span>
+          <span>Atendido: ${UI.formatarMoeda(g.valor_liquidado)}</span>
+          <span><strong>Saldo: ${UI.formatarMoeda(g.valor_atual)}</strong></span>
+        </div>
+      </div>`).join('') : '<p class="estado-vazio">Nenhuma Nota de Empenho encontrada.</p>';
+    alvo.querySelectorAll('.dash-item-ne').forEach(el => {
+      el.addEventListener('click', () => App.navegarPara('notasEmpenho'));
     });
   }
 

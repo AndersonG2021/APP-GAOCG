@@ -107,6 +107,12 @@ function dashboardParados_(session, sofsCarregados, recibosCarregados) {
  * saldo" = valor_atual <= 0 (esgotado) - mais crítico que o `alerta` que já
  * existe na tela de NE (esse dispara antes, quando ainda fica abaixo da
  * parcela mensal de referência, mas > 0).
+ *
+ * itens (sessão 2026-07-27, painel "Situação das NE's"): lista completa dos
+ * grupos, ordenada com os em `alerta` primeiro (mesmo critério já usado na
+ * tela de Notas de Empenho - saldo atual abaixo da parcela mensal de
+ * referência) - o painel do dashboard é rolável com busca em vez de
+ * paginado, então manda tudo de uma vez.
  */
 function dashboardNotasEmpenho_(session, sofsCarregados) {
   var grupos = montarGruposNotasEmpenho_(session, sofsCarregados);
@@ -121,12 +127,18 @@ function dashboardNotasEmpenho_(session, sofsCarregados) {
   });
   semSaldo.sort(function (a, b) { return a.valor_atual - b.valor_atual; });
 
+  var itens = grupos.slice().sort(function (a, b) {
+    if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;
+    return a.numero_ne < b.numero_ne ? -1 : 1;
+  });
+
   return {
     total_empenhado: totalEmpenhado,
     total_liquidado: totalLiquidado,
     saldo_disponivel: totalSaldo,
     total_sem_saldo: semSaldo.length,
-    itens_sem_saldo: semSaldo.slice(0, 8)
+    itens_sem_saldo: semSaldo.slice(0, 8),
+    itens: itens
   };
 }
 

@@ -1008,6 +1008,21 @@ Três pedidos do usuário pra tela de Unidades: (1) algumas unidades têm repass
 
 **Ainda não testado:** salvar uma unidade com C.G. Tesouro e SUS preenchidos separadamente e conferir a soma na Parcela Mensal; T.A. sazonal com data no passado mostrando o aviso (e continuando somado); T.A. sazonal com data futura sem aviso; T.A. regular nunca avisando; "Gerar PDF" sem filtro (todas as unidades) e com filtro aplicado (só as filtradas, mesmo passando de 20).
 
+## Ajustes rápidos: layout do T.A. e novo painel "Situação das NE's" no Dashboard (sessão 2026-07-27, publicado)
+
+Dois pedidos do usuário depois de testar a sessão anterior:
+
+**Layout do T.A. (`js/unidades.js`/`css/style.css`):** "Tipo de pagamento"/"Data limite" ficavam espremidos numa grade única de 5 colunas junto com Objeto/Nº/Valor. Virou 2 linhas dentro da mesma linha de T.A.: `.linha-ta-campos` (Objeto/Nº/Valor, 3 colunas) em cima, `.linha-ta-pagamento` (Tipo de pagamento/Data limite, 2 colunas) embaixo — mesmo princípio de `.linha-fonte-cronograma` (separar em blocos quando uma linha cresce demais pra um grid só).
+
+**Painel "Situação das NE's" substitui "SOFs pendentes de NE" no Dashboard** (o painel da lista, não o cartão indicador "SOFs sem NE emitida" no topo, que continua igual): mostra **todas** as Notas de Empenho (não só um recorte de 8), com número da NE, unidade, objeto, total solicitado, total atendido (liquidado) e saldo atual — rolável (`.dash-lista-rolavel`, `max-height` + `overflow-y:auto`) e com campo de busca (filtro por texto client-side, em número/unidade/objeto, sem chamada nova ao backend por busca). Linha fica vermelha quando `alerta` é `true` (mesmo critério já usado na tela de Notas de Empenho: saldo atual abaixo da parcela mensal de referência da fonte).
+
+- **Backend (`backend/Dashboard.gs`):** `dashboardNotasEmpenho_` ganhou `itens` (lista completa dos grupos de `montarGruposNotasEmpenho_`, ordenada com `alerta` primeiro) - os campos agregados (`total_empenhado`, `saldo_disponivel`, `itens_sem_saldo` etc.) continuam iguais.
+- **Frontend (`js/dashboard.js`):** nova `renderNeLista_(itens, filtroTexto)`, chamada uma vez no carregamento e de novo a cada tecla no campo de busca - só reconstrói a lista, não o dashboard inteiro. Clicar numa NE navega pra aba Notas de Empenho (sem filtro específico - a tela já ordena os alertas primeiro).
+
+**Passo manual pendente:** colar `backend/Dashboard.gs` atualizado no editor do Apps Script e reimplantar. Nenhuma coluna/aba nova.
+
+**Ainda não testado:** o painel novo (rolagem, busca, cor vermelha em NEs com saldo abaixo da parcela mensal); o layout novo da linha de T.A. em telas estreitas.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
