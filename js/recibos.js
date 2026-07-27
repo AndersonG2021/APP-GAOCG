@@ -173,12 +173,13 @@ const TelaRecibos = (function () {
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum recibo encontrado.</p>'; return; }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th></th><th>Unidade</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
+        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
         <tbody>${itens.map(r => {
           const unidade = unidades.find(u => u.id === r.unidade_id);
           return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
             <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
             <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
+            <td>${UI.escaparHtml(r.objeto || '-')}</td>
             <td>${UI.escaparHtml(r.numero_processo)}</td>
             <td>${UI.escaparHtml(r.competencia)}</td>
             <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
