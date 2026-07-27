@@ -979,6 +979,35 @@ Usuário relatou até 20s pra salvar uma edição em Unidades, travando o app ne
 
 **Ainda não testado:** medir o tempo de salvar uma Unidade com vários T.A.s antes/depois da correção.
 
+## Unidades: C.G. por fonte (Tesouro/SUS), T.A. sazonal com vencimento, e "Gerar PDF" (sessão 2026-07-27, aguardando o usuário criar as colunas/colar/implantar e testar)
+
+Três pedidos do usuário pra tela de Unidades: (1) algumas unidades têm repasse mensal recorrente em Tesouro e SUS, outras só numa fonte - "Valor do C.G." precisava virar dois campos; (2) Termos Aditivos precisavam de um tipo de pagamento (Regular/Sazonal) - se sazonal, o analista informa até quando aquele pagamento é feito, e quando essa data passa o card deve mostrar um aviso (o valor continua contando na Parcela Mensal normalmente, só o aviso é novo - o analista decide remover manualmente); (3) um botão "Gerar PDF" que lista as unidades atualmente filtradas (todas, se nenhum filtro aplicado).
+
+**Sem migração de dado:** `valor_contrato_gestao` (já existia) passou a significar "Valor do C.G. — TESOURO" - mesmo nome de campo, só reinterpretado na tela, nenhum dado existente perdido. Nova coluna `valor_contrato_gestao_sus`.
+
+**Backend (`backend/Unidades.gs`):**
+- `parcelaMensalTotal_(valorTesouro, valorSus, tas)` - assinatura mudou de 2 pra 3 parâmetros (Tesouro + SUS + soma dos T.A.s), atualizada nos 3 pontos que chamam (`criarUnidade`, `atualizarUnidade`, `listarUnidades`). Um T.A. sazonal vencido continua entrando nessa soma - só o aviso é novo, o cálculo de dinheiro não muda (pedido explícito do usuário).
+- Nova `anotarVencimentoTas_(tas)`: calcula `vencido` em cada T.A. (`tipo_pagamento === 'sazonal' && data_vencimento` no passado) - **campo calculado, nunca gravado**, mesmo princípio de `dias_parado`/`destacar_parado` (SOF), nunca fica desatualizado.
+- `substituirTasDaUnidade_`: cada T.A. grava também `tipo_pagamento` ('regular'/'sazonal', valor antigo/em branco vira 'regular' automaticamente - T.A.s já cadastrados continuam funcionando sem mudança) e `data_vencimento` (só gravada quando sazonal - some se o analista trocar pra regular sem limpar o campo, evita lixo órfão). Continua usando `proximosIds_`/`appendObjectRows_` em lote (correção da sessão anterior).
+- `criarUnidade`/`atualizarUnidade`: passam a ler `valor_contrato_gestao_sus` também.
+
+**Dados novos:**
+- Aba **Unidades**: nova coluna `valor_contrato_gestao_sus`.
+- Aba **UnidadesTA**: novas colunas `tipo_pagamento`, `data_vencimento`.
+- `backend/Utils.gs`: `HEADERS.Unidades`/`HEADERS.UnidadesTA`/`COLUNAS_NUMERICAS.Unidades` atualizados.
+
+**Frontend (`js/unidades.js`):**
+- Card: "Valor do C.G." virou duas linhas (Tesouro/SUS, sempre as duas, mesmo quando uma é R$ 0,00). T.A. vencido ganha um aviso vermelho "⚠ Pagamento sazonal encerrado em DD/MM/AAAA - remova este T.A. se não for mais válido".
+- Formulário: campo único de C.G. virou dois lado a lado. Linha de T.A. ganhou "Tipo de pagamento" (select) + "Data limite" (só aparece quando Sazonal é selecionado) - classe própria `.linha-ta` (não reaproveita `.linha-fonte`, que continua servindo só as linhas de Manutenção do SEI - mesmo princípio de `.linha-fonte-cronograma` quando a Fonte do SOF cresceu antes).
+- Novo botão "Gerar PDF" na barra de filtros: busca todas as unidades que batem com o filtro atual (`pageSize: 100000`, mesmo padrão de `exportarCsv` em SOF/Recibos - não só a página de 20 visível), monta uma página HTML limpa própria pra impressão (`montarPdfUnidadesHtml_` - tabela Nome/Tipo/OSS/CNPJ/C.G. Tesouro/C.G. SUS/Total T.A.s/Parcela Mensal + total geral) e abre em nova aba. **Sem biblioteca externa** (decisão confirmada com o usuário, já que o app é 100% vanilla até hoje) - a própria página aciona `window.print()` sozinha (`<body onload="window.print()">`), o usuário só escolhe "Salvar como PDF" no diálogo do navegador.
+
+**Passos manuais pendentes do usuário:**
+1. Na aba **Unidades**, criar a coluna `valor_contrato_gestao_sus`.
+2. Na aba **UnidadesTA**, criar as colunas `tipo_pagamento` e `data_vencimento`.
+3. Colar `backend/Unidades.gs` e `backend/Utils.gs` atualizados no editor do Apps Script e reimplantar.
+
+**Ainda não testado:** salvar uma unidade com C.G. Tesouro e SUS preenchidos separadamente e conferir a soma na Parcela Mensal; T.A. sazonal com data no passado mostrando o aviso (e continuando somado); T.A. sazonal com data futura sem aviso; T.A. regular nunca avisando; "Gerar PDF" sem filtro (todas as unidades) e com filtro aplicado (só as filtradas, mesmo passando de 20).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

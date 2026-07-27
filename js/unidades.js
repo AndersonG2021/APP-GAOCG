@@ -42,6 +42,7 @@ const TelaUnidades = (function () {
           <button class="botao" id="btnFiltrarUni">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosUni">Limpar filtros</button>
           <span style="flex:1"></span>
+          <button class="botao" id="btnGerarPdfUni">Gerar PDF</button>
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
         <div id="listaUnidades"></div>
@@ -49,6 +50,7 @@ const TelaUnidades = (function () {
       </div>`;
 
     document.getElementById('btnNovaUnidade').addEventListener('click', () => abrirFormulario());
+    document.getElementById('btnGerarPdfUni').addEventListener('click', gerarPdf);
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
@@ -126,13 +128,26 @@ const TelaUnidades = (function () {
     document.getElementById('uniPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
   }
 
+  /** "dd/mm/aaaa" a partir de uma data ISO ("aaaa-mm-dd") - só pro aviso de T.A. vencido no card. */
+  function formatarDataBr_(iso) {
+    if (!iso) return '';
+    const [ano, mes, dia] = String(iso).split('-');
+    return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+  }
+
   function detalheTasHtml(unidade) {
     const linhasTasHtml = (unidade.tas || []).length
-      ? unidade.tas.map(t => `<div class="cartao-unidade-detalhe-linha"><span>${UI.escaparHtml(t.objeto_ta || '-')} (T.A. ${UI.escaparHtml(t.numero_ta || '-')})</span><span>${UI.formatarMoeda(t.valor_ta)}</span></div>`).join('')
+      ? unidade.tas.map(t => `
+        <div class="cartao-unidade-detalhe-linha">
+          <span>${UI.escaparHtml(t.objeto_ta || '-')} (T.A. ${UI.escaparHtml(t.numero_ta || '-')})</span>
+          <span>${UI.formatarMoeda(t.valor_ta)}</span>
+        </div>
+        ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento sazonal encerrado em ${formatarDataBr_(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`).join('')
       : '<p class="ajuda">Nenhum Termo Aditivo cadastrado.</p>';
     return `
       <div class="cartao-unidade-detalhe oculto">
-        <div class="cartao-unidade-detalhe-linha"><span>Valor do C.G.</span><span>${UI.formatarMoeda(unidade.valor_contrato_gestao)}</span></div>
+        <div class="cartao-unidade-detalhe-linha"><span>Valor do C.G. - Tesouro</span><span>${UI.formatarMoeda(unidade.valor_contrato_gestao)}</span></div>
+        <div class="cartao-unidade-detalhe-linha"><span>Valor do C.G. - SUS</span><span>${UI.formatarMoeda(unidade.valor_contrato_gestao_sus)}</span></div>
         ${linhasTasHtml}
       </div>`;
   }
@@ -210,19 +225,39 @@ const TelaUnidades = (function () {
 
   /** Lê as linhas de T.A. direto do DOM (fonte da verdade entre re-renders) - mesmo padrão de lerLinhasFontesDoDom_ em js/sof.js. */
   function lerLinhasTasDoDom_() {
-    return Array.from(document.querySelectorAll('#tasContainer .linha-fonte')).map(linha => ({
+    return Array.from(document.querySelectorAll('#tasContainer .linha-ta')).map(linha => ({
       objeto_ta: linha.querySelector('.linha-ta-objeto').value,
       numero_ta: linha.querySelector('.linha-ta-numero').value,
-      valor_ta: linha.querySelector('.linha-ta-valor').value
+      valor_ta: linha.querySelector('.linha-ta-valor').value,
+      tipo_pagamento: linha.querySelector('.linha-ta-tipo-pagamento').value,
+      data_vencimento: linha.querySelector('.linha-ta-data-vencimento').value
     }));
   }
 
+  /**
+   * Ganhou "Tipo de pagamento" (Regular/Sazonal) e "Data limite" (sessão
+   * 2026-07-27) - a data só aparece quando Sazonal está selecionado (listener
+   * de change em renderTasFormulario alterna a visibilidade). Classe própria
+   * `.linha-ta` (não reaproveita `.linha-fonte`, que continua servindo só as
+   * linhas mais simples de Manutenção do SEI) - mesmo princípio de
+   * `.linha-fonte-cronograma` (js/sof.js) quando a linha de Fonte cresceu.
+   */
   function linhaTaHtml(item, indice) {
+    const sazonal = item.tipo_pagamento === 'sazonal';
     return `
-      <div class="linha-fonte" data-indice="${indice}">
-        <div class="campo"><label>Objeto do T.A.</label><input class="linha-ta-objeto" value="${UI.escaparHtml(item.objeto_ta || '')}" placeholder="Ex.: T.E.A. ou Aquisição de Equipamentos" /></div>
-        <div class="campo"><label>Nº do T.A.</label><input class="linha-ta-numero" value="${UI.escaparHtml(item.numero_ta || '')}" placeholder="Ex.: 1º" /></div>
-        <div class="campo"><label>Valor do T.A.</label><input class="linha-ta-valor" type="number" step="0.01" value="${item.valor_ta || ''}" /></div>
+      <div class="linha-ta" data-indice="${indice}">
+        <div class="linha-ta-campos">
+          <div class="campo"><label>Objeto do T.A.</label><input class="linha-ta-objeto" value="${UI.escaparHtml(item.objeto_ta || '')}" placeholder="Ex.: T.E.A. ou Aquisição de Equipamentos" /></div>
+          <div class="campo"><label>Nº do T.A.</label><input class="linha-ta-numero" value="${UI.escaparHtml(item.numero_ta || '')}" placeholder="Ex.: 1º" /></div>
+          <div class="campo"><label>Valor do T.A.</label><input class="linha-ta-valor" type="number" step="0.01" value="${item.valor_ta || ''}" /></div>
+          <div class="campo"><label>Tipo de pagamento</label>
+            <select class="linha-ta-tipo-pagamento">
+              <option value="regular" ${!sazonal ? 'selected' : ''}>Regular</option>
+              <option value="sazonal" ${sazonal ? 'selected' : ''}>Sazonal</option>
+            </select>
+          </div>
+          <div class="campo linha-ta-data-campo ${sazonal ? '' : 'oculto'}"><label>Data limite</label><input class="linha-ta-data-vencimento" type="date" value="${item.data_vencimento || ''}" /></div>
+        </div>
         <button type="button" class="botao-icone linha-fonte-remover" title="Remover T.A.">&times;</button>
       </div>`;
   }
@@ -233,16 +268,24 @@ const TelaUnidades = (function () {
     alvo.querySelectorAll('.linha-fonte-remover').forEach(btn => {
       btn.addEventListener('click', () => {
         linhasTas = lerLinhasTasDoDom_();
-        const indice = Number(btn.closest('.linha-fonte').dataset.indice);
+        const indice = Number(btn.closest('.linha-ta').dataset.indice);
         linhasTas.splice(indice, 1);
         renderTasFormulario();
+      });
+    });
+    alvo.querySelectorAll('.linha-ta-tipo-pagamento').forEach(select => {
+      select.addEventListener('change', function () {
+        this.closest('.linha-ta').querySelector('.linha-ta-data-campo').classList.toggle('oculto', this.value !== 'sazonal');
       });
     });
   }
 
   function abrirFormulario(unidade) {
     const editando = !!unidade;
-    linhasTas = (unidade && unidade.tas) ? unidade.tas.map(t => ({ objeto_ta: t.objeto_ta, numero_ta: t.numero_ta, valor_ta: t.valor_ta })) : [];
+    linhasTas = (unidade && unidade.tas) ? unidade.tas.map(t => ({
+      objeto_ta: t.objeto_ta, numero_ta: t.numero_ta, valor_ta: t.valor_ta,
+      tipo_pagamento: t.tipo_pagamento, data_vencimento: t.data_vencimento
+    })) : [];
 
     const corpo = `
       <form id="formUnidade">
@@ -256,7 +299,8 @@ const TelaUnidades = (function () {
           <div class="campo"><label>OSS</label><input id="uOss" value="${UI.escaparHtml(unidade ? unidade.oss : '')}" /></div>
           <div class="campo"><label>CNPJ *</label><input id="uCnpj" value="${UI.escaparHtml(unidade ? unidade.cnpj : '')}" required placeholder="00.000.000/0000-00" /></div>
           <div class="campo"><label>Contrato de Gestão *</label><input id="uContrato" value="${UI.escaparHtml(unidade ? unidade.contrato_gestao : '')}" required /></div>
-          <div class="campo"><label>Valor do C.G.</label><input id="uValorContratoGestao" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
+          <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
+          <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
           <div class="campo"><label>Classificação Orçamentária</label><input id="uClassificacao" value="${UI.escaparHtml(unidade ? unidade.classificacao_orcamentaria : '')}" /></div>
           <div class="campo"><label>Ação</label><input id="uAcao" value="${UI.escaparHtml(unidade ? unidade.acao : '')}" /></div>
           <div class="campo"><label>Subação</label><input id="uSubacao" value="${UI.escaparHtml(unidade ? unidade.subacao : '')}" /></div>
@@ -279,7 +323,7 @@ const TelaUnidades = (function () {
     renderTasFormulario();
     document.getElementById('btnAdicionarTa').addEventListener('click', () => {
       linhasTas = lerLinhasTasDoDom_();
-      linhasTas.push({ objeto_ta: '', numero_ta: '', valor_ta: '' });
+      linhasTas.push({ objeto_ta: '', numero_ta: '', valor_ta: '', tipo_pagamento: 'regular', data_vencimento: '' });
       renderTasFormulario();
     });
 
@@ -292,7 +336,8 @@ const TelaUnidades = (function () {
         oss: document.getElementById('uOss').value.trim(),
         cnpj: document.getElementById('uCnpj').value.trim(),
         contrato_gestao: document.getElementById('uContrato').value.trim(),
-        valor_contrato_gestao: document.getElementById('uValorContratoGestao').value,
+        valor_contrato_gestao: document.getElementById('uValorContratoGestaoTesouro').value,
+        valor_contrato_gestao_sus: document.getElementById('uValorContratoGestaoSus').value,
         classificacao_orcamentaria: document.getElementById('uClassificacao').value.trim(),
         acao: document.getElementById('uAcao').value.trim(),
         subacao: document.getElementById('uSubacao').value.trim(),
@@ -311,6 +356,77 @@ const TelaUnidades = (function () {
         UI.mostrarErro(erroEl, err.message);
       }
     });
+  }
+
+  /** Abre HTML gerado em nova aba (Blob + URL de objeto) - revoga a URL depois de um tempo, não na hora, senão a aba nem termina de carregar o conteúdo antes dela sumir. Mesmo padrão de abrirDocumentoEmNovaAba_ em js/sof.js. */
+  function abrirDocumentoEmNovaAba_(html) {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  /**
+   * "Gerar PDF" (sessão 2026-07-27): busca todas as unidades que batem com o
+   * filtro atual (não só a página de 20 visível - mesmo padrão de exportarCsv
+   * em js/sof.js/js/recibos.js), monta uma página HTML limpa própria pra
+   * impressão e abre em nova aba - sem biblioteca externa (o app é 100%
+   * vanilla). A própria página aciona o diálogo de impressão do navegador
+   * sozinha (`<body onload="window.print()">`), pro usuário só escolher
+   * "Salvar como PDF".
+   */
+  async function gerarPdf() {
+    const resposta = await Api.chamar('listarUnidades', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
+    abrirDocumentoEmNovaAba_(montarPdfUnidadesHtml_(resposta.items));
+  }
+
+  function montarPdfUnidadesHtml_(lista) {
+    let totalTesouro = 0, totalSus = 0, totalTas = 0, totalGeral = 0;
+
+    const linhas = lista.map(u => {
+      const somaTas = (u.tas || []).reduce((s, t) => s + (Number(t.valor_ta) || 0), 0);
+      totalTesouro += Number(u.valor_contrato_gestao) || 0;
+      totalSus += Number(u.valor_contrato_gestao_sus) || 0;
+      totalTas += somaTas;
+      totalGeral += Number(u.parcela_mensal_total) || 0;
+      return `<tr>
+        <td>${UI.escaparHtml(u.nome)}</td>
+        <td>${UI.escaparHtml(u.tipo || '-')}</td>
+        <td>${UI.escaparHtml(u.oss || '-')}</td>
+        <td>${UI.escaparHtml(u.cnpj || '-')}</td>
+        <td>${UI.formatarMoeda(u.valor_contrato_gestao)}</td>
+        <td>${UI.formatarMoeda(u.valor_contrato_gestao_sus)}</td>
+        <td>${UI.formatarMoeda(somaTas)}</td>
+        <td><strong>${UI.formatarMoeda(u.parcela_mensal_total)}</strong></td>
+      </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<title>Unidades - GAOCG</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000; margin: 24px; }
+  h1 { font-size: 15pt; margin: 0 0 4px; }
+  p.info { margin: 0 0 16px; font-size: 10pt; color: #444; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #999; padding: 5px 8px; font-size: 9.5pt; text-align: left; }
+  th { background: #eee; }
+  tfoot td { font-weight: bold; background: #f5f5f5; }
+  @media print { body { margin: 10mm; } }
+</style>
+</head>
+<body onload="window.print()">
+  <h1>Unidades - Valores de Contrato de Gestão</h1>
+  <p class="info">Gerado em ${new Date().toLocaleString('pt-BR')} - ${lista.length} unidade(s)</p>
+  <table>
+    <thead><tr><th>Nome</th><th>Tipo</th><th>OSS</th><th>CNPJ</th><th>C.G. Tesouro</th><th>C.G. SUS</th><th>Total T.A.s</th><th>Parcela Mensal</th></tr></thead>
+    <tbody>${linhas || '<tr><td colspan="8">Nenhuma unidade encontrada.</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="4">TOTAL GERAL</td><td>${UI.formatarMoeda(totalTesouro)}</td><td>${UI.formatarMoeda(totalSus)}</td><td>${UI.formatarMoeda(totalTas)}</td><td>${UI.formatarMoeda(totalGeral)}</td></tr></tfoot>
+  </table>
+</body>
+</html>`;
   }
 
   return { render };

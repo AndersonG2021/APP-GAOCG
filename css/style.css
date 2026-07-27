@@ -164,6 +164,18 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .linha-fonte-mes-campo { margin-bottom: 0; }
 .linha-fonte-mes-campo label { font-size: 11px; }
 
+/*
+ * Linha de Termo Aditivo da Unidade (sessão 2026-07-27): ganhou Tipo de
+ * pagamento (Regular/Sazonal) + Data limite, não cabe mais no grid de 3
+ * colunas de ".linha-fonte" - classe própria, mesmo princípio de
+ * ".linha-fonte-cronograma" acima.
+ */
+.linha-ta { position: relative; padding: 8px 40px 8px 12px; background: var(--cinza-100); border-radius: 8px; }
+.linha-ta-campos { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0 12px; align-items: start; }
+.linha-ta-campos .campo { margin-bottom: 0; }
+.linha-ta .linha-fonte-remover { position: absolute; top: 8px; right: 8px; margin-top: 0; }
+.cartao-unidade-ta-vencido { color: var(--vermelho); margin: 2px 0 6px; }
+
 .linhas-parcela-dividida { display: flex; flex-direction: column; gap: 8px; }
 .linha-parcela-dividida { display: flex; gap: 12px; align-items: flex-start; padding: 8px; background: var(--cinza-100); border-radius: 8px; }
 .linha-parcela-dividida .campo { margin-bottom: 0; }
@@ -474,6 +486,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
   .linha-fonte-cabecalho { grid-template-columns: 1fr; }
   .linha-fonte-meses { grid-template-columns: repeat(3, 1fr); }
   .linha-parcela-dividida { flex-direction: column; }
+  .linha-ta-campos { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 400px) {
