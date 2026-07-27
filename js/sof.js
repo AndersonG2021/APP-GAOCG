@@ -58,8 +58,10 @@ const TelaSof = (function () {
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
-   * aplica o filtro semNe (listarSof) só na primeira carga desta tela (não
-   * persiste depois de Filtrar/Limpar filtros); `abrirId` abre esse SOF
+   * marca o checkbox "Sem NE emitida" antes da primeira carga (fica visível
+   * e ativo na barra de filtros, igual a qualquer outro filtro - sessão
+   * 2026-07-27, achado real: antes disso o filtro era aplicado por baixo dos
+   * panos sem aparecer em lugar nenhum na tela); `abrirId` abre esse SOF
    * direto logo após a primeira carga.
    */
   async function render(opts) {
@@ -93,6 +95,7 @@ const TelaSof = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
             <div id="sofFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
+          <label style="align-self:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="sofFiltroSemNe" /> Sem NE emitida</label>
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosSof">Limpar filtros</button>
           <button class="botao" id="btnExportarSof">Exportar CSV</button>
@@ -112,6 +115,7 @@ const TelaSof = (function () {
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
+    document.getElementById('sofFiltroSemNe').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
     // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
     const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
@@ -125,10 +129,11 @@ const TelaSof = (function () {
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
+      document.getElementById('sofFiltroSemNe').checked = false;
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
-    if (opts && opts.semNe) await carregarComFiltros_(Object.assign({}, filtrosAtuais(), { semNe: true }));
-    else await carregar();
+    if (opts && opts.semNe) document.getElementById('sofFiltroSemNe').checked = true;
+    await carregar();
     if (opts && opts.abrirId) abrirSofExistente(opts.abrirId);
   }
 
@@ -145,7 +150,8 @@ const TelaSof = (function () {
       objeto: UI.valoresFiltroMultiplo('sofFiltroObjeto'),
       tipo_unidade: UI.valoresFiltroMultiplo('sofFiltroTipoUnidade'),
       dea: UI.valoresFiltroMultiplo('sofFiltroDea'),
-      fonte: UI.valoresFiltroMultiplo('sofFiltroFonte')
+      fonte: UI.valoresFiltroMultiplo('sofFiltroFonte'),
+      semNe: document.getElementById('sofFiltroSemNe').checked
     };
   }
 

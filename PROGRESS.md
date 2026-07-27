@@ -1037,6 +1037,14 @@ Sem alteração de backend, sem coluna/aba nova - nada a colar no Apps Script.
 
 **Ainda não testado:** marcar Tipo de unidade e ver Unidade estreitar sem clicar em Filtrar (nas 4 telas); desmarcar e ver voltar a lista completa; marcar uma Unidade específica e ver Tipo/OSS estreitarem; uma seleção que deixou de fazer sentido sumir sozinha do outro campo sem erro.
 
+## Filtro "Sem NE emitida" do Dashboard virou visível na tela de SOF (sessão 2026-07-27, publicado, só frontend)
+
+Usuário reportou que, ao clicar num link do Dashboard que leva pra outra aba com um filtro já aplicado, nada na barra de filtros dessa aba mostrava qual filtro estava ativo. Investigado: os widgets de Competência/Status em Recibos já mostravam a seleção corretamente (`UI.definirValoresFiltroMultiplo`, sessão anterior) - o gap real era só o clique em "SOFs sem NE emitida" (Dashboard) → aba SOF: esse filtro (`semNe`) era aplicado por baixo dos panos (`listarSof`), sem nenhum campo na tela indicando isso.
+
+**Corrigido (`js/sof.js`):** "Sem NE emitida" virou um checkbox de verdade na barra de filtros de SOF (mesmo padrão do "Somente ativas" em Unidades) - participa de `filtrosAtuais()`/"Filtrar"/"Limpar filtros" como qualquer outro filtro, recarrega sozinho ao marcar/desmarcar. O clique vindo do Dashboard (`App.navegarPara('sof', { semNe: true })`) agora só marca esse checkbox antes da primeira carga, em vez de aplicar o filtro escondido - fica visível e o usuário pode desmarcar quando quiser. Sem alteração de backend (`listarSof` já aceitava `semNe` desde a sessão anterior).
+
+Sem alteração de backend, sem coluna/aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
