@@ -95,6 +95,44 @@ const UI = (function () {
     });
   }
 
+  /**
+   * Cores por status de Recibo (sessão 2026-07-27, pedido visual do usuário -
+   * cores exatas de uma referência que ele mandou). `status` é texto livre
+   * (configurado em Listas Personalizadas, tipo STATUS_RECIBO) - a busca é
+   * por correspondência exata (maiúsculas/espaços nas pontas ignorados); um
+   * status que não estiver no mapa cai no visual neutro de sempre (`.selo`
+   * sem cor própria). Se algum status da planilha do usuário tiver uma
+   * grafia levemente diferente da referência, é só ajustar a chave aqui.
+   */
+  const CORES_STATUS_RECIBO_ = {
+    'PROCESSO INEXISTENTE': { bg: '#17b6a8', fg: '#ffffff' },
+    'ENVIADO DE VOLTA A UNIDADE PARA CORREÇÃO': { bg: '#a8790a', fg: '#ffffff' },
+    'AGUARDANDO RELATÓRIO CTAI': { bg: '#6e2530', fg: '#ffffff' },
+    'AGUARDANDO ORÇAMENTO': { bg: '#ddc6ea', fg: '#4a3355' },
+    'AGUARDANDO ASSINATURA DA NE': { bg: '#e34fa0', fg: '#ffffff' },
+    'AGUARDANDO FORMALZAÇÃO': { bg: '#3a3d42', fg: '#ffffff' },
+    'AGUARDANDO FORMALIZAÇÃO': { bg: '#3a3d42', fg: '#ffffff' },
+    'AGUARDANDO ASSINATURA DO ATESTO': { bg: '#e0362f', fg: '#ffffff' },
+    'AGUARDANDO LIBERAÇÃO DA LIQUIDAÇÃO(CLSUS)': { bg: '#a9d4f5', fg: '#1c4a68' },
+    'AGUARDANDO LIBERAÇÃO DA LIQUIDAÇÃO (CLSUS)': { bg: '#a9d4f5', fg: '#1c4a68' },
+    'AGUARDANDO LIBERAÇÃO DA LIQUIDAÇÃO(CLTESOURO)': { bg: '#d9d9dc', fg: '#3a3a3d' },
+    'AGUARDANDO LIBERAÇÃO DA LIQUIDAÇÃO (CLTESOURO)': { bg: '#d9d9dc', fg: '#3a3a3d' },
+    'AGUARDANDO ASSINATURA DA LIQUIDAÇÃO': { bg: '#4c2f85', fg: '#ffffff' },
+    'ENVIADO AO SETOR DE PAGAMENTO (CPAG_TESOURO)': { bg: '#8a8d93', fg: '#ffffff' },
+    'ENVIADO AO SETOR DE PAGAMENTO(CPAG_TESOURO)': { bg: '#8a8d93', fg: '#ffffff' },
+    'ENVIADO AO SETOR DE PAGAMENTO (CPAG_SUS)': { bg: '#0f3b47', fg: '#ffffff' },
+    'ENVIADO AO SETOR DE PAGAMENTO(CPAG_SUS)': { bg: '#0f3b47', fg: '#ffffff' },
+    'PAGO': { bg: '#1c7a37', fg: '#ffffff' },
+    'PARCELA COMPENSADA': { bg: '#bdeec0', fg: '#1c5c28' }
+  };
+
+  function seloStatusReciboHtml(status) {
+    const chave = String(status || '').trim().toUpperCase();
+    const cor = CORES_STATUS_RECIBO_[chave];
+    const estilo = cor ? ` style="background:${cor.bg};color:${cor.fg}"` : '';
+    return `<span class="selo selo-status"${estilo}>${escaparHtml(status || '-')}</span>`;
+  }
+
   function formatarMoeda(valor) {
     const n = Number(valor) || 0;
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -514,7 +552,7 @@ const UI = (function () {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
-    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros
+    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml
   };
 })();
 

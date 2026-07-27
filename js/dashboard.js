@@ -84,11 +84,12 @@ const Dashboard = (function () {
     renderConteudo(dados);
   }
 
-  function cartaoIndicadorHtml_(id, icone, valor, rotulo, deltaHtml) {
+  function cartaoIndicadorHtml_(id, icone, valor, rotulo, deltaHtml, cor) {
+    const corClasse = cor || 'azul';
     return `
-      <div class="cartao-indicador clicavel" id="${id}">
+      <div class="cartao-indicador clicavel acento-${corClasse}" id="${id}">
         <div class="cartao-indicador-topo">
-          <span class="cartao-indicador-icone">${icone}</span>
+          <span class="cartao-indicador-icone ${corClasse}">${icone}</span>
           <span class="cartao-indicador-seta">${ICONE_SETA}</span>
         </div>
         <div class="valor">${valor}</div>
@@ -111,7 +112,7 @@ const Dashboard = (function () {
     const statusLinhas = Object.keys(r.por_status).map(status => {
       const s = r.por_status[status];
       return `<tr data-status="${UI.escaparHtml(status)}">
-        <td>${UI.escaparHtml(status)}</td><td>${s.quantidade}</td>
+        <td>${UI.seloStatusReciboHtml(status)}</td><td>${s.quantidade}</td>
         <td>${UI.formatarMoeda(s.valor_liquidado)}</td><td>${UI.formatarMoeda(s.valor_pago)}</td>
       </tr>`;
     }).join('');
@@ -130,12 +131,12 @@ const Dashboard = (function () {
 
     document.getElementById('dashConteudo').innerHTML = `
       <div class="grade-indicadores">
-        ${cartaoIndicadorHtml_('dashCardRecibos', ICONE_RECIBO, r.total_recibos, `Recibos na competência ${UI.escaparHtml(r.competencia)}`, deltaRecibosHtml)}
-        ${cartaoIndicadorHtml_('dashCardPago', ICONE_CIFRAO, UI.formatarMoeda(r.total_valor_pago), 'Valor pago no período', deltaPagoHtml)}
-        ${cartaoIndicadorHtml_('dashCardSofNe', ICONE_ARQUIVO, sofNe.total_pendentes, 'SOFs sem NE emitida', `<div class="cartao-indicador-delta">${sofNe.aguardando_mais_de_5_dias} aguardando há mais de 5 dias</div>`)}
-        ${cartaoIndicadorHtml_('dashCardParados', ICONE_RELOGIO, parados.itens.length, 'Processos parados', `<div class="cartao-indicador-delta">${parados.novos_hoje} novo(s) hoje</div>`)}
-        ${cartaoIndicadorHtml_('dashCardSaldoNe', ICONE_ALERTA, UI.formatarMoeda(ne.saldo_disponivel), 'Saldo disponível em Notas de Empenho', ne.total_sem_saldo > 0 ? `<div class="cartao-indicador-delta negativo">${ne.total_sem_saldo} sem saldo</div>` : '')}
-        ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`)}
+        ${cartaoIndicadorHtml_('dashCardRecibos', ICONE_RECIBO, r.total_recibos, `Recibos na competência ${UI.escaparHtml(r.competencia)}`, deltaRecibosHtml, 'azul')}
+        ${cartaoIndicadorHtml_('dashCardPago', ICONE_CIFRAO, UI.formatarMoeda(r.total_valor_pago), 'Valor pago no período', deltaPagoHtml, 'verde')}
+        ${cartaoIndicadorHtml_('dashCardSofNe', ICONE_ARQUIVO, sofNe.total_pendentes, 'SOFs sem NE emitida', `<div class="cartao-indicador-delta">${sofNe.aguardando_mais_de_5_dias} aguardando há mais de 5 dias</div>`, 'amarelo')}
+        ${cartaoIndicadorHtml_('dashCardParados', ICONE_RELOGIO, parados.itens.length, 'Processos parados', `<div class="cartao-indicador-delta">${parados.novos_hoje} novo(s) hoje</div>`, 'roxo')}
+        ${cartaoIndicadorHtml_('dashCardSaldoNe', ICONE_ALERTA, UI.formatarMoeda(ne.saldo_disponivel), 'Saldo disponível em Notas de Empenho', ne.total_sem_saldo > 0 ? `<div class="cartao-indicador-delta negativo">${ne.total_sem_saldo} sem saldo</div>` : '', 'vermelho')}
+        ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`, 'ciano')}
       </div>
 
       <div class="dash-grade-paineis">
