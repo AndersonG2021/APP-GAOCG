@@ -38,10 +38,30 @@ function agruparTasPorUnidade_() {
   return mapa;
 }
 
-/** "Parcela mensal" = Valor do C.G. (único, não repetido por T.A.) + soma de todos os Valores de T.A. */
-function parcelaMensalTotal_(valorContratoGestao, tas) {
+/**
+ * "Parcela mensal" = Valor do C.G. Tesouro + Valor do C.G. SUS (algumas
+ * unidades têm repasse recorrente nas duas fontes, outras só numa - sessão
+ * 2026-07-27) + soma de todos os Valores de T.A.. Um T.A. sazonal vencido
+ * continua entrando nessa soma normalmente - só gera aviso visual (ver
+ * anotarVencimentoTas_), o analista é quem decide remover a linha.
+ */
+function parcelaMensalTotal_(valorContratoGestaoTesouro, valorContratoGestaoSus, tas) {
   var somaTas = (tas || []).reduce(function (soma, t) { return soma + toNumber_(t.valor_ta); }, 0);
-  return toNumber_(valorContratoGestao) + somaTas;
+  return toNumber_(valorContratoGestaoTesouro) + toNumber_(valorContratoGestaoSus) + somaTas;
+}
+
+/**
+ * Marca cada T.A. sazonal cuja data_vencimento já passou com `vencido: true`
+ * (sessão 2026-07-27) - calculado toda leitura, nunca gravado, mesmo
+ * princípio de dias_parado/destacar_parado (Sof.gs) - nunca fica
+ * desatualizado. T.A. regular (ou sazonal sem data) nunca vence.
+ */
+function anotarVencimentoTas_(tas) {
+  var hoje = nowIso_().slice(0, 10);
+  (tas || []).forEach(function (t) {
+    t.vencido = t.tipo_pagamento === 'sazonal' && !!t.data_vencimento && t.data_vencimento < hoje;
+  });
+  return tas;
 }
 
 /**
@@ -70,12 +90,17 @@ function substituirTasDaUnidade_(unidadeId, tasArray, session) {
   if (itens.length) {
     var ids = proximosIds_('UnidadesTA', itens.length);
     var novasLinhas = itens.map(function (item, i) {
+      var tipoPagamento = item.tipo_pagamento === 'sazonal' ? 'sazonal' : 'regular';
       return {
         id: ids[i],
         unidade_id: unidadeId,
         objeto_ta: sanitizeString_(item.objeto_ta, 200),
         numero_ta: sanitizeString_(item.numero_ta, 20),
         valor_ta: toNumber_(item.valor_ta),
+        tipo_pagamento: tipoPagamento,
+        // Data só faz sentido pra sazonal - descarta lixo órfão se o
+        // analista trocar de sazonal pra regular sem limpar o campo.
+        data_vencimento: tipoPagamento === 'sazonal' ? sanitizeString_(item.data_vencimento, 10) : '',
         criado_por: session.id,
         data_criacao: nowIso_()
       };
@@ -167,9 +192,9 @@ function listarUnidades(session, params) {
 
   var tasPorUnidade = agruparTasPorUnidade_();
   pageRows.forEach(function (u) {
-    var tas = tasPorUnidade[u.id] || [];
+    var tas = anotarVencimentoTas_(tasPorUnidade[u.id] || []);
     u.tas = tas;
-    u.parcela_mensal_total = parcelaMensalTotal_(u.valor_contrato_gestao, tas);
+    u.parcela_mensal_total = parcelaMensalTotal_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas);
   });
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
@@ -202,6 +227,7 @@ function criarUnidade(session, dados) {
     cnpj: cnpj,
     contrato_gestao: contratoGestao,
     valor_contrato_gestao: toNumber_(dados.valor_contrato_gestao),
+    valor_contrato_gestao_sus: toNumber_(dados.valor_contrato_gestao_sus),
     classificacao_orcamentaria: sanitizeString_(dados.classificacao_orcamentaria, 200),
     acao: sanitizeString_(dados.acao, 50),
     subacao: sanitizeString_(dados.subacao, 50),
@@ -215,9 +241,9 @@ function criarUnidade(session, dados) {
   bumpVersao_('unidades');
   substituirTasDaUnidade_(id, dados.tas, session);
 
-  var tas = listarTasPorUnidade_(id);
+  var tas = anotarVencimentoTas_(listarTasPorUnidade_(id));
   novo.tas = tas;
-  novo.parcela_mensal_total = parcelaMensalTotal_(novo.valor_contrato_gestao, tas);
+  novo.parcela_mensal_total = parcelaMensalTotal_(novo.valor_contrato_gestao, novo.valor_contrato_gestao_sus, tas);
   return ok_(novo);
 }
 
@@ -233,6 +259,7 @@ function atualizarUnidade(session, id, dados) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = sanitizeString_(dados[campo], 200);
   });
   if (dados.hasOwnProperty('valor_contrato_gestao')) atualizado.valor_contrato_gestao = toNumber_(dados.valor_contrato_gestao);
+  if (dados.hasOwnProperty('valor_contrato_gestao_sus')) atualizado.valor_contrato_gestao_sus = toNumber_(dados.valor_contrato_gestao_sus);
 
   if (atualizado.cnpj && !validarCnpj_(atualizado.cnpj)) return fail_('CNPJ inválido.');
 
@@ -253,9 +280,9 @@ function atualizarUnidade(session, id, dados) {
 
   if (dados.hasOwnProperty('tas')) substituirTasDaUnidade_(id, dados.tas, session);
 
-  var tas = listarTasPorUnidade_(id);
+  var tas = anotarVencimentoTas_(listarTasPorUnidade_(id));
   atualizado.tas = tas;
-  atualizado.parcela_mensal_total = parcelaMensalTotal_(atualizado.valor_contrato_gestao, tas);
+  atualizado.parcela_mensal_total = parcelaMensalTotal_(atualizado.valor_contrato_gestao, atualizado.valor_contrato_gestao_sus, tas);
   return ok_(atualizado);
 }
 

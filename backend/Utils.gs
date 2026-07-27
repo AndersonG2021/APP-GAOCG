@@ -20,7 +20,10 @@ var SHEETS = {
 
 var HEADERS = {
   Usuarios: ['id', 'nome', 'login', 'senha_hash', 'perfil', 'ativo', 'data_criacao', 'data_inativacao'],
-  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'valor_contrato_gestao', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
+  // valor_contrato_gestao_sus: novo (sessão 2026-07-27) - algumas unidades
+  // têm repasse mensal recorrente em duas fontes (Tesouro e SUS), outras só
+  // numa. valor_contrato_gestao (já existia) passa a significar "Tesouro".
+  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'valor_contrato_gestao', 'valor_contrato_gestao_sus', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
   ListasPersonalizadas: ['id', 'tipo_lista', 'valor', 'pausa_contagem_parado', 'ativo', 'criado_por', 'data_criacao'],
   SOF: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
     'acao_snapshot', 'subacao_snapshot', 'gd_snapshot', 'divergente_da_unidade', 'tipo', 'sei', 'sof_numero',
@@ -53,7 +56,10 @@ var HEADERS = {
   // confiada como veio do frontend. parcela_mensal (em SofFontes) continua
   // independente disso - não é derivada do cronograma.
   SofFontesCronograma: ['id', 'sof_fonte_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
-  UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'criado_por', 'data_criacao'],
+  // tipo_pagamento/data_vencimento: novos (sessão 2026-07-27) - T.A. sazonal
+  // com data limite; vencido é calculado (anotarVencimentoTas_, Unidades.gs),
+  // nunca gravado.
+  UnidadesTA: ['id', 'unidade_id', 'objeto_ta', 'numero_ta', 'valor_ta', 'tipo_pagamento', 'data_vencimento', 'criado_por', 'data_criacao'],
   // fonte/arquivo_drive_id/arquivo_url/mes_referencia: colunas que já existem
   // na aba real (criarNotaEmpenho já grava nelas há tempo - HEADERS não
   // refletia isso porque appendObjectRow_/updateObjectRow_ usam o cabeçalho
@@ -82,7 +88,7 @@ var HEADERS = {
  * abaixo e aplicarFormatoTexto_/protegerFormatoLinha_.
  */
 var COLUNAS_NUMERICAS = {
-  Unidades: ['valor_contrato_gestao'],
+  Unidades: ['valor_contrato_gestao', 'valor_contrato_gestao_sus'],
   SofFontes: ['parcela_mensal', 'total_solicitado'],
   SofFontesCronograma: ['mes', 'valor'],
   UnidadesTA: ['valor_ta'],
