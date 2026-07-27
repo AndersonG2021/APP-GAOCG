@@ -200,7 +200,7 @@ const TelaRecibos = (function () {
             <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
             <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
             <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
-            <td>${UI.escaparHtml(r.status)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+            <td>${UI.seloStatusReciboHtml(r.status)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;

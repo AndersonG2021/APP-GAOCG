@@ -1045,6 +1045,21 @@ Usuário reportou que, ao clicar num link do Dashboard que leva pra outra aba co
 
 Sem alteração de backend, sem coluna/aba nova.
 
+## Reforço visual — cores de status e cards com mais destaque (sessão 2026-07-27, publicado, só CSS/frontend)
+
+Usuário pediu explicitamente uma mudança **só visual** ("não estou falando de features apenas a questão visual"): o app estava "tudo branco no branco", queria os cards com mais destaque e os status de Recibo coloridos, usando como exemplo uma imagem de referência com 14 status coloridos.
+
+- **Cores por status de Recibo (`js/app.js`):** novo mapa `CORES_STATUS_RECIBO_` (14 status → cor de fundo/texto, batendo com a imagem de referência do usuário) + `seloStatusReciboHtml(status)` (gera `<span class="selo selo-status" style="background:...;color:...">`), exportado em `UI`. A chave é comparada por string exata (maiúsculo/sem espaço nas pontas) — **se algum status não aparecer colorido, é porque o texto exato cadastrado em Listas Personalizadas não bate com nenhuma chave do mapa; o usuário precisa reportar a grafia exata pra eu ajustar**, já que status são texto livre configurável, não um enum fixo.
+  - Usado em `js/recibos.js` (coluna Status da tabela) e `js/dashboard.js` (painel "Recibos por status").
+- **Cards com mais presença (`css/style.css`):**
+  - `--sombra` ficou mais profunda; nova `--sombra-forte` (usada no hover) e novos tokens de cor `--roxo`/`--roxo-claro`/`--ciano`/`--ciano-claro` (pra dar mais variedade aos indicadores do Dashboard).
+  - `.cartao-sof`, `.cartao-ne` e `.cartao-unidade` ganharam uma borda esquerda colorida por padrão (antes só apareciam coloridas em estado de alerta/parado — `.cartao-sof.parado`, `.cartao-ne.alerta`, `.cartao-unidade.inativa` continuam sobrescrevendo pra amarelo/vermelho/cinza) e sombra mais forte no hover.
+  - `.cartao-indicador` (cartões do Dashboard) ganhou uma barra colorida no topo e o ícone ganhou fundo colorido — `cartaoIndicadorHtml_` (`js/dashboard.js`) agora recebe um 6º parâmetro `cor` (azul/verde/amarelo/vermelho/roxo/ciano), um por cartão, pra cada um ter uma identidade visual própria em vez de todos azuis.
+
+Sem alteração de backend, sem coluna/aba nova, sem mudança de lógica/comportamento — só cor e sombra.
+
+**Ainda não testado:** conferir visualmente todas as 14 cores de status batendo com a imagem de referência; conferir que os 6 cartões do Dashboard aparecem com cores diferentes; conferir em telas estreitas que nada quebrou.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
