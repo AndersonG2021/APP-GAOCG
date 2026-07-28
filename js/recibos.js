@@ -103,6 +103,15 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
     if (filtroInicial && filtroInicial.competencia) UI.definirValoresFiltroMultiplo('recFiltroCompetencia', filtroInicial.competencia);
     if (filtroInicial && filtroInicial.status) UI.definirValoresFiltroMultiplo('recFiltroStatus', filtroInicial.status);
+    // statusExceto (Dashboard, card de Recibos): seleciona todos os status
+    // conhecidos MENOS os informados - é como o filtro múltiplo (que é
+    // "incluir X") expressa um "status diferente de PAGO".
+    if (filtroInicial && filtroInicial.statusExceto) {
+      const excluir = filtroInicial.statusExceto.map(s => String(s).toUpperCase());
+      const selecionar = statusFiltroOpcoes.map(o => o.valor)
+        .filter(v => excluir.indexOf(String(v).toUpperCase()) === -1);
+      UI.definirValoresFiltroMultiplo('recFiltroStatus', selecionar);
+    }
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosRec', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);

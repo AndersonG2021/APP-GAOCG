@@ -84,13 +84,19 @@ const Dashboard = (function () {
     renderConteudo(dados);
   }
 
-  function cartaoIndicadorHtml_(id, icone, valor, rotulo, deltaHtml, cor) {
+  /**
+   * clicavel (padrão true): quando false, o card fica só informativo - sem a
+   * classe .clicavel (cursor/hover) e sem a seta (usado no card "Atendido x
+   * Solicitado", que não navega pra lugar nenhum).
+   */
+  function cartaoIndicadorHtml_(id, icone, valor, rotulo, deltaHtml, cor, clicavel) {
     const corClasse = cor || 'azul';
+    const ehClicavel = clicavel !== false;
     return `
-      <div class="cartao-indicador clicavel acento-${corClasse}" id="${id}">
+      <div class="cartao-indicador ${ehClicavel ? 'clicavel' : ''} acento-${corClasse}" id="${id}">
         <div class="cartao-indicador-topo">
           <span class="cartao-indicador-icone ${corClasse}">${icone}</span>
-          <span class="cartao-indicador-seta">${ICONE_SETA}</span>
+          ${ehClicavel ? `<span class="cartao-indicador-seta">${ICONE_SETA}</span>` : ''}
         </div>
         <div class="valor">${valor}</div>
         <div class="rotulo">${rotulo}</div>
@@ -100,14 +106,27 @@ const Dashboard = (function () {
 
   function renderConteudo(dados) {
     const r = dados.recibos, sofNe = dados.sof_ne_pendente, parados = dados.processos_parados,
-      ne = dados.notas_empenho, uni = dados.unidades;
+      ne = dados.notas_empenho, uni = dados.unidades, atendido = dados.sof_atendido;
 
+    // --- Card 1: Recibos criados x pagos na competência ---
     const deltaRecibos = variacaoPercentual_(r.total_recibos, r.total_recibos_competencia_anterior);
     const competenciaAnterior = competenciaAnteriorLabel_(r.competencia);
-    const deltaRecibosHtml = deltaRecibos === null ? '' : `<div class="cartao-indicador-delta ${deltaRecibos >= 0 ? 'positivo' : 'negativo'}">${deltaRecibos >= 0 ? '+' : ''}${deltaRecibos}% vs ${UI.escaparHtml(competenciaAnterior)}</div>`;
-
+    const pagos = r.total_recibos_pagos || 0;
+    const naoPagos = r.total_recibos - pagos;
+    // Ainda usado pelo painel inferior "Recibos por status" (será substituído
+    // pelos gráficos na Parte 2).
     const percentualPago = r.total_valor_liquidado > 0 ? Math.round((r.total_valor_pago / r.total_valor_liquidado) * 100) : null;
-    const deltaPagoHtml = percentualPago === null ? '' : `<div class="cartao-indicador-delta">${percentualPago}% do valor liquidado</div>`;
+    const compRecibosHtml = `<div class="cartao-indicador-delta">${pagos} pago(s) · ${naoPagos} não pago(s)</div>`;
+    const deltaVsMesHtml = deltaRecibos === null ? '' : `<div class="cartao-indicador-delta ${deltaRecibos >= 0 ? 'positivo' : 'negativo'}">${deltaRecibos >= 0 ? '+' : ''}${deltaRecibos}% vs ${UI.escaparHtml(competenciaAnterior)}</div>`;
+
+    // --- Card 2: Atendido (empenhado) x Solicitado, acumulado geral ---
+    const solicitado = (atendido && atendido.total_solicitado) || 0;
+    const empenhado = (atendido && atendido.total_empenhado) || 0;
+    const percentualAtendido = solicitado > 0 ? Math.round((empenhado / solicitado) * 100) : null;
+    const atendidoDeltaHtml = `
+      <div class="cartao-indicador-barra"><div class="cartao-indicador-barra-preenchimento" style="width:${Math.min(percentualAtendido || 0, 100)}%"></div></div>
+      <div class="cartao-indicador-delta">${UI.formatarMoeda(empenhado)} empenhado</div>
+      <div class="cartao-indicador-subvalor">de ${UI.formatarMoeda(solicitado)} solicitado</div>`;
 
     const statusLinhas = Object.keys(r.por_status).map(status => {
       const s = r.por_status[status];
@@ -130,13 +149,10 @@ const Dashboard = (function () {
       </table>` : '<p class="estado-vazio">Nenhum processo parado no momento.</p>';
 
     document.getElementById('dashConteudo').innerHTML = `
-      <div class="grade-indicadores">
-        ${cartaoIndicadorHtml_('dashCardRecibos', ICONE_RECIBO, r.total_recibos, `Recibos na competência ${UI.escaparHtml(r.competencia)}`, deltaRecibosHtml, 'azul')}
-        ${cartaoIndicadorHtml_('dashCardPago', ICONE_CIFRAO, UI.formatarMoeda(r.total_valor_pago), 'Valor pago no período', deltaPagoHtml, 'verde')}
-        ${cartaoIndicadorHtml_('dashCardSofNe', ICONE_ARQUIVO, sofNe.total_pendentes, 'SOFs sem NE emitida', `<div class="cartao-indicador-delta">${sofNe.aguardando_mais_de_5_dias} aguardando há mais de 5 dias</div>`, 'amarelo')}
-        ${cartaoIndicadorHtml_('dashCardParados', ICONE_RELOGIO, parados.itens.length, 'Processos parados', `<div class="cartao-indicador-delta">${parados.novos_hoje} novo(s) hoje</div>`, 'roxo')}
-        ${cartaoIndicadorHtml_('dashCardSaldoNe', ICONE_ALERTA, UI.formatarMoeda(ne.saldo_disponivel), 'Saldo disponível em Notas de Empenho', ne.total_sem_saldo > 0 ? `<div class="cartao-indicador-delta negativo">${ne.total_sem_saldo} sem saldo</div>` : '', 'vermelho')}
-        ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`, 'ciano')}
+      <div class="grade-indicadores grade-indicadores-3">
+        ${cartaoIndicadorHtml_('dashCardRecibos', ICONE_RECIBO, r.total_recibos, `Recibos na competência ${UI.escaparHtml(r.competencia)}`, compRecibosHtml + deltaVsMesHtml, 'azul')}
+        ${cartaoIndicadorHtml_('dashCardAtendido', ICONE_CIFRAO, percentualAtendido === null ? '—' : percentualAtendido + '%', 'Atendido do total solicitado', atendidoDeltaHtml, 'verde', false)}
+        ${cartaoIndicadorHtml_('dashCardSaldoBaixo', ICONE_ALERTA, ne.total_saldo_abaixo_20, 'NEs com saldo abaixo de 20% da parcela', '<div class="cartao-indicador-delta">Clique para ver as Notas de Empenho</div>', 'vermelho')}
       </div>
 
       <div class="dash-grade-paineis">
@@ -172,14 +188,12 @@ const Dashboard = (function () {
     document.getElementById('dashBuscaNe').addEventListener('input', function () { renderNeLista_(ne.itens, this.value); });
     document.getElementById('dashVerTodosNe').addEventListener('click', e => { e.preventDefault(); App.navegarPara('notasEmpenho'); });
 
-    document.getElementById('dashCardRecibos').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia] }));
-    document.getElementById('dashCardPago').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia] }));
-    document.getElementById('dashCardSofNe').addEventListener('click', () => App.navegarPara('sof', { semNe: true }));
-    document.getElementById('dashCardParados').addEventListener('click', () => {
-      document.getElementById('dashPainelParados').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    document.getElementById('dashCardSaldoNe').addEventListener('click', () => App.navegarPara('notasEmpenho'));
-    document.getElementById('dashCardUnidades').addEventListener('click', () => App.navegarPara('unidades'));
+    // Card 1: Recibos da competência, com todos os status EXCETO "PAGO"
+    // (o filtro de status é "incluir X", então mandamos todos menos PAGO).
+    document.getElementById('dashCardRecibos').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia], statusExceto: ['PAGO'] }));
+    // Card 2 (Atendido x Solicitado) é só informativo - sem clique.
+    // Card 3: Notas de Empenho já filtrado por saldo < 20% da parcela.
+    document.getElementById('dashCardSaldoBaixo').addEventListener('click', () => App.navegarPara('notasEmpenho', { saldoBaixo: true }));
 
     document.getElementById('dashVerTodosRecibos').addEventListener('click', e => { e.preventDefault(); App.navegarPara('recibos', { competencia: [r.competencia] }); });
 
