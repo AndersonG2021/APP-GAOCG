@@ -416,6 +416,12 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
     var fontesDaMesmaFonte = fontesDoSof.filter(function (f) { return f.fonte === grupo.fonte; });
     var parcelaMensalRef = fontesDaMesmaFonte
       .reduce(function (soma, f) { return soma + toNumber_(f.parcela_mensal); }, 0);
+    // Total solicitado desta NE = total_solicitado das fontes do SOF que batem
+    // com a fonte da NE (soma dos meses no cronograma da fonte). Base do
+    // "Falta ser Atendido" (padronização de nomenclatura 2026-07-28: Atendido =
+    // empenhado; Falta = Solicitado - Atendido).
+    var totalSolicitadoFonte = fontesDaMesmaFonte
+      .reduce(function (soma, f) { return soma + toNumber_(f.total_solicitado); }, 0);
     // SOF de pagamento único (só 1 mês preenchido no cronograma da fonte, ou
     // nenhum) não é um desembolso recorrente - o alerta "abaixo do previsto"
     // só faz sentido pra fontes com mais de 1 mês no cronograma.
@@ -452,6 +458,14 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       valor_bruto: grupo.valor,
       valor_liquidado: valorLiquidado,
       valor_atual: valorAtual,
+      // Nomenclatura padronizada (2026-07-28): total_atendido = empenhado
+      // (valor_bruto); saldo_atual = valor_atual; falta_atendido = solicitado -
+      // atendido. valor_bruto/valor_liquidado/valor_atual mantidos para não
+      // quebrar quem já consome, mas a UI passa a usar os campos abaixo.
+      total_solicitado: totalSolicitadoFonte,
+      total_atendido: grupo.valor,
+      saldo_atual: valorAtual,
+      falta_atendido: totalSolicitadoFonte - grupo.valor,
       parcela_mensal_referencia: parcelaMensalRef,
       alerta: parcelaMensalRef > 0 && valorAtual < parcelaMensalRef && mesesPreenchidosFonte > 1,
       arquivos: grupo.arquivos,

@@ -64,7 +64,9 @@ function montarLinhasNe_(session, filtros) {
     .map(function (g) {
       return {
         numero_ne: g.numero_ne || '', unidade: g.unidade_nome || '', oss: g.sof_oss || '', fonte: g.fonte || '',
-        objeto: g.sof_objeto || '', empenhado: g.valor_bruto, atendido: g.valor_liquidado, saldo: g.valor_atual
+        objeto: g.sof_objeto || '',
+        total_solicitado: g.total_solicitado, total_atendido: g.total_atendido,
+        saldo_atual: g.saldo_atual, falta_atendido: g.falta_atendido
       };
     });
 }
@@ -130,9 +132,10 @@ var RELATORIO_CATALOGO_ = {
       { key: 'oss', rotulo: 'OSS', tipo: 'texto' },
       { key: 'fonte', rotulo: 'Fonte', tipo: 'texto' },
       { key: 'objeto', rotulo: 'Objeto', tipo: 'texto' },
-      { key: 'empenhado', rotulo: 'Empenhado', tipo: 'moeda' },
-      { key: 'atendido', rotulo: 'Atendido', tipo: 'moeda' },
-      { key: 'saldo', rotulo: 'Saldo', tipo: 'moeda' }
+      { key: 'total_solicitado', rotulo: 'Total Solicitado', tipo: 'moeda' },
+      { key: 'total_atendido', rotulo: 'Total Atendido', tipo: 'moeda' },
+      { key: 'saldo_atual', rotulo: 'Saldo Atual', tipo: 'moeda' },
+      { key: 'falta_atendido', rotulo: 'Falta ser Atendido', tipo: 'moeda' }
     ]
   },
   sof: {
