@@ -122,10 +122,11 @@ const Dashboard = (function () {
     const solicitado = (atendido && atendido.total_solicitado) || 0;
     const empenhado = (atendido && atendido.total_empenhado) || 0;
     const percentualAtendido = solicitado > 0 ? Math.round((empenhado / solicitado) * 100) : null;
+    const faltaAtender = Math.max(solicitado - empenhado, 0);
     const atendidoDeltaHtml = `
       <div class="cartao-indicador-barra"><div class="cartao-indicador-barra-preenchimento" style="width:${Math.min(percentualAtendido || 0, 100)}%"></div></div>
-      <div class="cartao-indicador-delta">${UI.formatarMoeda(empenhado)} empenhado</div>
-      <div class="cartao-indicador-subvalor">de ${UI.formatarMoeda(solicitado)} solicitado</div>`;
+      <div class="cartao-indicador-delta">${UI.formatarMoeda(empenhado)} atendido de ${UI.formatarMoeda(solicitado)} solicitado</div>
+      <div class="cartao-indicador-subvalor">Falta ser atendido: ${UI.formatarMoeda(faltaAtender)}</div>`;
 
     document.getElementById('dashConteudo').innerHTML = `
       <div class="grade-indicadores grade-indicadores-3">
@@ -162,7 +163,7 @@ const Dashboard = (function () {
   const GRAF_METRICAS_ = [
     { valor: 'pago', rotulo: 'Total pago' },
     { valor: 'liquidado', rotulo: 'Total liquidado' },
-    { valor: 'empenhado', rotulo: 'Total empenhado (NE)' },
+    { valor: 'empenhado', rotulo: 'Total atendido (NE)' },
     { valor: 'contagem', rotulo: 'Nº de recibos' }
   ];
   const GRAF_DIMENSOES_ = [

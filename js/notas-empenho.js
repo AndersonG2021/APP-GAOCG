@@ -215,10 +215,10 @@ const TelaNotasEmpenho = (function () {
         <h3 class="cartao-ne-numero">${UI.escaparHtml(g.numero_ne)}</h3>
         <p class="cartao-ne-unidade">${UI.escaparHtml(g.unidade_nome || '-')}</p>
         <div class="cartao-ne-infogrid">
-          <div class="cartao-ne-infogrid-item"><span>Valor bruto</span><strong>${UI.formatarMoeda(g.valor_bruto)}</strong></div>
-          <div class="cartao-ne-infogrid-item"><span>Liquidado</span><strong>${UI.formatarMoeda(g.valor_liquidado)}</strong></div>
-          <div class="cartao-ne-infogrid-item"><span>Saldo atual</span><strong class="${g.alerta ? 'vermelho' : ''}">${UI.formatarMoeda(g.valor_atual)}</strong></div>
-          <div class="cartao-ne-infogrid-item"><span>Parcela de referência</span><strong>${UI.formatarMoeda(g.parcela_mensal_referencia)}</strong></div>
+          <div class="cartao-ne-infogrid-item"><span>Total Solicitado</span><strong>${UI.formatarMoeda(g.total_solicitado)}</strong></div>
+          <div class="cartao-ne-infogrid-item"><span>Total Atendido</span><strong>${UI.formatarMoeda(g.total_atendido)}</strong></div>
+          <div class="cartao-ne-infogrid-item"><span>Saldo Atual</span><strong class="${g.alerta ? 'vermelho' : ''}">${UI.formatarMoeda(g.saldo_atual)}</strong></div>
+          <div class="cartao-ne-infogrid-item"><span>Falta ser Atendido</span><strong>${UI.formatarMoeda(g.falta_atendido)}</strong></div>
         </div>
         <div class="cartao-ne-rodape">
           <div class="cartao-ne-rodape-links">

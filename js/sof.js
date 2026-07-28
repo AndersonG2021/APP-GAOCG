@@ -1034,7 +1034,7 @@ const TelaSof = (function () {
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor Empenhado</th><th>Período</th><th>Arquivo</th></tr></thead>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th></tr></thead>
         <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
       <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora.</p>
@@ -1044,7 +1044,7 @@ const TelaSof = (function () {
         <div class="campo"><label>Fonte</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
       </div>
       <div class="grade-3">
-        <div class="campo"><label>Valor Empenhado</label><input id="neValor" type="number" step="0.01" /></div>
+        <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
       <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
 
