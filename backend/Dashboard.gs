@@ -214,6 +214,131 @@ function competenciaAnterior_(competencia) {
   return MESES_ABREV_PT_[idx] + '.' + (ano < 10 ? '0' + ano : String(ano));
 }
 
+/** "jul.26" -> ordinal comparável (ano*12 + mês). null se não parsear. Usado no filtro de período dos gráficos. */
+function competenciaParaOrdinal_(competencia) {
+  if (!competencia) return null;
+  var partes = String(competencia).split('.');
+  var idx = MESES_ABREV_PT_.indexOf(String(partes[0]).toLowerCase());
+  var ano = Number(partes[1]);
+  if (idx < 0 || isNaN(ano)) return null;
+  // "26" -> 2026 (mesma convenção de 2 dígitos usada em todo o app).
+  if (ano < 100) ano += 2000;
+  return ano * 12 + idx;
+}
+
+/** Data ISO -> competência "mmm.aa". Usado pra atribuir o empenho ao mês em que foi registrado (quando não há cronograma). */
+function dataParaCompetencia_(iso) {
+  if (!iso) return null;
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return MESES_ABREV_PT_[d.getMonth()] + '.' + String(d.getFullYear()).slice(-2);
+}
+
+/**
+ * Painel de gráficos do Dashboard (sessão 2026-07-28, ver
+ * docs/ESPECIFICACAO_NOVO_DASHBOARD.md). Agrega uma métrica por uma dimensão,
+ * dentro de um período (competência de/até).
+ *
+ * params: { metrica, agruparPor, competenciaInicio, competenciaFim }
+ *   metrica   : 'pago' | 'liquidado' | 'empenhado' | 'contagem'
+ *   agruparPor: 'oss' | 'unidade' | 'fonte' | 'status' | 'mes'
+ *
+ * Fontes de dado:
+ *   - pago/liquidado/contagem -> aba Recibos (filtra por competencia do recibo).
+ *   - empenhado -> Notas de Empenho (valor). Por 'mes', distribui pelo
+ *     cronograma de desembolso quando a NE original tem um; senão joga o valor
+ *     no mês da data_criacao. Por oss/unidade/fonte, soma o valor da NE
+ *     filtrando pela competência da data_criacao. 'status' não se aplica a
+ *     empenho (NE não tem status) - retorna vazio nesse caso.
+ *
+ * Retorno: { metrica, agruparPor, itens: [{label, valor}], total, ehMoeda }.
+ */
+function obterGraficoDashboard(session, params) {
+  params = params || {};
+  var metrica = params.metrica || 'pago';
+  var agruparPor = params.agruparPor || 'oss';
+  var inicioOrd = competenciaParaOrdinal_(params.competenciaInicio);
+  var fimOrd = competenciaParaOrdinal_(params.competenciaFim);
+
+  function noPeriodo_(competencia) {
+    var ord = competenciaParaOrdinal_(competencia);
+    if (ord === null) return inicioOrd === null && fimOrd === null;
+    if (inicioOrd !== null && ord < inicioOrd) return false;
+    if (fimOrd !== null && ord > fimOrd) return false;
+    return true;
+  }
+
+  var acc = {};
+  function add_(label, valor) {
+    label = (label === '' || label === null || label === undefined) ? '(sem)' : String(label);
+    acc[label] = (acc[label] || 0) + valor;
+  }
+
+  var unidadesPorId = {};
+  todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
+
+  if (metrica === 'empenhado') {
+    if (agruparPor === 'status') {
+      return ok_({ metrica: metrica, agruparPor: agruparPor, itens: [], total: 0, ehMoeda: true });
+    }
+    var sofsPorId = {};
+    sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) { if (!toBool_(s.excluido)) sofsPorId[s.id] = s; });
+    var cronogramaPorNeId = agruparCronogramaPorNotaEmpenho_();
+
+    todasNotasEmpenhoComCache_().forEach(function (n) {
+      var sof = sofsPorId[n.sof_id];
+      if (!sof) return; // NE de SOF excluído/inexistente não entra
+      if (agruparPor === 'mes') {
+        var crono = cronogramaPorNeId[n.id];
+        if (crono && crono.length) {
+          var ano = Number(String(n.numero_ne).substring(0, 4)) || new Date().getFullYear();
+          crono.forEach(function (c) {
+            var comp = MESES_ABREV_PT_[c.mes - 1] + '.' + String(ano).slice(-2);
+            if (noPeriodo_(comp)) add_(comp, toNumber_(c.valor));
+          });
+        } else {
+          var compCriacao = dataParaCompetencia_(n.data_criacao);
+          if (noPeriodo_(compCriacao)) add_(compCriacao, toNumber_(n.valor));
+        }
+      } else {
+        var compCriacao2 = dataParaCompetencia_(n.data_criacao);
+        if (!noPeriodo_(compCriacao2)) return;
+        var unidade = unidadesPorId[sof.unidade_id];
+        var label = agruparPor === 'oss' ? sof.oss_snapshot
+          : agruparPor === 'fonte' ? n.fonte
+          : (unidade ? unidade.nome : '');
+        add_(label, toNumber_(n.valor));
+      }
+    });
+  } else {
+    sheetToObjects_(getSheet_(SHEETS.RECIBOS)).forEach(function (r) {
+      if (toBool_(r.excluido)) return;
+      if (!noPeriodo_(r.competencia)) return;
+      var valor = metrica === 'contagem' ? 1
+        : metrica === 'liquidado' ? toNumber_(r.valor_liquidado)
+        : toNumber_(r.valor_pago);
+      var unidade = unidadesPorId[r.unidade_id];
+      var label = agruparPor === 'oss' ? r.oss_snapshot
+        : agruparPor === 'fonte' ? r.fonte
+        : agruparPor === 'status' ? r.status
+        : agruparPor === 'mes' ? r.competencia
+        : (unidade ? unidade.nome : '');
+      add_(label, valor);
+    });
+  }
+
+  var itens = Object.keys(acc).map(function (label) { return { label: label, valor: acc[label] }; });
+  // Por mês: ordem cronológica. Nas demais dimensões: maior valor primeiro.
+  if (agruparPor === 'mes') {
+    itens.sort(function (a, b) { return (competenciaParaOrdinal_(a.label) || 0) - (competenciaParaOrdinal_(b.label) || 0); });
+  } else {
+    itens.sort(function (a, b) { return b.valor - a.valor; });
+  }
+  var total = itens.reduce(function (s, it) { return s + it.valor; }, 0);
+
+  return ok_({ metrica: metrica, agruparPor: agruparPor, itens: itens, total: total, ehMoeda: metrica !== 'contagem' });
+}
+
 function obterDashboard(session, params) {
   params = params || {};
   var competencia = params.competencia || competenciaAtual_();

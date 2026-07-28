@@ -539,3 +539,45 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 @media (max-width: 720px) {
   .grade-indicadores-3 { grid-template-columns: 1fr; }
 }
+
+/* ===== Painel de gráficos do Dashboard (Parte 2, 2026-07-28) ===== */
+.dash-graficos { margin-top: 4px; }
+.dash-graf-controles { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 16px; }
+.dash-graf-controles .campo { margin: 0; min-width: 150px; }
+.dash-graf-controles label { display: block; font-size: 11.5px; color: var(--cinza-500); margin-bottom: 4px; }
+.dash-graf-controles select { width: 100%; padding: 7px 8px; border: 1px solid var(--cinza-200); border-radius: 8px; background: var(--branco); color: var(--cinza-900); font-size: 13px; }
+.dash-graf-area { min-height: 200px; }
+
+.graf-render { width: 100%; overflow-x: auto; }
+.graf-svg { width: 100%; height: auto; max-height: 340px; display: block; }
+/* Rótulos dentro do SVG (usam fill, não color). */
+.graf-eixo-txt { fill: #898781; font-size: 11px; font-family: inherit; }
+.graf-val-txt { fill: var(--cinza-700); font-size: 10.5px; font-weight: 600; font-family: inherit; }
+
+/* Barras horizontais (HTML - melhor para rótulos longos de unidade/OSS). */
+.graf-hbars { display: flex; flex-direction: column; gap: 7px; padding: 4px 0; }
+.graf-hbar-linha { display: grid; grid-template-columns: 160px 1fr 96px; align-items: center; gap: 10px; }
+.graf-hbar-rotulo { font-size: 12px; color: var(--cinza-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.graf-hbar-trilho { background: var(--cinza-100); border-radius: 6px; height: 18px; overflow: hidden; }
+.graf-hbar-fill { height: 100%; background: #2a78d6; border-radius: 6px; min-width: 2px; transition: width .25s ease; }
+.graf-hbar-valor { font-size: 12px; color: var(--cinza-700); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Pizza / rosca + legenda. */
+.graf-pizza-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+.graf-svg-pizza { width: 180px; height: 180px; flex: 0 0 auto; }
+.graf-legenda { display: flex; flex-direction: column; gap: 6px; min-width: 220px; flex: 1; }
+.graf-leg-item { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; }
+.graf-leg-cor { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.graf-leg-rotulo { color: var(--cinza-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.graf-leg-valor { color: var(--cinza-500); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Tabela de valores (números exatos + acessibilidade). */
+.graf-tabela-wrap { margin-top: 14px; }
+.graf-tabela-wrap summary { cursor: pointer; font-size: 12.5px; color: var(--azul); font-weight: 600; }
+.graf-tabela { margin-top: 10px; }
+.graf-td-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) {
+  .dash-graf-controles .campo { min-width: 130px; flex: 1; }
+  .graf-hbar-linha { grid-template-columns: 110px 1fr 74px; }
+}

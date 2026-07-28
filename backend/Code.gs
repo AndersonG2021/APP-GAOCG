@@ -103,6 +103,7 @@ function handleRequest_(params) {
 
       // Dashboard (Funcionalidade 8)
       case 'obterDashboard': return jsonOut_(obterDashboard(session, params));
+      case 'obterGraficoDashboard': return jsonOut_(obterGraficoDashboard(session, params));
 
       // Versões (cache client-side por aba)
       case 'getVersoes': return jsonOut_(getVersoes(session, params));
