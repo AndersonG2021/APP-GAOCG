@@ -99,10 +99,14 @@ Novo endpoint `obterGraficoDashboard(session, params)`:
 
 ### 3.4. Renderização
 
-- Biblioteca **Chart.js empacotada localmente** em `js/vendor/chart.min.js`
-  (sem CDN em runtime), incluída no `index.html`.
-- Paleta e estilo seguindo o guia de dataviz (cores acessíveis, consistentes
-  em tema claro/escuro).
+- **Gráficos SVG próprios** (decisão 2026-07-28), sem biblioteca externa nem
+  CDN — no estilo vanilla/zero-dependência do resto do app. Implementados em
+  `js/dashboard.js` (funções `grafico*_`).
+- Paleta seguindo o guia de dataviz: **hue único** para barras/linha
+  (magnitude), paleta categórica validada para as fatias da pizza (identidade),
+  com teto de fatias/barras (top N + "Outros"). App é tema claro (light-only).
+- Cada gráfico vem acompanhado de uma **tabela de valores** (números exatos +
+  acessibilidade), em `<details>` recolhível.
 
 ---
 
