@@ -15,7 +15,8 @@ var SHEETS = {
   RECIBOS: 'Recibos',
   LOG_AUDITORIA: 'LogAuditoria',
   EDICOES_EM_ANDAMENTO: 'EdicoesEmAndamento',
-  CONTADORES: 'Contadores'
+  CONTADORES: 'Contadores',
+  RELATORIOS_MODELOS: 'RelatoriosModelos'
 };
 
 var HEADERS = {
@@ -79,7 +80,12 @@ var HEADERS = {
   LogAuditoria: ['id', 'usuario_id', 'perfil_usuario', 'data_hora', 'tipo_processo', 'processo_id',
     'dono_processo', 'campo_alterado', 'valor_anterior', 'valor_novo', 'fora_do_dono', 'origem'],
   EdicoesEmAndamento: ['tipo_processo', 'processo_id', 'usuario_id', 'iniciado_em', 'ultimo_heartbeat'],
-  Contadores: ['prefixo', 'proximo']
+  Contadores: ['prefixo', 'proximo'],
+  // Modelos de relatório (Parte 3 do redesign do Dashboard, 2026-07-28) -
+  // compartilhados entre todos. config_json guarda fonte/filtros/colunas/
+  // agrupamento/formato serializados. A aba é criada sob demanda por
+  // getSheetModelosRelatorio_ (Relatorios.gs) se ainda não existir.
+  RelatoriosModelos: ['id', 'nome', 'config_json', 'criado_por', 'data_criacao']
 };
 
 /**

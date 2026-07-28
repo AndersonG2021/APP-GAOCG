@@ -15,7 +15,8 @@ var PREFIXOS_ID = {
   SofFontes: 'SFT',
   SofFontesCronograma: 'SFC',
   UnidadesTA: 'UTA',
-  NotasEmpenhoCronograma: 'NEC'
+  NotasEmpenhoCronograma: 'NEC',
+  RelatoriosModelos: 'RPT'
 };
 
 /**

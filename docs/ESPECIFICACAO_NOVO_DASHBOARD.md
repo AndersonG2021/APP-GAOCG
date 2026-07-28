@@ -11,7 +11,12 @@
 
 O dashboard atual (6 cards em 2 linhas + 3 painéis inferiores) passa a ter:
 
-- **1 linha com 3 cards** no topo (os 3 cards da 2ª linha atual são **removidos**).
+- **6 cards em 2 linhas.** A 1ª linha muda (Recibos criados×pagos, Atendido×
+  Solicitado, NEs com saldo baixo). A **2ª linha é mantida** (Processos parados,
+  Saldo em NE, Total mensal comprometido) — a pedido do usuário (2026-07-28);
+  numa 1ª rodada eu havia removido por engano de interpretação. O card
+  "Processos parados" fica **informativo** (o painel-lista que ele abria foi
+  substituído pelos gráficos).
 - **1 painel de gráficos** configurável (substitui "Recibos por status",
   "Situação das NE's" e "Processos parados").
 - **1 botão "Gerar relatório"** que abre um assistente em etapas.

@@ -105,6 +105,14 @@ function handleRequest_(params) {
       case 'obterDashboard': return jsonOut_(obterDashboard(session, params));
       case 'obterGraficoDashboard': return jsonOut_(obterGraficoDashboard(session, params));
 
+      // Relatórios (Parte 3 do redesign do Dashboard)
+      case 'obterCatalogoRelatorios': return jsonOut_(obterCatalogoRelatorios(session));
+      case 'gerarRelatorio': return jsonOut_(gerarRelatorio(session, params));
+      case 'gerarRelatorioSheets': return jsonOut_(gerarRelatorioSheets(session, params));
+      case 'listarModelosRelatorio': return jsonOut_(listarModelosRelatorio(session));
+      case 'salvarModeloRelatorio': return jsonOut_(salvarModeloRelatorio(session, params.data));
+      case 'excluirModeloRelatorio': return jsonOut_(excluirModeloRelatorio(session, params.id));
+
       // Versões (cache client-side por aba)
       case 'getVersoes': return jsonOut_(getVersoes(session, params));
 
