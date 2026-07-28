@@ -36,13 +36,47 @@ function dashboardRecibos_(session, competencia, recibosCarregados) {
     ? rows.filter(function (r) { return r.competencia === competenciaAnterior; }).length
     : null;
 
+  // total_recibos_pagos (sessão 2026-07-28): quantos dos recibos da competência
+  // já estão com status exatamente "PAGO" - alimenta o card "criados x pagos".
+  var totalRecibosPagos = doMes.filter(function (r) {
+    return String(r.status || '').toUpperCase() === 'PAGO';
+  }).length;
+
   return {
     competencia: competencia,
     total_recibos: doMes.length,
+    total_recibos_pagos: totalRecibosPagos,
     total_recibos_competencia_anterior: totalRecibosAnterior,
     total_valor_liquidado: totalLiquidado,
     total_valor_pago: totalPago,
     por_status: porStatus
+  };
+}
+
+/**
+ * Card "Atendido x Solicitado" (sessão 2026-07-28): compara o total empenhado
+ * (soma do valor de todas as Notas de Empenho de SOFs não excluídas) com o
+ * total solicitado (soma de SOF.total_solicitado das mesmas SOFs). Acumulado
+ * geral - não filtra por competência (decisão de desenho, ver
+ * docs/ESPECIFICACAO_NOVO_DASHBOARD.md). sofs já vem sem excluídos de
+ * obterDashboard.
+ */
+function dashboardSofAtendido_(session, sofs) {
+  var idsSof = {};
+  var totalSolicitado = 0;
+  sofs.forEach(function (s) {
+    idsSof[s.id] = true;
+    totalSolicitado += toNumber_(s.total_solicitado);
+  });
+
+  var totalEmpenhado = 0;
+  todasNotasEmpenhoComCache_().forEach(function (n) {
+    if (idsSof[n.sof_id]) totalEmpenhado += toNumber_(n.valor);
+  });
+
+  return {
+    total_solicitado: totalSolicitado,
+    total_empenhado: totalEmpenhado
   };
 }
 
@@ -127,6 +161,11 @@ function dashboardNotasEmpenho_(session, sofsCarregados) {
   });
   semSaldo.sort(function (a, b) { return a.valor_atual - b.valor_atual; });
 
+  // total_saldo_abaixo_20 (sessão 2026-07-28): card "NEs com saldo baixo" -
+  // grupos com saldo atual < 20% da parcela mensal de referência. Mesmo
+  // critério do filtro saldoBaixo de listarNotasEmpenho (grupoNeComSaldoBaixo_).
+  var saldoAbaixo20 = grupos.filter(grupoNeComSaldoBaixo_).length;
+
   var itens = grupos.slice().sort(function (a, b) {
     if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;
     return a.numero_ne < b.numero_ne ? -1 : 1;
@@ -137,6 +176,7 @@ function dashboardNotasEmpenho_(session, sofsCarregados) {
     total_liquidado: totalLiquidado,
     saldo_disponivel: totalSaldo,
     total_sem_saldo: semSaldo.length,
+    total_saldo_abaixo_20: saldoAbaixo20,
     itens_sem_saldo: semSaldo.slice(0, 8),
     itens: itens
   };
@@ -190,6 +230,7 @@ function obterDashboard(session, params) {
 
   return ok_({
     recibos: dashboardRecibos_(session, competencia, recibos),
+    sof_atendido: dashboardSofAtendido_(session, sofs),
     sof_ne_pendente: dashboardSofPendenteNe_(session, sofs),
     processos_parados: dashboardParados_(session, sofs, recibos),
     notas_empenho: dashboardNotasEmpenho_(session, sofs),

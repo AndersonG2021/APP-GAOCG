@@ -522,3 +522,20 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 @media (max-width: 400px) {
   .cartao-login { padding: 22px; }
 }
+
+/* ===== Novo Dashboard (2026-07-28): 3 cards do topo ===== */
+.grade-indicadores-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Mini barra de progresso dentro do card (card "Atendido x Solicitado"). */
+.cartao-indicador-barra { width: 100%; height: 6px; border-radius: 999px; background: var(--cinza-200); overflow: hidden; margin-top: 8px; }
+.cartao-indicador-barra-preenchimento { height: 100%; background: var(--verde); border-radius: 999px; transition: width .25s ease; }
+/* "de R$ X solicitado" - letra menor abaixo do valor empenhado. */
+.cartao-indicador-subvalor { font-size: 10.5px; color: var(--cinza-500); margin-top: 2px; }
+
+/* Filtro de checkbox na barra de filtros (ex.: "Somente saldo < 20%" em NE). */
+.campo-checkbox-filtro { display: flex; align-items: center; }
+.rotulo-checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--cinza-700); cursor: pointer; white-space: nowrap; }
+.rotulo-checkbox input { width: 15px; height: 15px; cursor: pointer; margin: 0; }
+
+@media (max-width: 720px) {
+  .grade-indicadores-3 { grid-template-columns: 1fr; }
+}

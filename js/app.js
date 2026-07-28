@@ -541,6 +541,7 @@ const UI = (function () {
         botaoTodos.addEventListener('click', () => {
           raiz.querySelectorAll('.filtro-multiplo-x').forEach(btn => limparFiltroMultiplo(btn.dataset.alvo));
           raiz.querySelectorAll('input[type=text], input[type=search]').forEach(inp => { inp.value = ''; });
+          raiz.querySelectorAll('input[type=checkbox]').forEach(chk => { chk.checked = false; });
           raiz.querySelectorAll('select').forEach(sel => { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });
           if (aoLimpar) aoLimpar();
         });
@@ -560,7 +561,7 @@ const App = (function () {
   const TELAS = {
     dashboard: () => Dashboard.render(),
     sof: (opts) => TelaSof.render(opts),
-    notasEmpenho: () => TelaNotasEmpenho.render(),
+    notasEmpenho: (opts) => TelaNotasEmpenho.render(opts),
     recibos: (opts) => TelaRecibos.render(opts),
     unidades: () => TelaUnidades.render(),
     listas: () => TelaListas.render(),

@@ -463,9 +463,27 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
   return resultado;
 }
 
+/**
+ * "Saldo baixo" de uma NE (sessão 2026-07-28): saldo atual (valor_atual)
+ * abaixo de 20% da parcela mensal de referência da fonte. Mesmo critério
+ * usado pelo card do Dashboard (dashboardNotasEmpenho_, Dashboard.gs) e pelo
+ * filtro saldoBaixo de listarNotasEmpenho, para os dois nunca divergirem.
+ * Exige parcela_mensal_referencia > 0 (sem parcela de referência não há como
+ * dizer se o saldo está "baixo").
+ */
+var FRACAO_SALDO_BAIXO_NE_ = 0.20;
+function grupoNeComSaldoBaixo_(g) {
+  return g.parcela_mensal_referencia > 0 &&
+    g.valor_atual < FRACAO_SALDO_BAIXO_NE_ * g.parcela_mensal_referencia;
+}
+
 function listarNotasEmpenho(session, params) {
   params = params || {};
   var resultado = montarGruposNotasEmpenho_(session);
+
+  // Filtro do Dashboard (card "NEs com saldo baixo"): só grupos com saldo
+  // atual abaixo de 20% da parcela mensal de referência.
+  if (toBool_(params.saldoBaixo)) resultado = resultado.filter(grupoNeComSaldoBaixo_);
 
   var unidadeIds = paraArrayFiltro_(params.unidade_id);
   if (unidadeIds.length) resultado = resultado.filter(function (g) { return unidadeIds.indexOf(String(g.sof_unidade_id)) !== -1; });

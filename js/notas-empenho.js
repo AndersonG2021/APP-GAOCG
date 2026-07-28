@@ -19,7 +19,12 @@ const TelaNotasEmpenho = (function () {
   let totalRegistros = 0;
   const TAMANHO_PAGINA = 20;
 
-  async function render() {
+  /**
+   * opts (opcional, vindo do Dashboard via App.navegarPara): `saldoBaixo: true`
+   * já marca o filtro "Somente saldo < 20% da parcela" antes da primeira carga
+   * (card "NEs com saldo baixo" do Dashboard).
+   */
+  async function render(opts) {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),
@@ -51,6 +56,9 @@ const TelaNotasEmpenho = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
             <div id="neFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
+          <div class="campo campo-checkbox-filtro">
+            <label class="rotulo-checkbox"><input type="checkbox" id="neFiltroSaldoBaixo" /> Somente saldo &lt; 20% da parcela</label>
+          </div>
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosNe">Limpar filtros</button>
           <span style="flex:1"></span>
@@ -74,6 +82,10 @@ const TelaNotasEmpenho = (function () {
     UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
+    document.getElementById('neFiltroSaldoBaixo').addEventListener('change', () => {
+      if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
+    });
+    if (opts && opts.saldoBaixo) document.getElementById('neFiltroSaldoBaixo').checked = true;
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosNe', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
@@ -88,7 +100,8 @@ const TelaNotasEmpenho = (function () {
       objeto: UI.valoresFiltroMultiplo('neFiltroObjeto'),
       tipo_unidade: UI.valoresFiltroMultiplo('neFiltroTipoUnidade'),
       dea: UI.valoresFiltroMultiplo('neFiltroDea'),
-      fonte: UI.valoresFiltroMultiplo('neFiltroFonte')
+      fonte: UI.valoresFiltroMultiplo('neFiltroFonte'),
+      saldoBaixo: document.getElementById('neFiltroSaldoBaixo').checked
     };
   }
 
