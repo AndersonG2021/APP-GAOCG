@@ -600,3 +600,11 @@ input.rel-input { min-width: 220px; flex: 1; }
 @media (max-width: 720px) {
   input.rel-input, select.rel-input { min-width: 140px; }
 }
+
+/* ===== Editor com negrito (Objeto da despesa no SOF, 2026-07-28) ===== */
+.editor-rico { border: 1px solid var(--cinza-200); border-radius: 8px; overflow: hidden; background: var(--branco); }
+.editor-rico-barra { display: flex; gap: 4px; padding: 5px 6px; border-bottom: 1px solid var(--cinza-200); background: var(--cinza-100); }
+.editor-rico-btn { min-width: 30px; height: 26px; border: 1px solid var(--cinza-300); border-radius: 6px; background: var(--branco); cursor: pointer; font-size: 13px; line-height: 1; color: var(--cinza-900); }
+.editor-rico-btn:hover { background: var(--azul-claro); border-color: var(--azul); }
+.editor-rico-area { min-height: 120px; max-height: 320px; overflow-y: auto; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--cinza-900); outline: none; }
+.editor-rico-area:empty:before { content: attr(data-placeholder); color: var(--cinza-500); }
