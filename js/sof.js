@@ -18,8 +18,7 @@ const TelaSof = (function () {
     { id: 'sofContrato', rotulo: 'Contrato de Gestão' },
     { id: 'seiAcao', rotulo: 'Ação' },
     { id: 'seiSubacao', rotulo: 'Subação' },
-    { id: 'seiGd', rotulo: 'G.D.' },
-    { id: 'sofTa', rotulo: 'T.A.' },
+    { id: 'seiGrupoDespesa', rotulo: 'Grupo de despesa' },
     { id: 'sofSei', rotulo: 'Número do Processo' },
     { id: 'sofNumero', rotulo: 'Nº SOF' },
     { id: 'sofDea', rotulo: 'DEA' },
@@ -39,11 +38,7 @@ const TelaSof = (function () {
     { id: 'seiSolicitanteSetor', rotulo: 'Solicitante - Setor' },
     { id: 'seiOrdenadorNome', rotulo: 'Ordenador - Nome' },
     { id: 'seiOrdenadorCargo', rotulo: 'Ordenador - Cargo' },
-    { id: 'seiOrdenadorSetor', rotulo: 'Ordenador - Setor' },
-    { id: 'seiAssinaturaNeNome', rotulo: 'Assinatura da Nota de Empenho - Nome' },
-    { id: 'seiAssinaturaNeCargo', rotulo: 'Assinatura da Nota de Empenho - Cargo' },
-    { id: 'seiAssinaturaNlNome', rotulo: 'Assinatura da Nota de Liquidação - Nome' },
-    { id: 'seiAssinaturaNlCargo', rotulo: 'Assinatura da Nota de Liquidação - Cargo' }
+    { id: 'seiOrdenadorSetor', rotulo: 'Ordenador - Setor' }
   ];
   let unidades = [];
   let itens = [];
@@ -426,8 +421,9 @@ const TelaSof = (function () {
     { id: 'seiCredorCnpj', campo: 'sei_credor_cnpj', altCampo: 'cnpj_snapshot' },
     { id: 'seiAcao', campo: 'sei_acao', altCampo: 'acao_snapshot' },
     { id: 'seiSubacao', campo: 'sei_subacao', altCampo: 'subacao_snapshot' },
-    { id: 'seiGd', campo: 'gd_snapshot' },
-    { id: 'seiGrupoDespesa', campo: 'sei_grupo_despesa' },
+    // "Grupo de despesa" unifica o antigo G.D. (gd_snapshot) - usa sei_grupo_despesa,
+    // com gd_snapshot como alternativa pra modelos antigos que só tinham o G.D.
+    { id: 'seiGrupoDespesa', campo: 'sei_grupo_despesa', altCampo: 'gd_snapshot' },
     { id: 'seiMedidaCompensatoriaPoas', campo: 'sei_medida_compensatoria_poas' },
     { id: 'seiConvenioNumero', campo: 'sei_convenio_numero' },
     { id: 'seiConvenioEfisco', campo: 'sei_convenio_efisco' },
@@ -479,7 +475,9 @@ const TelaSof = (function () {
       const el = document.getElementById(item.id);
       const valor = template[item.campo] || (item.altCampo && template[item.altCampo]) || '';
       if (!el || !valor) return;
-      el.value = valor;
+      // Objeto da despesa é um editor contenteditable (usa innerHTML, não value).
+      if (item.id === 'seiObjetoDespesa') el.innerHTML = objetoDespesaParaHtml_(valor);
+      else el.value = valor;
       destacar(el);
     });
     document.getElementById('sofOss').dispatchEvent(new Event('change', { bubbles: true }));
@@ -538,7 +536,7 @@ const TelaSof = (function () {
         <h4 class="sei-secao-titulo">Dados do cadastro</h4>
         <div class="grade-3">
           <div class="campo"><label>Contrato de Gestão *</label><input id="sofContrato" value="${UI.escaparHtml(snapshot.contrato_snapshot)}" /></div>
-          <div class="campo"><label>T.A. *</label><input id="sofTa" value="${v('ta')}" /></div>
+          <div class="campo"><label>T.A.</label><input id="sofTa" value="${v('ta')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Identificação do processo</h4>
@@ -572,7 +570,15 @@ const TelaSof = (function () {
           <div class="campo"><label>Área/setor solicitante *</label><input id="seiAreaSetorSolicitante" value="${v('sei_area_setor_solicitante')}" /></div>
           <div class="campo"><label>Tema POAS *</label><input id="seiTemaPoas" value="${v('sei_tema_poas')}" /></div>
         </div>
-        <div class="campo"><label>Objeto da despesa (texto completo p/ documento SEI) *</label><textarea id="seiObjetoDespesa" rows="6" placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento.">${v('sei_objeto_despesa')}</textarea></div>
+        <div class="campo">
+          <label>Objeto da despesa (texto completo p/ documento SEI) *</label>
+          <div class="editor-rico">
+            <div class="editor-rico-barra">
+              <button type="button" class="editor-rico-btn" data-cmd="bold" title="Negrito (Ctrl+B)"><b>N</b></button>
+            </div>
+            <div id="seiObjetoDespesa" class="editor-rico-area" contenteditable="true" data-placeholder="Parágrafo completo, com despachos/notas técnicas/valores, igual ao que vai constar no documento. Selecione um trecho e clique em N (ou Ctrl+B) para deixar em negrito.">${objetoDespesaParaHtml_(sof ? sof.sei_objeto_despesa : '')}</div>
+          </div>
+        </div>
 
         <h4 class="sei-secao-titulo">Destinação e classificação</h4>
         <div class="grade-3">
@@ -582,8 +588,7 @@ const TelaSof = (function () {
           <div class="campo"><label>CNPJ *</label><input id="seiCredorCnpj" value="${UI.escaparHtml((sof && sof.sei_credor_cnpj) || snapshot.cnpj_snapshot || '')}" /></div>
           <div class="campo"><label>Ação *</label><input id="seiAcao" value="${UI.escaparHtml((sof && sof.sei_acao) || snapshot.acao_snapshot || '')}" /></div>
           <div class="campo"><label>Subação *</label><input id="seiSubacao" value="${UI.escaparHtml((sof && sof.sei_subacao) || snapshot.subacao_snapshot || '')}" /></div>
-          <div class="campo"><label>G.D. *</label><input id="seiGd" value="${UI.escaparHtml(snapshot.gd_snapshot)}" /></div>
-          <div class="campo"><label>Grupo de despesa</label><input id="seiGrupoDespesa" value="${v('sei_grupo_despesa')}" placeholder="Ex.: 3.3.50" /></div>
+          <div class="campo"><label>Grupo de despesa *</label><input id="seiGrupoDespesa" value="${UI.escaparHtml((sof && sof.sei_grupo_despesa) || snapshot.gd_snapshot || '')}" placeholder="Ex.: 3.3.50" /></div>
         </div>
 
         <div class="campo">
@@ -636,14 +641,14 @@ const TelaSof = (function () {
 
         <h4 class="sei-secao-titulo">Assinatura da Nota de Empenho</h4>
         <div class="grade-2">
-          <div class="campo"><label>Nome *</label><input id="seiAssinaturaNeNome" value="${v('sei_assinatura_ne_nome')}" /></div>
-          <div class="campo"><label>Cargo *</label><input id="seiAssinaturaNeCargo" value="${v('sei_assinatura_ne_cargo')}" /></div>
+          <div class="campo"><label>Nome</label><input id="seiAssinaturaNeNome" value="${v('sei_assinatura_ne_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNeCargo" value="${v('sei_assinatura_ne_cargo')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Assinatura da Nota de Liquidação</h4>
         <div class="grade-2">
-          <div class="campo"><label>Nome *</label><input id="seiAssinaturaNlNome" value="${v('sei_assinatura_nl_nome')}" /></div>
-          <div class="campo"><label>Cargo *</label><input id="seiAssinaturaNlCargo" value="${v('sei_assinatura_nl_cargo')}" /></div>
+          <div class="campo"><label>Nome</label><input id="seiAssinaturaNlNome" value="${v('sei_assinatura_nl_nome')}" /></div>
+          <div class="campo"><label>Cargo</label><input id="seiAssinaturaNlCargo" value="${v('sei_assinatura_nl_cargo')}" /></div>
         </div>
 
         <div class="campo"><label>Observação</label><textarea id="sofObservacao" rows="2">${v('observacao')}</textarea></div>
@@ -682,7 +687,8 @@ const TelaSof = (function () {
       document.getElementById('seiCredorCnpj').value = preenchido.cnpj_snapshot;
       document.getElementById('seiAcao').value = preenchido.acao_snapshot;
       document.getElementById('seiSubacao').value = preenchido.subacao_snapshot;
-      document.getElementById('seiGd').value = preenchido.gd_snapshot;
+      // Campo unificado "Grupo de despesa" recebe o G.D. da unidade.
+      document.getElementById('seiGrupoDespesa').value = preenchido.gd_snapshot;
     });
 
     if (!editando) {
@@ -723,6 +729,16 @@ const TelaSof = (function () {
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
     document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
+
+    // Barra do editor "Objeto da despesa" (negrito). mousedown preventDefault
+    // pra não perder a seleção ao clicar no botão; Ctrl+B já funciona nativo.
+    document.querySelectorAll('#formSof .editor-rico-btn').forEach(btn => {
+      btn.addEventListener('mousedown', e => e.preventDefault());
+      btn.addEventListener('click', () => {
+        document.getElementById('seiObjetoDespesa').focus();
+        document.execCommand(btn.dataset.cmd, false, null);
+      });
+    });
 
     ['sofUnidade', 'sofOss', 'sofObjeto'].forEach(id => UI.tornarPesquisavel(id));
 
@@ -843,6 +859,45 @@ const TelaSof = (function () {
     atualizarTotalGeralFormulario();
   }
 
+  /**
+   * "Objeto da despesa" permite negrito (2026-07-28). Armazenamento é texto
+   * puro com marcador markdown `**negrito**` (nada de HTML na célula do Sheets,
+   * sem risco de XSS): o negrito é reconstruído só na exibição por
+   * objetoDespesaParaHtml_. serializarObjetoDespesa_ converte o conteúdo do
+   * editor contenteditable de volta pra esse texto com `**`.
+   */
+  function isBoldStyle_(el) {
+    const fw = el.style && el.style.fontWeight;
+    return fw === 'bold' || fw === 'bolder' || Number(fw) >= 600;
+  }
+  function serializarObjetoDespesa_(editorEl) {
+    const segs = [];
+    (function walk(node, bold) {
+      node.childNodes.forEach(n => {
+        if (n.nodeType === 3) { segs.push({ t: n.nodeValue, b: bold }); return; }
+        if (n.nodeType !== 1) return;
+        const tag = n.tagName;
+        if (tag === 'BR') { segs.push({ t: '\n', b: false }); return; }
+        const b = bold || tag === 'B' || tag === 'STRONG' || isBoldStyle_(n);
+        if (tag === 'DIV' || tag === 'P') segs.push({ t: '\n', b: false });
+        walk(n, b);
+      });
+    })(editorEl, false);
+    let out = '';
+    segs.forEach(s => {
+      if (s.t === '\n') { out += '\n'; return; }
+      const t = String(s.t).replace(/\*/g, ''); // asterisco literal não convive com o marcador **
+      out += (s.b && t.trim()) ? '**' + t + '**' : t;
+    });
+    return out.replace(/\*\*(\s*)\*\*/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  /** Texto (com `**negrito**`) -> HTML seguro: escapa tudo, depois aplica negrito e quebras de linha. */
+  function objetoDespesaParaHtml_(texto) {
+    return UI.escaparHtml(String(texto || ''))
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+  }
+
   /** Junta os campos "de sempre" do SOF com os ~34 campos do documento SEI (formulário único desde a fusão). */
   function coletarDadosFormulario() {
     const linhasManutencao = lerLinhasManutencaoSeiDoDom_().filter(l => l.codigo || l.elemento || l.valor);
@@ -854,7 +909,9 @@ const TelaSof = (function () {
       contrato_snapshot: document.getElementById('sofContrato').value.trim(),
       acao_snapshot: document.getElementById('seiAcao').value.trim(),
       subacao_snapshot: document.getElementById('seiSubacao').value.trim(),
-      gd_snapshot: document.getElementById('seiGd').value.trim(),
+      // "G.D." e "Grupo de despesa" foram unificados num único campo (mesma
+      // informação) - ambos vêm de seiGrupoDespesa (2026-07-28).
+      gd_snapshot: document.getElementById('seiGrupoDespesa').value.trim(),
       sei: document.getElementById('sofSei').value.trim(),
       sof_numero: document.getElementById('sofNumero').value.trim(),
       periodo_inicio: document.getElementById('sofPeriodoInicio').value,
@@ -877,7 +934,7 @@ const TelaSof = (function () {
       sei_justificativa_pleito: document.getElementById('seiJustificativaPleito').value.trim(),
       sei_area_setor_solicitante: document.getElementById('seiAreaSetorSolicitante').value.trim(),
       sei_tema_poas: document.getElementById('seiTemaPoas').value.trim(),
-      sei_objeto_despesa: document.getElementById('seiObjetoDespesa').value.trim(),
+      sei_objeto_despesa: serializarObjetoDespesa_(document.getElementById('seiObjetoDespesa')),
       sei_destinacao: document.getElementById('seiDestinacao').value.trim(),
       sei_credor: document.getElementById('seiCredor').value.trim(),
       sei_credor_cnpj: document.getElementById('seiCredorCnpj').value.trim(),
@@ -1141,7 +1198,9 @@ const TelaSof = (function () {
 
   function validarCamposObrigatorios() {
     for (const campo of CAMPOS_OBRIGATORIOS) {
-      const valor = document.getElementById(campo.id).value.trim();
+      const el = document.getElementById(campo.id);
+      // Objeto da despesa é um editor contenteditable (não tem .value) - usa textContent.
+      const valor = (el.value !== undefined ? el.value : (el.textContent || '')).trim();
       if (!valor) return 'Preencha o campo obrigatório: ' + campo.rotulo + '.';
     }
     const fontes = lerLinhasFontesDoDom_();
@@ -1323,7 +1382,7 @@ const TelaSof = (function () {
 
   <p>Área/setor solicitante: ${UI.escaparHtml(sof.sei_area_setor_solicitante || '')}</p>
   <p>Tema POAS: ${UI.escaparHtml(sof.sei_tema_poas || '')}</p>
-  <p>Objeto da despesa: ${nl2br_(sof.sei_objeto_despesa)}</p>
+  <p>Objeto da despesa: ${objetoDespesaParaHtml_(sof.sei_objeto_despesa)}</p>
 
   <p>Destinação (Hospital, Geres, etc...): ${UI.escaparHtml(sof.sei_destinacao || '')}</p>
   <p>Credor: ${UI.escaparHtml(sof.sei_credor || '')}</p>
