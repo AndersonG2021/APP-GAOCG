@@ -93,14 +93,54 @@ function montarLinhasSof_(session, filtros) {
     });
 }
 
+/**
+ * Espelha os filtros de listarUnidades (Unidades.gs), inclusive as
+ * semânticas menos óbvias - OSS por "contém" e busca livre varrendo todos os
+ * campos - porque o botão "Gerar Relatório" da tela de Unidades manda os
+ * filtros que estão na tela: o relatório precisa trazer exatamente as
+ * unidades que o analista está vendo. Filtros ausentes (caso do assistente do
+ * Dashboard, que só oferece OSS) simplesmente não filtram nada.
+ */
 function montarLinhasUnidades_(session, filtros) {
-  var oss = paraArrayFiltro_(filtros.oss);
+  var oss = paraArrayFiltro_(filtros.oss).map(function (v) { return v.toLowerCase(); });
+  var ids = paraArrayFiltro_(filtros.unidade_id);
+  var tipos = paraArrayFiltro_(filtros.tipo);
+  var busca = sanitizeString_(filtros.busca, 200).toLowerCase();
+  var somenteAtivas = toBool_(filtros.somenteAtivas);
+  var tasPorUnidade = agruparTasPorUnidade_();
+
   return todasUnidadesComCache_()
-    .filter(function (u) { return !oss.length || oss.indexOf(u.oss) !== -1; })
+    .filter(function (u) {
+      if (somenteAtivas && !toBool_(u.ativo)) return false;
+      if (ids.length && ids.indexOf(String(u.id)) === -1) return false;
+      if (tipos.length && tipos.indexOf(u.tipo) === -1) return false;
+      if (oss.length) {
+        var ossLinha = String(u.oss || '').toLowerCase();
+        var bate = oss.some(function (v) { return ossLinha.indexOf(v) !== -1; });
+        if (!bate) return false;
+      }
+      if (busca) {
+        var achou = Object.keys(u).some(function (campo) {
+          var valor = u[campo];
+          if (valor === null || valor === undefined) return false;
+          return String(valor).toLowerCase().indexOf(busca) !== -1;
+        });
+        if (!achou) return false;
+      }
+      return true;
+    })
+    .sort(function (a, b) { return String(a.nome || '').localeCompare(String(b.nome || '')); })
     .map(function (u) {
+      var tas = tasPorUnidade[u.id] || [];
+      var totalTas = tas.reduce(function (soma, t) { return soma + toNumber_(t.valor_ta); }, 0);
       return {
         nome: u.nome || '', tipo: u.tipo || '', oss: u.oss || '', cnpj: u.cnpj || '',
-        contrato_gestao: u.contrato_gestao || '', ativo: toBool_(u.ativo) ? 'Sim' : 'Não'
+        contrato_gestao: u.contrato_gestao || '', ativo: toBool_(u.ativo) ? 'Sim' : 'Não',
+        valor_contrato_gestao: toNumber_(u.valor_contrato_gestao),
+        valor_contrato_gestao_sus: toNumber_(u.valor_contrato_gestao_sus),
+        total_tas: totalTas,
+        parcela_mensal_regular: parcelaMensalRegular_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas),
+        parcela_mensal_total: parcelaMensalTotal_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas)
       };
     });
 }
@@ -152,6 +192,10 @@ var RELATORIO_CATALOGO_ = {
       { key: 'periodo', rotulo: 'Período', tipo: 'texto' }
     ]
   },
+  // Colunas de valor sempre por último (pedido do usuário, sessão 2026-07-29):
+  // a ordem aqui é a ordem que sai no relatório - gerarRelatorio projeta as
+  // colunas escolhidas preservando a ordem do catálogo, não a ordem em que o
+  // analista marcou os checkboxes.
   unidades: {
     rotulo: 'Unidades', montar: montarLinhasUnidades_,
     colunas: [
@@ -160,7 +204,12 @@ var RELATORIO_CATALOGO_ = {
       { key: 'oss', rotulo: 'OSS', tipo: 'texto' },
       { key: 'cnpj', rotulo: 'CNPJ', tipo: 'texto' },
       { key: 'contrato_gestao', rotulo: 'Contrato de gestão', tipo: 'texto' },
-      { key: 'ativo', rotulo: 'Ativa', tipo: 'texto' }
+      { key: 'ativo', rotulo: 'Ativa', tipo: 'texto' },
+      { key: 'valor_contrato_gestao', rotulo: 'C.G. Tesouro', tipo: 'moeda' },
+      { key: 'valor_contrato_gestao_sus', rotulo: 'C.G. SUS', tipo: 'moeda' },
+      { key: 'total_tas', rotulo: 'Total T.A.s', tipo: 'moeda' },
+      { key: 'parcela_mensal_regular', rotulo: 'Parcela Mensal Regular', tipo: 'moeda' },
+      { key: 'parcela_mensal_total', rotulo: 'Parcela Mensal', tipo: 'moeda' }
     ]
   }
 };

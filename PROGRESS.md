@@ -1109,6 +1109,20 @@ Três pedidos do usuário sobre a tela de Unidades, a partir de screenshots anot
 
 **Ainda não testado:** o rótulo "Não Regular" aparecendo certo no formulário (e T.A.s antigos marcados "sazonal" continuando a cair nessa opção); as 2 divisões do card mostrando os T.A.s certos em cada uma; "Parcela mensal regular" batendo com a soma esperada (Tesouro + SUS + só os T.A.s Regular); criar uma unidade nova e confirmar que ela salva normalmente sem o campo de Classificação Orçamentária.
 
+### "Gerar PDF" virou "Gerar Relatório" (escolha de colunas + as 4 saídas do Dashboard)
+
+Pedido do usuário: o botão da tela de Unidades deve deixar escolher **quais colunas entram** (mantendo as **colunas de valor sempre por último**, como já estavam) e oferecer os **mesmos tipos de documento** do botão "Gerar relatório" do Dashboard.
+
+Em vez de um segundo gerador, a tela de Unidades passou a ser **um atalho pré-filtrado para o gerador que já existe** — sem duplicar renderização/CSV/Sheets:
+
+- **`js/relatorios.js`:** o `gerar_` interno (que lia o assistente do DOM) virou **`gerarComConfig(config)` público** — recebe a config pronta e devolve `true` só quando gerou de fato (pra quem chama de um modal próprio não fechar e perder a seleção quando dá erro). O botão do assistente agora chama `gerarComConfig(lerConfigAtual_())`.
+- **`js/unidades.js`:** botão renomeado (`btnGerarPdfUni` → `btnGerarRelatorioUni`, "Gerar PDF" → "Gerar Relatório"); abre um modal enxuto com **checkboxes de colunas** (vindas do catálogo do backend) + **radio de formato** (Visualizar na tela / PDF / Excel-CSV / Google Sheets, exatamente os 4 do Dashboard) e chama `TelaRelatorios.gerarComConfig` passando `filtrosAtuais()` da tela. **Removidos** `gerarPdf`, `montarPdfUnidadesHtml_` e `abrirDocumentoEmNovaAba_` (a tabela HTML de impressão própria virou código morto — quem imprime agora é o gerador de relatórios). *Obs.: `abrirDocumentoEmNovaAba_` em `js/sof.js` é uma cópia separada, usada pelo documento SEI, e continua intacta.*
+- **`backend/Relatorios.gs`:** a fonte `unidades` ganhou as colunas de valor — **C.G. Tesouro, C.G. SUS, Total T.A.s, Parcela Mensal Regular, Parcela Mensal** — declaradas **depois** das de texto, porque `gerarRelatorio` projeta preservando a ordem do catálogo (não a ordem em que o analista marcou), que é o que garante "valores sempre por último". `montarLinhasUnidades_` passou a aceitar também `unidade_id`/`tipo`/`busca`/`somenteAtivas`, **espelhando as semânticas de `listarUnidades`** (OSS por "contém", busca livre varrendo todos os campos) pro relatório trazer exatamente as unidades que estão na tela. Filtros ausentes não filtram nada — o assistente do Dashboard, que só oferece OSS, continua funcionando igual (e de brinde ganhou as 5 colunas de valor na fonte Unidades).
+
+**Passo manual pendente (backend):** `backend/Relatorios.gs` entra na lista de arquivos a colar/reimplantar. Nenhuma coluna/aba nova.
+
+**Ainda não testado:** as 4 saídas a partir da tela de Unidades (em especial Google Sheets); o relatório respeitando busca/Unidade/Tipo/OSS/"Somente ativas" da tela; desmarcar colunas e conferir que as de valor continuam por último; totais batendo com os da tela.
+
 **Bug reportado e corrigido na sequência (`css/style.css`, só CSS):** ao expandir um card de Unidade, todos os outros cards **da mesma linha da grade** também "esticavam" (ficavam mais altos, com espaço em branco embaixo), mesmo sem mostrar nenhuma informação a mais. Causa: `.grade-cards-unidade` é um grid sem `align-items` definido, que por padrão (`stretch`) estica todo item da grade pra ocupar a altura do maior item da mesma linha — ao expandir um card, ele virava o mais alto da linha e "puxava" a altura dos vizinhos. Corrigido com `align-items: start` no grid, pra cada card ter só a altura do seu próprio conteúdo.
 
 ## Referências úteis
