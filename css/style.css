@@ -432,7 +432,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-sof-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--cinza-200); }
 
 /* ===== Cards de Unidades ===== */
-.grade-cards-unidade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 18px; align-items: start; }
+.grade-cards-unidade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(480px, 100%), 1fr)); gap: 18px; align-items: start; }
 .cartao-unidade {
   display: flex; gap: 12px; background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra);
   padding: 18px; border-left: 4px solid var(--verde); transition: box-shadow .12s ease;
@@ -447,8 +447,8 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-unidade-repasse-total { font-size: 12px; font-weight: 600; color: var(--cinza-700); }
 .cartao-unidade-meta { font-size: 12.5px; color: var(--cinza-700); margin: 6px 0; overflow-wrap: break-word; }
 .cartao-unidade-detalhe { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cinza-200); font-size: 13px; }
-.cartao-unidade-detalhe-linha { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; color: var(--cinza-700); }
-.cartao-unidade-detalhe-linha span:first-child { min-width: 0; overflow-wrap: break-word; }
+.cartao-unidade-detalhe-linha { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; color: var(--cinza-700); }
+.cartao-unidade-detalhe-linha span:first-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cartao-unidade-detalhe-linha span:last-child { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .cartao-unidade-detalhe-secao { margin: 0 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--cinza-500); }
 .cartao-unidade-detalhe-secao.cartao-unidade-detalhe-divisor { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--cinza-200); }
