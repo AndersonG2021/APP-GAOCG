@@ -106,7 +106,7 @@ const TelaRelatorios = (function () {
     UI.abrirModal('Gerar relatório', corpo, rodape, { grande: true });
 
     document.getElementById('relFonte').addEventListener('change', aoMudarFonte_);
-    document.getElementById('btnRelGerar').addEventListener('click', gerar_);
+    document.getElementById('btnRelGerar').addEventListener('click', () => gerarComConfig(lerConfigAtual_()));
     document.getElementById('btnRelFechar').addEventListener('click', UI.fecharModal);
     document.getElementById('btnRelSalvarModelo').addEventListener('click', salvarModelo_);
     document.getElementById('btnRelCarregarModelo').addEventListener('click', carregarModeloSelecionado_);
@@ -204,21 +204,32 @@ const TelaRelatorios = (function () {
   }
 
   // ----- geração -----
-  async function gerar_() {
-    const config = lerConfigAtual_();
-    if (!config.colunas.length) { UI.toast('Selecione ao menos uma coluna.', 'erro'); return; }
+  /**
+   * Gera a partir de uma config pronta, em vez de ler o assistente do DOM -
+   * o que permite outras telas reaproveitarem as 4 saídas (tela/PDF/CSV/
+   * Sheets) sem duplicar nada. É o que a tela de Unidades usa no botão
+   * "Gerar Relatório" (sessão 2026-07-29), mandando os filtros que já estão
+   * aplicados na tela. config: { fonte, filtros, colunas, agruparPor,
+   * incluirGrafico, formato }. Devolve true só quando gerou de fato - quem
+   * chama de um modal próprio usa isso pra não fechar (e perder a seleção do
+   * usuário) quando deu erro.
+   */
+  async function gerarComConfig(config) {
+    if (!config.colunas.length) { UI.toast('Selecione ao menos uma coluna.', 'erro'); return false; }
     try {
       if (config.formato === 'sheets') {
         const resp = await Api.chamar('gerarRelatorioSheets', paramsBackend_(config));
         window.open(resp.url, '_blank');
         UI.toast('Planilha gerada no Google Sheets.', 'sucesso');
-        return;
+        return true;
       }
       const dados = await Api.chamar('gerarRelatorio', paramsBackend_(config));
-      if (config.formato === 'csv') { baixarCsv_(dados, config); return; }
+      if (config.formato === 'csv') { baixarCsv_(dados, config); return true; }
       abrirJanelaImpressao_(relatorioParaHtml_(dados, config), config.formato === 'pdf');
+      return true;
     } catch (e) {
       UI.toast('Falha ao gerar relatório. ' + (e.message || ''), 'erro');
+      return false;
     }
   }
 
@@ -382,5 +393,5 @@ const TelaRelatorios = (function () {
     @media print { body { margin: 0; } .rel-tabela thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   `;
 
-  return { abrir };
+  return { abrir, gerarComConfig };
 })();

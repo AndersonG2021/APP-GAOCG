@@ -42,7 +42,7 @@ const TelaUnidades = (function () {
           <button class="botao" id="btnFiltrarUni">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosUni">Limpar filtros</button>
           <span style="flex:1"></span>
-          <button class="botao" id="btnGerarPdfUni">Gerar PDF</button>
+          <button class="botao" id="btnGerarRelatorioUni">Gerar Relatório</button>
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
         <div id="listaUnidades"></div>
@@ -50,7 +50,7 @@ const TelaUnidades = (function () {
       </div>`;
 
     document.getElementById('btnNovaUnidade').addEventListener('click', () => abrirFormulario());
-    document.getElementById('btnGerarPdfUni').addEventListener('click', gerarPdf);
+    document.getElementById('btnGerarRelatorioUni').addEventListener('click', abrirGerarRelatorio);
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
@@ -382,75 +382,60 @@ const TelaUnidades = (function () {
     });
   }
 
-  /** Abre HTML gerado em nova aba (Blob + URL de objeto) - revoga a URL depois de um tempo, não na hora, senão a aba nem termina de carregar o conteúdo antes dela sumir. Mesmo padrão de abrirDocumentoEmNovaAba_ em js/sof.js. */
-  function abrirDocumentoEmNovaAba_(html) {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
   /**
-   * "Gerar PDF" (sessão 2026-07-27): busca todas as unidades que batem com o
-   * filtro atual (não só a página de 20 visível - mesmo padrão de exportarCsv
-   * em js/sof.js/js/recibos.js), monta uma página HTML limpa própria pra
-   * impressão e abre em nova aba - sem biblioteca externa (o app é 100%
-   * vanilla). A própria página aciona o diálogo de impressão do navegador
-   * sozinha (`<body onload="window.print()">`), pro usuário só escolher
-   * "Salvar como PDF".
+   * "Gerar Relatório" (sessão 2026-07-29, era "Gerar PDF"): escolha de colunas
+   * + as mesmas 4 saídas do assistente do Dashboard (tela/PDF/CSV/Sheets).
+   * Não duplica nada da geração em si - monta a config e entrega pro
+   * TelaRelatorios.gerarComConfig (js/relatorios.js), com os filtros que já
+   * estão aplicados NA TELA (não só a página de 20 visível: quem pagina é o
+   * listarUnidades da tela, o relatório roda a fonte inteira no backend).
+   * As colunas vêm do catálogo do backend, que já ordena as de valor por
+   * último - a ordem do relatório é a do catálogo, não a de marcação.
    */
-  async function gerarPdf() {
-    const resposta = await Api.chamar('listarUnidades', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    abrirDocumentoEmNovaAba_(montarPdfUnidadesHtml_(resposta.items));
-  }
+  async function abrirGerarRelatorio() {
+    let colunas;
+    try {
+      const catalogo = await Api.chamar('obterCatalogoRelatorios', {}, { cache: true });
+      colunas = (catalogo.fontes.filter(f => f.fonte === 'unidades')[0] || {}).colunas || [];
+    } catch (e) {
+      UI.toast('Não foi possível carregar as opções de relatório. ' + (e.message || ''), 'erro');
+      return;
+    }
 
-  function montarPdfUnidadesHtml_(lista) {
-    let totalTesouro = 0, totalSus = 0, totalTas = 0, totalGeral = 0;
+    const corpo = `
+      <div class="rel-wizard">
+        <div class="rel-secao">
+          <label>Colunas <span class="rel-hint">(marque as que entram; as de valor saem sempre por último)</span></label>
+          <div class="rel-colunas">${colunas.map(c =>
+            `<label class="rotulo-checkbox rel-col-item"><input type="checkbox" class="uni-rel-col" value="${c.key}" checked /> ${UI.escaparHtml(c.rotulo)}</label>`
+          ).join('')}</div>
+        </div>
+        <div class="rel-secao">
+          <label>Formato de saída</label>
+          <div class="rel-formatos">
+            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="tela" checked /> Visualizar na tela</label>
+            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="pdf" /> PDF (impressão)</label>
+            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="csv" /> Excel / CSV</label>
+            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="sheets" /> Google Sheets</label>
+          </div>
+        </div>
+        <p class="ajuda">O relatório usa os filtros aplicados na tela. Sem filtro, entram todas as unidades.</p>
+      </div>`;
 
-    const linhas = lista.map(u => {
-      const somaTas = (u.tas || []).reduce((s, t) => s + (Number(t.valor_ta) || 0), 0);
-      totalTesouro += Number(u.valor_contrato_gestao) || 0;
-      totalSus += Number(u.valor_contrato_gestao_sus) || 0;
-      totalTas += somaTas;
-      totalGeral += Number(u.parcela_mensal_total) || 0;
-      return `<tr>
-        <td>${UI.escaparHtml(u.nome)}</td>
-        <td>${UI.escaparHtml(u.tipo || '-')}</td>
-        <td>${UI.escaparHtml(u.oss || '-')}</td>
-        <td>${UI.escaparHtml(u.cnpj || '-')}</td>
-        <td>${UI.formatarMoeda(u.valor_contrato_gestao)}</td>
-        <td>${UI.formatarMoeda(u.valor_contrato_gestao_sus)}</td>
-        <td>${UI.formatarMoeda(somaTas)}</td>
-        <td><strong>${UI.formatarMoeda(u.parcela_mensal_total)}</strong></td>
-      </tr>`;
-    }).join('');
+    UI.abrirModal('Gerar Relatório de Unidades', corpo,
+      `<button class="botao" id="btnUniRelFechar">Cancelar</button><button class="botao primario" id="btnUniRelGerar">Gerar</button>`,
+      { grande: true });
 
-    return `<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8" />
-<title>Unidades - GAOCG</title>
-<style>
-  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000; margin: 24px; }
-  h1 { font-size: 15pt; margin: 0 0 4px; }
-  p.info { margin: 0 0 16px; font-size: 10pt; color: #444; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #999; padding: 5px 8px; font-size: 9.5pt; text-align: left; }
-  th { background: #eee; }
-  tfoot td { font-weight: bold; background: #f5f5f5; }
-  @media print { body { margin: 10mm; } }
-</style>
-</head>
-<body onload="window.print()">
-  <h1>Unidades - Valores de Contrato de Gestão</h1>
-  <p class="info">Gerado em ${new Date().toLocaleString('pt-BR')} - ${lista.length} unidade(s)</p>
-  <table>
-    <thead><tr><th>Nome</th><th>Tipo</th><th>OSS</th><th>CNPJ</th><th>C.G. Tesouro</th><th>C.G. SUS</th><th>Total T.A.s</th><th>Parcela Mensal</th></tr></thead>
-    <tbody>${linhas || '<tr><td colspan="8">Nenhuma unidade encontrada.</td></tr>'}</tbody>
-    <tfoot><tr><td colspan="4">TOTAL GERAL</td><td>${UI.formatarMoeda(totalTesouro)}</td><td>${UI.formatarMoeda(totalSus)}</td><td>${UI.formatarMoeda(totalTas)}</td><td>${UI.formatarMoeda(totalGeral)}</td></tr></tfoot>
-  </table>
-</body>
-</html>`;
+    document.getElementById('btnUniRelFechar').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnUniRelGerar').addEventListener('click', async () => {
+      const marcadas = Array.from(document.querySelectorAll('.uni-rel-col:checked')).map(el => el.value);
+      const formato = (document.querySelector('input[name=uniRelFormato]:checked') || {}).value || 'tela';
+      const gerou = await TelaRelatorios.gerarComConfig({
+        fonte: 'unidades', filtros: filtrosAtuais(), colunas: marcadas,
+        agruparPor: '', incluirGrafico: false, formato
+      });
+      if (gerou) UI.fecharModal();
+    });
   }
 
   return { render };
