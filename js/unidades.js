@@ -142,9 +142,10 @@ const TelaUnidades = (function () {
   }
 
   function linhaTaDetalheHtml_(t) {
+    const rotulo = `${t.objeto_ta || '-'} (T.A. ${t.numero_ta || '-'})`;
     return `
       <div class="cartao-unidade-detalhe-linha">
-        <span>${UI.escaparHtml(t.objeto_ta || '-')} (T.A. ${UI.escaparHtml(t.numero_ta || '-')})</span>
+        <span title="${UI.escaparHtml(rotulo)}">${UI.escaparHtml(rotulo)}</span>
         <span>${UI.formatarMoeda(t.valor_ta)}</span>
       </div>
       ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento não regular encerrado em ${formatarDataBr_(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`;
