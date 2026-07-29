@@ -432,7 +432,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-sof-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--cinza-200); }
 
 /* ===== Cards de Unidades ===== */
-.grade-cards-unidade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 18px; }
+.grade-cards-unidade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 18px; align-items: start; }
 .cartao-unidade {
   display: flex; gap: 12px; background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra);
   padding: 18px; border-left: 4px solid var(--verde); transition: box-shadow .12s ease;

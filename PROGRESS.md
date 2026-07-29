@@ -1109,6 +1109,8 @@ Três pedidos do usuário sobre a tela de Unidades, a partir de screenshots anot
 
 **Ainda não testado:** o rótulo "Não Regular" aparecendo certo no formulário (e T.A.s antigos marcados "sazonal" continuando a cair nessa opção); as 2 divisões do card mostrando os T.A.s certos em cada uma; "Parcela mensal regular" batendo com a soma esperada (Tesouro + SUS + só os T.A.s Regular); criar uma unidade nova e confirmar que ela salva normalmente sem o campo de Classificação Orçamentária.
 
+**Bug reportado e corrigido na sequência (`css/style.css`, só CSS):** ao expandir um card de Unidade, todos os outros cards **da mesma linha da grade** também "esticavam" (ficavam mais altos, com espaço em branco embaixo), mesmo sem mostrar nenhuma informação a mais. Causa: `.grade-cards-unidade` é um grid sem `align-items` definido, que por padrão (`stretch`) estica todo item da grade pra ocupar a altura do maior item da mesma linha — ao expandir um card, ele virava o mais alto da linha e "puxava" a altura dos vizinhos. Corrigido com `align-items: start` no grid, pra cada card ter só a altura do seu próprio conteúdo.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
