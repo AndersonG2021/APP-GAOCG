@@ -51,6 +51,20 @@ function parcelaMensalTotal_(valorContratoGestaoTesouro, valorContratoGestaoSus,
 }
 
 /**
+ * "Parcela mensal regular" (sessão 2026-07-29): mesma soma de
+ * parcelaMensalTotal_, mas exclui os T.A.s marcados como "Não Regular"
+ * (tipo_pagamento === 'sazonal' internamente) - só a parte do repasse que se
+ * repete todo mês sem previsão de encerramento. Valor do C.G. Tesouro/SUS
+ * entram sempre, por serem recorrentes por definição.
+ */
+function parcelaMensalRegular_(valorContratoGestaoTesouro, valorContratoGestaoSus, tas) {
+  var somaTasRegulares = (tas || [])
+    .filter(function (t) { return t.tipo_pagamento !== 'sazonal'; })
+    .reduce(function (soma, t) { return soma + toNumber_(t.valor_ta); }, 0);
+  return toNumber_(valorContratoGestaoTesouro) + toNumber_(valorContratoGestaoSus) + somaTasRegulares;
+}
+
+/**
  * Marca cada T.A. sazonal cuja data_vencimento já passou com `vencido: true`
  * (sessão 2026-07-27) - calculado toda leitura, nunca gravado, mesmo
  * princípio de dias_parado/destacar_parado (Sof.gs) - nunca fica
@@ -195,6 +209,7 @@ function listarUnidades(session, params) {
     var tas = anotarVencimentoTas_(tasPorUnidade[u.id] || []);
     u.tas = tas;
     u.parcela_mensal_total = parcelaMensalTotal_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas);
+    u.parcela_mensal_regular = parcelaMensalRegular_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas);
   });
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
@@ -244,6 +259,7 @@ function criarUnidade(session, dados) {
   var tas = anotarVencimentoTas_(listarTasPorUnidade_(id));
   novo.tas = tas;
   novo.parcela_mensal_total = parcelaMensalTotal_(novo.valor_contrato_gestao, novo.valor_contrato_gestao_sus, tas);
+  novo.parcela_mensal_regular = parcelaMensalRegular_(novo.valor_contrato_gestao, novo.valor_contrato_gestao_sus, tas);
   return ok_(novo);
 }
 
@@ -283,6 +299,7 @@ function atualizarUnidade(session, id, dados) {
   var tas = anotarVencimentoTas_(listarTasPorUnidade_(id));
   atualizado.tas = tas;
   atualizado.parcela_mensal_total = parcelaMensalTotal_(atualizado.valor_contrato_gestao, atualizado.valor_contrato_gestao_sus, tas);
+  atualizado.parcela_mensal_regular = parcelaMensalRegular_(atualizado.valor_contrato_gestao, atualizado.valor_contrato_gestao_sus, tas);
   return ok_(atualizado);
 }
 

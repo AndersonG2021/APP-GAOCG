@@ -1096,6 +1096,19 @@ Sessão grande, **entregue por partes**, com o desenho fechado com o usuário **
 
 **Pontos em aberto conhecidos:** (1) "Total Solicitado" por NE usa o solicitado **da fonte** — se um SOF tiver 2 NEs originais na mesma fonte, o solicitado se repete (raro); (2) "Falta ser Atendido" pode ficar negativo se a NE foi atendida acima do solicitado (no card do Dashboard é limitado em 0; no relatório e na tela de NE fica o valor real).
 
+## Unidades: "Não Regular" no lugar de "Sazonal", card com 2 divisões, "Parcela Mensal Regular" e remoção de "Classificação Orçamentária" (sessão 2026-07-29, backend pendente de colar)
+
+Três pedidos do usuário sobre a tela de Unidades, a partir de screenshots anotados à mão.
+
+- **"Sazonal" virou "Não Regular" (só o rótulo — `js/unidades.js`):** o `<select>` de "Tipo de pagamento" no formulário de T.A. agora mostra "Regular"/"Não Regular". O valor interno continua `'sazonal'` (não renomeado) — os dados já salvos na aba `UnidadesTA` continuam válidos sem precisar de migração; é puramente rótulo visível.
+- **Card com 2 divisões ao expandir (`js/unidades.js`, `css/style.css`):** `detalheTasHtml` agora separa em **"Pagamentos Regulares"** (sempre traz Valor do C.G. - Tesouro e Valor do C.G. - SUS, que são recorrentes por definição, + os T.A.s marcados "Regular") e **"Pagamentos Não Regulares"** (só os T.A.s marcados "Não Regular", com mensagem "Nenhum pagamento não regular cadastrado." quando vazio) — separadas por uma linha divisória tracejada (`.cartao-unidade-detalhe-secao.cartao-unidade-detalhe-divisor`).
+- **Nova linha "Parcela mensal regular" no cabeçalho do card:** abaixo de "Parcela mensal" (que continua somando tudo). Novo `parcelaMensalRegular_` (`backend/Unidades.gs`) = Valor do C.G. Tesouro + Valor do C.G. SUS + soma só dos T.A.s "Regular" (exclui os "Não Regular"). Calculado e devolvido como `parcela_mensal_regular` em `listarUnidades`, `criarUnidade` e `atualizarUnidade` — mesmo padrão já usado para `parcela_mensal_total`.
+- **"Classificação Orçamentária" removida do formulário de Unidade** (tanto "Nova unidade" quanto "Editar unidade" — é o mesmo formulário/modal para as duas ações, então não dá pra tirar só de um). O campo continua existindo no modelo de dados (`classificacao_orcamentaria` na aba `Unidades`) e continua sendo usado no autopreenchimento ao criar um SOF (`classificacao_orcamentaria_snapshot`, `js/sof.js`) — só não tem mais como editá-lo pela tela de Unidades. **Efeito colateral aceito:** unidades novas criadas a partir de agora nascem com esse campo em branco (autopreenchendo em branco no SOF, mas o analista pode digitar direto no campo do SOF, que já é editável independente da unidade); unidades já cadastradas mantêm o valor que já tinham, intocado.
+
+**Passo manual pendente (backend):** colar `backend/Unidades.gs` atualizado no editor do Apps Script e reimplantar (Nova versão) — **some junto** aos arquivos já pendentes de colar da sessão anterior (`Dashboard.gs`, `NotasEmpenho.gs`, `Code.gs`, `Utils.gs`, `Contadores.gs`, `Relatorios.gs`). Nenhuma coluna/aba nova.
+
+**Ainda não testado:** o rótulo "Não Regular" aparecendo certo no formulário (e T.A.s antigos marcados "sazonal" continuando a cair nessa opção); as 2 divisões do card mostrando os T.A.s certos em cada uma; "Parcela mensal regular" batendo com a soma esperada (Tesouro + SUS + só os T.A.s Regular); criar uma unidade nova e confirmar que ela salva normalmente sem o campo de Classificação Orçamentária.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

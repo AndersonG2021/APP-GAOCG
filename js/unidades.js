@@ -141,20 +141,37 @@ const TelaUnidades = (function () {
     return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
   }
 
+  function linhaTaDetalheHtml_(t) {
+    return `
+      <div class="cartao-unidade-detalhe-linha">
+        <span>${UI.escaparHtml(t.objeto_ta || '-')} (T.A. ${UI.escaparHtml(t.numero_ta || '-')})</span>
+        <span>${UI.formatarMoeda(t.valor_ta)}</span>
+      </div>
+      ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento não regular encerrado em ${formatarDataBr_(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`;
+  }
+
+  /**
+   * Duas divisões (sessão 2026-07-29): "Pagamentos Regulares" sempre traz
+   * Valor do C.G. - Tesouro/SUS (são recorrentes por definição) + os T.A.s
+   * marcados como Regular; "Pagamentos Não Regulares" traz só os T.A.s
+   * marcados como Não Regular (tipo_pagamento === 'sazonal' internamente -
+   * nome do valor mantido pra não exigir migração dos dados já salvos).
+   */
   function detalheTasHtml(unidade) {
-    const linhasTasHtml = (unidade.tas || []).length
-      ? unidade.tas.map(t => `
-        <div class="cartao-unidade-detalhe-linha">
-          <span>${UI.escaparHtml(t.objeto_ta || '-')} (T.A. ${UI.escaparHtml(t.numero_ta || '-')})</span>
-          <span>${UI.formatarMoeda(t.valor_ta)}</span>
-        </div>
-        ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento sazonal encerrado em ${formatarDataBr_(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`).join('')
-      : '<p class="ajuda">Nenhum Termo Aditivo cadastrado.</p>';
+    const tas = unidade.tas || [];
+    const regulares = tas.filter(t => t.tipo_pagamento !== 'sazonal');
+    const naoRegulares = tas.filter(t => t.tipo_pagamento === 'sazonal');
+    const naoRegularesHtml = naoRegulares.length
+      ? naoRegulares.map(linhaTaDetalheHtml_).join('')
+      : '<p class="ajuda">Nenhum pagamento não regular cadastrado.</p>';
     return `
       <div class="cartao-unidade-detalhe oculto">
+        <p class="cartao-unidade-detalhe-secao">Pagamentos Regulares</p>
         <div class="cartao-unidade-detalhe-linha"><span>Valor do C.G. - Tesouro</span><span>${UI.formatarMoeda(unidade.valor_contrato_gestao)}</span></div>
         <div class="cartao-unidade-detalhe-linha"><span>Valor do C.G. - SUS</span><span>${UI.formatarMoeda(unidade.valor_contrato_gestao_sus)}</span></div>
-        ${linhasTasHtml}
+        ${regulares.map(linhaTaDetalheHtml_).join('')}
+        <p class="cartao-unidade-detalhe-secao cartao-unidade-detalhe-divisor">Pagamentos Não Regulares</p>
+        ${naoRegularesHtml}
       </div>`;
   }
 
@@ -176,6 +193,7 @@ const TelaUnidades = (function () {
           <div class="cartao-unidade-cabecalho">
             <h3>${UI.escaparHtml(u.nome)}</h3>
             <span class="cartao-unidade-parcela">Parcela mensal: ${UI.formatarMoeda(u.parcela_mensal_total)}</span>
+            <span class="cartao-unidade-parcela-regular">Parcela mensal regular: ${UI.formatarMoeda(u.parcela_mensal_regular)}</span>
           </div>
           <div class="cartao-unidade-meta">${UI.escaparHtml(u.tipo || '-')} · OSS ${UI.escaparHtml(u.oss || '-')} · ${UI.escaparHtml(u.cnpj || '-')}</div>
           ${detalheTasHtml(u)}
@@ -241,8 +259,8 @@ const TelaUnidades = (function () {
   }
 
   /**
-   * Ganhou "Tipo de pagamento" (Regular/Sazonal) e "Data limite" (sessão
-   * 2026-07-27) - a data só aparece quando Sazonal está selecionado (listener
+   * Ganhou "Tipo de pagamento" (Regular/Não Regular) e "Data limite" (sessão
+   * 2026-07-27) - a data só aparece quando Não Regular está selecionado (listener
    * de change em renderTasFormulario alterna a visibilidade). Classe própria
    * `.linha-ta` (não reaproveita `.linha-fonte`, que continua servindo só as
    * linhas mais simples de Manutenção do SEI) - mesmo princípio de
@@ -261,7 +279,7 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Tipo de pagamento</label>
             <select class="linha-ta-tipo-pagamento">
               <option value="regular" ${!sazonal ? 'selected' : ''}>Regular</option>
-              <option value="sazonal" ${sazonal ? 'selected' : ''}>Sazonal</option>
+              <option value="sazonal" ${sazonal ? 'selected' : ''}>Não Regular</option>
             </select>
           </div>
           <div class="campo linha-ta-data-campo ${sazonal ? '' : 'oculto'}"><label>Data limite</label><input class="linha-ta-data-vencimento" type="date" value="${item.data_vencimento || ''}" /></div>
@@ -309,7 +327,6 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Contrato de Gestão *</label><input id="uContrato" value="${UI.escaparHtml(unidade ? unidade.contrato_gestao : '')}" required /></div>
           <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
           <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
-          <div class="campo"><label>Classificação Orçamentária</label><input id="uClassificacao" value="${UI.escaparHtml(unidade ? unidade.classificacao_orcamentaria : '')}" /></div>
           <div class="campo"><label>Ação</label><input id="uAcao" value="${UI.escaparHtml(unidade ? unidade.acao : '')}" /></div>
           <div class="campo"><label>Subação</label><input id="uSubacao" value="${UI.escaparHtml(unidade ? unidade.subacao : '')}" /></div>
           <div class="campo"><label>G.D.</label><input id="uGd" value="${UI.escaparHtml(unidade ? unidade.gd : '')}" /></div>
@@ -346,7 +363,6 @@ const TelaUnidades = (function () {
         contrato_gestao: document.getElementById('uContrato').value.trim(),
         valor_contrato_gestao: document.getElementById('uValorContratoGestaoTesouro').value,
         valor_contrato_gestao_sus: document.getElementById('uValorContratoGestaoSus').value,
-        classificacao_orcamentaria: document.getElementById('uClassificacao').value.trim(),
         acao: document.getElementById('uAcao').value.trim(),
         subacao: document.getElementById('uSubacao').value.trim(),
         gd: document.getElementById('uGd').value.trim(),
