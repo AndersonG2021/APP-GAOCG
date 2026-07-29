@@ -192,8 +192,8 @@ const TelaUnidades = (function () {
         <div class="cartao-unidade-corpo">
           <div class="cartao-unidade-cabecalho">
             <h3>${UI.escaparHtml(u.nome)}</h3>
-            <span class="cartao-unidade-parcela">Parcela mensal: ${UI.formatarMoeda(u.parcela_mensal_total)}</span>
-            <span class="cartao-unidade-parcela-regular">Parcela mensal regular: ${UI.formatarMoeda(u.parcela_mensal_regular)}</span>
+            <span class="cartao-unidade-repasse-regular">Repasse Mensal Regular: ${UI.formatarMoeda(u.parcela_mensal_regular)}</span>
+            <span class="cartao-unidade-repasse-total">Repasse Mensal Total: ${UI.formatarMoeda(u.parcela_mensal_total)}</span>
           </div>
           <div class="cartao-unidade-meta">${UI.escaparHtml(u.tipo || '-')} · OSS ${UI.escaparHtml(u.oss || '-')} · ${UI.escaparHtml(u.cnpj || '-')}</div>
           ${detalheTasHtml(u)}

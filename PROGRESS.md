@@ -1123,6 +1123,10 @@ Em vez de um segundo gerador, a tela de Unidades passou a ser **um atalho pré-f
 
 **Ainda não testado:** as 4 saídas a partir da tela de Unidades (em especial Google Sheets); o relatório respeitando busca/Unidade/Tipo/OSS/"Somente ativas" da tela; desmarcar colunas e conferir que as de valor continuam por último; totais batendo com os da tela.
 
+### Card de Unidade: valor em destaque virou o "Repasse Mensal Regular" (`js/unidades.js`, `css/style.css`, só CSS/frontend)
+
+Pedido do usuário: no cabeçalho do card, o valor em destaque (verde, negrito) deve ser o **regular**, não o total. Trocada a ordem e os rótulos: **"Repasse Mensal Regular"** (valor em destaque, primeiro) e **"Repasse Mensal Total"** (linha secundária, embaixo) — mesmos dois valores de antes (`parcela_mensal_regular`/`parcela_mensal_total`, já vindos do backend), só invertida a ênfase visual e renomeados os rótulos ("Parcela mensal"/"Parcela mensal regular" → "Repasse Mensal Total"/"Repasse Mensal Regular"). Classes CSS renomeadas de `.cartao-unidade-parcela`/`.cartao-unidade-parcela-regular` para `.cartao-unidade-repasse-regular`/`.cartao-unidade-repasse-total`, pra bater com qual delas é a de destaque.
+
 **Bug reportado e corrigido na sequência (`css/style.css`, só CSS):** ao expandir um card de Unidade, todos os outros cards **da mesma linha da grade** também "esticavam" (ficavam mais altos, com espaço em branco embaixo), mesmo sem mostrar nenhuma informação a mais. Causa: `.grade-cards-unidade` é um grid sem `align-items` definido, que por padrão (`stretch`) estica todo item da grade pra ocupar a altura do maior item da mesma linha — ao expandir um card, ele virava o mais alto da linha e "puxava" a altura dos vizinhos. Corrigido com `align-items: start` no grid, pra cada card ter só a altura do seu próprio conteúdo.
 
 ## Referências úteis
