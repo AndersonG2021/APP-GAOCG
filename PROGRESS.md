@@ -1137,6 +1137,11 @@ Usuário reportou que, com objetos de T.A. mais longos (ex.: "Tratamento de AVC 
 
 **Ainda não testado:** conferir visualmente com T.A.s de objeto bem longo se o rótulo trunca (e o tooltip mostra o texto completo) em vez de quebrar linha; conferir o comportamento responsivo em tela estreita/celular.
 
+### Modal "Gerar Relatório de Unidades": remove coluna "Ativa" e adiciona marcar/desmarcar todas (`js/unidades.js`, só frontend)
+
+- **Coluna "Ativa" removida** da lista de checkboxes desse modal - filtrada só no `abrirGerarRelatorio` (`colunas.filter(c => c.key !== 'ativo')`), **sem tirar do catálogo compartilhado** (`backend/Relatorios.gs`), então o assistente do Dashboard continua oferecendo essa coluna normalmente pra quem quiser.
+- **Botão "Marcar/desmarcar todas"** ao lado do rótulo "Colunas": alterna todos os checkboxes de uma vez - se alguma estiver desmarcada, marca todas; se todas já estiverem marcadas, desmarca todas.
+
 **Bug reportado e corrigido na sequência (`css/style.css`, só CSS):** ao expandir um card de Unidade, todos os outros cards **da mesma linha da grade** também "esticavam" (ficavam mais altos, com espaço em branco embaixo), mesmo sem mostrar nenhuma informação a mais. Causa: `.grade-cards-unidade` é um grid sem `align-items` definido, que por padrão (`stretch`) estica todo item da grade pra ocupar a altura do maior item da mesma linha — ao expandir um card, ele virava o mais alto da linha e "puxava" a altura dos vizinhos. Corrigido com `align-items: start` no grid, pra cada card ter só a altura do seu próprio conteúdo.
 
 ## Referências úteis

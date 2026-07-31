@@ -398,6 +398,10 @@ const TelaUnidades = (function () {
     try {
       const catalogo = await Api.chamar('obterCatalogoRelatorios', {}, { cache: true });
       colunas = (catalogo.fontes.filter(f => f.fonte === 'unidades')[0] || {}).colunas || [];
+      // "Ativa" não é útil no relatório (a tela já lista só ativas por
+      // padrão) - filtrada só aqui, sem tirar do catálogo compartilhado com
+      // o assistente do Dashboard.
+      colunas = colunas.filter(c => c.key !== 'ativo');
     } catch (e) {
       UI.toast('Não foi possível carregar as opções de relatório. ' + (e.message || ''), 'erro');
       return;
@@ -406,7 +410,10 @@ const TelaUnidades = (function () {
     const corpo = `
       <div class="rel-wizard">
         <div class="rel-secao">
-          <label>Colunas <span class="rel-hint">(marque as que entram; as de valor saem sempre por último)</span></label>
+          <div class="rel-linha" style="justify-content:space-between">
+            <label style="margin:0">Colunas <span class="rel-hint">(marque as que entram; as de valor saem sempre por último)</span></label>
+            <button type="button" class="botao" id="btnUniRelTodasColunas">Marcar/desmarcar todas</button>
+          </div>
           <div class="rel-colunas">${colunas.map(c =>
             `<label class="rotulo-checkbox rel-col-item"><input type="checkbox" class="uni-rel-col" value="${c.key}" checked /> ${UI.escaparHtml(c.rotulo)}</label>`
           ).join('')}</div>
@@ -428,6 +435,11 @@ const TelaUnidades = (function () {
       { grande: true });
 
     document.getElementById('btnUniRelFechar').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnUniRelTodasColunas').addEventListener('click', () => {
+      const caixas = Array.from(document.querySelectorAll('.uni-rel-col'));
+      const marcarTodas = caixas.some(cb => !cb.checked);
+      caixas.forEach(cb => { cb.checked = marcarTodas; });
+    });
     document.getElementById('btnUniRelGerar').addEventListener('click', async () => {
       const marcadas = Array.from(document.querySelectorAll('.uni-rel-col:checked')).map(el => el.value);
       const formato = (document.querySelector('input[name=uniRelFormato]:checked') || {}).value || 'tela';
