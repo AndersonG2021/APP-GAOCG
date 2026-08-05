@@ -84,6 +84,7 @@ function handleRequest_(params) {
       case 'criarNotaEmpenho': return jsonOut_(criarNotaEmpenho(session, params.data));
       case 'criarReforcosEmLote': return jsonOut_(criarReforcosEmLote(session, params.data));
       case 'excluirNotaEmpenho': return jsonOut_(excluirNotaEmpenho(session, params.id));
+      case 'excluirNotasEmpenhoEmLote': return jsonOut_(excluirNotasEmpenhoEmLote(session, params.ids));
 
       // Recibos (Funcionalidade 4)
       case 'listarRecibos': return jsonOut_(listarRecibos(session, params));

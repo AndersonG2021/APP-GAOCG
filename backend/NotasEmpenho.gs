@@ -343,6 +343,11 @@ function criarNotaEmpenho(session, dados) {
     sof_id: dados.sof_id,
     tipo: tipo,
     numero_ne: numeroNe,
+    // numero_ne_reforco (sessão 2026-07-30): só relevante pra reforço - o
+    // número PRÓPRIO do documento (lido por OCR), não confundir com numero_ne
+    // (o da NE mãe, usado pra agrupar). Fica vazio quando o analista digitou
+    // manualmente sem o documento ter sido lido com sucesso.
+    numero_ne_reforco: tipo === 'reforco' ? sanitizeString_(dados.numero_ne_reforco, 50) : '',
     fonte: fonteFinal,
     objeto: objetoFinal,
     valor: valor,
@@ -434,8 +439,12 @@ function criarNotaEmpenho(session, dados) {
  * arquivo_url. fonte/objeto sempre herdados da NE original correspondente
  * (nunca escolhidos de novo, mesma regra de criarNotaEmpenho).
  *
- * dados: { sof_id, numero_ne, itens: [{ mes_referencia, valor }, ...],
- *   arquivoBase64, arquivoNome, arquivoTipo }
+ * dados: { sof_id, numero_ne, numero_ne_reforco, itens: [{ mes_referencia,
+ *   valor }, ...], arquivoBase64, arquivoNome, arquivoTipo }
+ * numero_ne_reforco (sessão 2026-07-30): número PRÓPRIO do documento de
+ * reforço (lido por OCR) - todos os meses deste lote vêm do MESMO documento,
+ * então compartilham o mesmo numero_ne_reforco. É a chave usada pra agrupar
+ * esses meses como "um reforço só" na tela (ver montarGruposNotasEmpenho_).
  */
 function criarReforcosEmLote(session, dados) {
   dados = dados || {};
@@ -459,6 +468,8 @@ function criarReforcosEmLote(session, dados) {
   var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
   var arquivo = pasta.createFile(blob);
 
+  var numeroNeReforco = sanitizeString_(dados.numero_ne_reforco, 50);
+
   var neSheet = getSheet_(SHEETS.NOTAS_EMPENHO);
   var idsNe = proximosIds_('NotasEmpenho', itens.length);
   var agora = nowIso_();
@@ -468,6 +479,7 @@ function criarReforcosEmLote(session, dados) {
       sof_id: dados.sof_id,
       tipo: 'reforco',
       numero_ne: numeroNe,
+      numero_ne_reforco: numeroNeReforco,
       fonte: original.fonte,
       objeto: original.objeto,
       valor: item.valor,
@@ -561,6 +573,47 @@ function excluirNotaEmpenho(session, id) {
 }
 
 /**
+ * Exclui várias linhas de Nota de Empenho de uma vez (sessão 2026-07-30,
+ * pedido do usuário: excluir um reforço na tabela "Reforços lançados" deve
+ * excluir TODOS os meses daquele mesmo documento de reforço de uma vez, um
+ * só botão, não um por mês). Só aceita linhas tipo=reforco - por segurança,
+ * NUNCA exclui uma NE original por este caminho (ignora silenciosamente se
+ * algum id passado for de uma original; use excluirNotaEmpenho pra isso, que
+ * já tem a checagem de "não excluir com reforço ativo").
+ */
+function excluirNotasEmpenhoEmLote(session, ids) {
+  if (!ids || !ids.length) return fail_('Nenhuma Nota de Empenho informada.');
+  var sheet = getSheet_(SHEETS.NOTAS_EMPENHO);
+  var excluidas = [];
+
+  ids.forEach(function (id) {
+    var existente = findById_(sheet, id);
+    if (!existente || toBool_(existente.excluido) || existente.tipo !== 'reforco') return;
+    var atualizado = Object.assign({}, existente, {
+      excluido: true,
+      excluido_por: session.id,
+      excluido_em: nowIso_()
+    });
+    var rowIndex = existente._row;
+    delete atualizado._row;
+    updateObjectRow_(sheet, rowIndex, atualizado);
+    excluidas.push(existente);
+  });
+
+  if (!excluidas.length) return fail_('Nenhuma das Notas de Empenho informadas pôde ser excluída.');
+  invalidarCacheNotasEmpenho_();
+
+  var idsLog = proximosIds_('LogAuditoria', excluidas.length);
+  var linhasLog = excluidas.map(function (existente, i) {
+    return montarLinhaLog_(idsLog[i], session, 'NotaEmpenho', existente.id, existente.criado_por, 'EXCLUSAO', '', 'Reforço excluído (lote) - valor ' + existente.valor);
+  });
+  appendObjectRows_(getSheet_(SHEETS.LOG_AUDITORIA), linhasLog);
+  bumpVersao_(['notasEmpenho', 'sof', 'dashboard', 'logAuditoria']);
+
+  return ok_({ ids: excluidas.map(function (e) { return e.id; }) });
+}
+
+/**
  * Soma o valor de TODAS as Notas de Empenho (mãe + reforços), agrupada por
  * "sof_id|fonte|objeto" - numa única leitura da aba NotasEmpenho, em vez de
  * relê-la (ou filtrá-la) uma vez por linha de fonte. Alimenta
@@ -647,6 +700,42 @@ function situacaoCronogramaMes_(numeroNe, mes, ano, mapaRecibos) {
 }
 
 /**
+ * Agrupa as linhas de REFORÇO de uma NE por numero_ne_reforco (sessão
+ * 2026-07-30, pedido do usuário: "se for referente à mesma NE de reforço,
+ * tratar como um só, não um arquivo pra cada mês"). Cada documento de
+ * reforço pode cobrir vários meses de uma vez (criarReforcosEmLote) - antes,
+ * cada mês virava uma linha própria e visualmente parecia "um arquivo por
+ * mês"; agora todos os meses do MESMO documento (mesmo numero_ne_reforco)
+ * viram um único item, com a lista de meses+valores e o arquivo compartilhado.
+ *
+ * Linhas sem numero_ne_reforco (reforço lançado manualmente, sem o
+ * documento ter sido lido com sucesso por OCR) NÃO são agrupadas entre si -
+ * cada uma vira seu próprio item (chave por id), já que não há garantia
+ * nenhuma de que duas linhas manuais sem número sejam do mesmo documento.
+ */
+function agruparReforcosPorNumero_(linhasReforco) {
+  var porChave = {};
+  var ordem = [];
+  linhasReforco.forEach(function (l) {
+    var chave = l.numero_ne_reforco ? ('n:' + l.numero_ne_reforco) : ('id:' + l.id);
+    if (!porChave[chave]) {
+      porChave[chave] = { numero_ne_reforco: l.numero_ne_reforco || '', ids: [], meses: [], valor_total: 0, arquivo_url: '' };
+      ordem.push(chave);
+    }
+    var grupo = porChave[chave];
+    grupo.ids.push(l.id);
+    grupo.valor_total += l.valor;
+    if (!grupo.arquivo_url && l.arquivo_url) grupo.arquivo_url = l.arquivo_url;
+    if (l.mes_referencia) grupo.meses.push({ mes: l.mes_referencia, valor: l.valor });
+  });
+  return ordem.map(function (chave) {
+    var grupo = porChave[chave];
+    grupo.meses.sort(function (a, b) { return a.mes - b.mes; });
+    return grupo;
+  });
+}
+
+/**
  * Listagem própria de Notas de Empenho (Funcionalidade 5, item 4 - Should):
  * um card por número de NE (agrupando original + reforços), com o valor
  * atual já calculado (bruto - liquidado nos Recibos) e o alerta de "abaixo
@@ -691,11 +780,19 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
     // ela aparecer, abaixo.
     if (!grupos[chave]) grupos[chave] = { numero_ne: chave, sof_id: n.sof_id, fonte: n.fonte, objeto: n.objeto || '', valor: 0, arquivos: [], original_id: null, reforcos: [], linhasNe: [] };
     grupos[chave].valor += toNumber_(n.valor);
-    if (n.arquivo_url) grupos[chave].arquivos.push({ tipo: n.tipo, url: n.arquivo_url, data: n.data_criacao });
+    // arquivos (sessão 2026-07-30): só o(s) arquivo(s) da NE ORIGINAL entram
+    // aqui - os arquivos de reforço aparecem dentro de cada linha da tabela
+    // "Reforços lançados" (reforcos_agrupados, abaixo), não mais duplicados
+    // aqui um por mês (o mesmo arquivo de um reforço de 3 meses aparecia 3x).
+    if (n.tipo === 'original' && n.arquivo_url) grupos[chave].arquivos.push({ tipo: n.tipo, url: n.arquivo_url, data: n.data_criacao });
     // linhasNe (sessão 2026-07-29): linhas individuais (mãe + cada reforço),
     // com id próprio - alimenta a opção de excluir uma linha específica no
-    // frontend (card de NE e tabela de NE dentro da edição de SOF).
-    grupos[chave].linhasNe.push({ id: n.id, tipo: n.tipo, valor: toNumber_(n.valor), mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null });
+    // frontend (tabela de NE dentro da edição de SOF) e a base do
+    // agrupamento por numero_ne_reforco (reforcos_agrupados, abaixo).
+    grupos[chave].linhasNe.push({
+      id: n.id, tipo: n.tipo, valor: toNumber_(n.valor), mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null,
+      numero_ne_reforco: n.numero_ne_reforco || '', arquivo_url: n.arquivo_url || '', data_criacao: n.data_criacao
+    });
     if (n.tipo === 'original') {
       grupos[chave].original_id = n.id;
       grupos[chave].fonte = n.fonte;
@@ -811,11 +908,16 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       // linhas (sessão 2026-07-29): mãe + cada reforço individualmente, com
       // id próprio - permite excluir uma linha específica (mãe ou reforço)
       // sem afetar as demais. Original sempre primeiro, reforços em seguida
-      // ordenados por mês de referência (sem mês por último).
+      // ordenados por mês de referência (sem mês por último). Usada pela
+      // tabela de NE dentro da edição de SOF (js/sof.js).
       linhas: grupo.linhasNe.slice().sort(function (a, b) {
         if (a.tipo !== b.tipo) return a.tipo === 'original' ? -1 : 1;
         return (a.mes_referencia || 99) - (b.mes_referencia || 99);
-      })
+      }),
+      // reforcos_agrupados (sessão 2026-07-30): reforços agrupados por
+      // numero_ne_reforco (1 item por documento de reforço, não 1 por mês) -
+      // usada pela tabela "Reforços lançados" do card de NE.
+      reforcos_agrupados: agruparReforcosPorNumero_(grupo.linhasNe.filter(function (l) { return l.tipo === 'reforco'; }))
     };
   });
 

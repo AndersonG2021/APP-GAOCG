@@ -1289,6 +1289,41 @@ Usuário mandou o texto bruto real (lido pelo OCR do Google Drive via `extrairTe
 
 **Ainda não testado:** reprocessar o mesmo documento e confirmar que os 12 meses saem certos agora (Set=0, Out/Nov/Dez=2.303.995,53, resto 0) e que o cronograma não diverge mais do Preço Total.
 
+## Tabela "Reforços Lançados" agrupada por documento, não mais por mês (sessão 2026-07-30, ALTERAÇÃO DE PLANILHA NECESSÁRIA)
+
+Pedido do usuário, a partir de um print do card de NE: a NE de reforço estava aparecendo "como se fosse um arquivo pra cada mês" — um documento de reforço que cobre 3 meses (ex.: Out/Nov/Dez) virava 3 linhas soltas na lista "Reforços lançados", cada uma com seu próprio botão de excluir, e o card ainda tinha "Ver arquivo 1/2/3" repetidos no rodapé (o mesmo arquivo, um link por mês). O usuário quer: uma **tabela** "Reforços Lançados" com 1 linha por **documento** de reforço (não por mês), colunas Número da NE de reforço / Meses / Valor por mês, **um único botão de excluir** por documento (exclui todos os meses daquele reforço de uma vez) e o link "Ver arquivo" **dentro da própria linha da tabela**, não mais solto no rodapé do card.
+
+### Causa raiz
+Cada mês de um reforço multi-mês sempre foi salvo como uma **linha própria** na aba `NotasEmpenho` (`criarReforcosEmLote` grava 1 linha por item do cronograma detectado) — correto para o modelo de dados (cada mês precisa da própria `mes_referencia`/`valor` para o cálculo de saldo), mas **nunca havia um jeito de saber, só olhando a planilha, quais linhas vieram do mesmo documento** — o frontend simplesmente listava todas as linhas `tipo='reforco'` soltas.
+
+### Modelo de dados (⚠️ requer 1 coluna nova na planilha, ver "Passo manual" abaixo)
+- **`NotasEmpenho` ganha a coluna `numero_ne_reforco`**: o próprio número da NE de reforço (lido do documento pelo mesmo OCR que já lê `numero_ne` da NE original), gravado em **todas** as linhas/meses criados a partir do mesmo documento. É a chave de agrupamento.
+
+### Backend
+- **`Utils.gs`**: `numero_ne_reforco` adicionado a `HEADERS.NotasEmpenho`.
+- **`NotasEmpenho.gs`**:
+  - `criarNotaEmpenho`/`criarReforcosEmLote` passam a gravar `numero_ne_reforco` em toda linha de reforço criada (vazio/ignorado para `tipo='original'`).
+  - Novo `agruparReforcosPorNumero_(linhasReforco)`: agrupa as linhas de reforço de uma NE por `numero_ne_reforco` — linhas com o mesmo número viram **1 item** (`{ numero_ne_reforco, ids: [...], meses: [{mes, valor}, ...], valor_total, arquivo_url }`). Linhas sem `numero_ne_reforco` (reforço lançado manualmente, sem o documento ter sido lido com sucesso pelo OCR) **não são agrupadas entre si** — cada uma vira seu próprio item, chaveada pelo próprio `id`, já que não há garantia de que duas linhas manuais sem número sejam do mesmo documento.
+  - `montarGruposNotasEmpenho_` ganhou `reforcos_agrupados` (resultado do agrupamento acima) no retorno de cada card; `arquivos` (usado para o(s) link(s) "Ver arquivo" do rodapé do card) agora só recebe a linha `original` — os arquivos de reforço saem só de dentro da tabela agrupada, não duplicados no rodapé.
+  - Novo `excluirNotasEmpenhoEmLote(session, ids)`: exclusão lógica em lote, defensivamente restrita a linhas `tipo='reforco'` (ignora silenciosamente qualquer id que não seja reforço, mesma cautela de nunca deixar excluir a mãe por essa via) — usada pelo botão único de excluir de um grupo inteiro.
+- **`Code.gs`**: novo `case 'excluirNotasEmpenhoEmLote'`.
+
+### Frontend
+- **`js/notas-empenho.js`**:
+  - `linhasReforcoHtml_` reescrita: consome `g.reforcos_agrupados` em vez de `g.linhas.filter(tipo==='reforco')` — agora renderiza uma **tabela** (`.tabela-reforcos`) com 1 linha por documento de reforço, colunas Nº da NE de reforço / Meses (lista) / Valor por mês (lista, paralela à de meses) / Arquivo (link "Ver arquivo" da própria linha) / Excluir (1 botão, `data-ids` com todos os ids do grupo separados por vírgula).
+  - `excluirReforcoClique_` passa a receber uma **lista de ids** (não mais um id só) e chama `excluirNotasEmpenhoEmLote` — 1 única confirmação, mensagem ajustada para citar quantos meses serão excluídos juntos quando for mais de 1.
+  - Os 3 pontos que criam reforço (`abrirModalReforco`, `abrirModalNovaNe` branch reforço, e o mini-formulário em `js/sof.js`) agora capturam `resultado.numero_ne` (do retorno de `lerAnexoNotaEmpenho`) numa variável própria e passam `numero_ne_reforco` no payload de `criarReforcosEmLote`/`criarNotaEmpenho` — resetada em todos os mesmos pontos onde `itensDetectados`/`arquivoLido` já eram resetados (troca de arquivo, "Remover anexo", erro de leitura).
+  - `cartaoNeHtml_` não precisou de mudança no rodapé — como `arquivos` já vem filtrado só para a original (backend), o(s) link(s) "Ver arquivo" duplicados por mês somem sozinhos.
+- **`js/sof.js`**: mini-formulário de NE embutido na edição de SOF também captura e envia `numero_ne_reforco` (mesma variável/padrão), para consistência de dado mesmo que a exibição desse formulário específico não tenha sido pedida para mudar (continua mostrando linhas individuais ali, sem agrupamento — o pedido do usuário era especificamente sobre o card da tela de Notas de Empenho).
+- **`css/style.css`**: `.cartao-ne-linha-item` (lista solta antiga) removida; nova `.tabela-reforcos`/`.tabela-reforcos-lista` estilizando a tabela (reaproveita a classe `.tabela` já usada no resto do app, com `white-space: normal` para caber listas de meses/valores dentro da célula).
+
+### ⚠️ Passo manual pendente
+1. **Criar a coluna `numero_ne_reforco` na aba `NotasEmpenho`** (senão o dado é descartado silenciosamente, mesmo mecanismo de sempre) — reforços já cadastrados **antes** desta sessão vão continuar aparecendo (cada um em seu próprio item, chaveado pelo id, já que não têm esse número gravado) — só não ficam agrupados entre si mesmo que sejam do mesmo documento original; não há como recuperar esse agrupamento retroativamente sem reprocessar os anexos antigos.
+2. Colar e reimplantar (Nova versão): `Utils.gs`, `NotasEmpenho.gs`, `Code.gs` — recomendado colar **todos** os `.gs` de uma vez (lição já registrada acima).
+3. Frontend (`js/notas-empenho.js`, `js/sof.js`, `css/style.css`) atualiza sozinho no GitHub Pages depois do `git push` (até ~10 min de propagação).
+
+**Ainda não testado:** anexar um reforço com 2+ meses e conferir que aparece **1 linha só** na tabela "Reforços Lançados" (com todos os meses/valores listados); clicar "Ver arquivo" dentro dessa linha; excluir esse grupo e confirmar que **todos** os meses somem juntos (1 clique, 1 confirmação); lançar um reforço manualmente (sem OCR reconhecer o documento) e confirmar que ele aparece como item isolado, sem se misturar com outros; conferir que o rodapé do card volta a mostrar só 1 "Ver arquivo" (o da NE mãe).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

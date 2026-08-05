@@ -79,7 +79,13 @@ var HEADERS = {
   // novo) - ver criarNotaEmpenho, NotasEmpenho.gs.
   // excluido/excluido_por/excluido_em (sessão 2026-07-29): exclusão lógica de
   // uma NE (mãe ou reforço), mesmo padrão de SOF/Recibos - ver excluirNotaEmpenho.
-  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'fonte', 'objeto', 'valor', 'periodo', 'mes_referencia',
+  // numero_ne_reforco (sessão 2026-07-30): só para tipo=reforco - o número
+  // PRÓPRIO do documento de reforço (lido por OCR), diferente de numero_ne
+  // (que é o número da NE MÃE, usado pra agrupar tudo no mesmo card). Vários
+  // meses vindos do MESMO documento de reforço compartilham o mesmo
+  // numero_ne_reforco - é a chave usada pra agrupar esses meses como "um
+  // reforço só" na tabela "Reforços lançados" (ver montarGruposNotasEmpenho_).
+  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'numero_ne_reforco', 'fonte', 'objeto', 'valor', 'periodo', 'mes_referencia',
     'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao', 'excluido', 'excluido_por', 'excluido_em'],
   NotasEmpenhoCronograma: ['id', 'nota_empenho_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
