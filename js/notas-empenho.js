@@ -367,6 +367,26 @@ const TelaNotasEmpenho = (function () {
     }
   }
 
+  /**
+   * Mostra (num <details> recolhido, some sozinho até ter algo) o texto
+   * bruto que o OCR leu do documento (sessão 2026-07-30) - diagnóstico pra
+   * quando um campo não é identificado corretamente: o layout visto no PDF
+   * nem sempre bate com a ordem/formatação que o OCR do Google devolve como
+   * texto plano, então ver o texto real é o jeito confiável de depurar um
+   * regex que não está batendo, em vez de adivinhar.
+   */
+  function mostrarDiagnosticoOcr_(idDetails, texto) {
+    const el = document.getElementById(idDetails);
+    if (!el) return;
+    if (texto) {
+      el.classList.remove('oculto');
+      el.querySelector('pre').textContent = texto;
+    } else {
+      el.classList.add('oculto');
+      el.querySelector('pre').textContent = '';
+    }
+  }
+
   function abrirModalReforco(grupo) {
     const corpo = `
       <form id="formReforcoNe">
@@ -375,6 +395,10 @@ const TelaNotasEmpenho = (function () {
         <p id="reforcoStatusAnexo" class="ajuda oculto"></p>
         <p id="reforcoAvisoReferencia" class="aviso-divergencia oculto"></p>
         <div id="reforcoMesesDetectados" class="oculto"></div>
+        <details class="ocr-diagnostico oculto" id="reforcoDiagnostico">
+          <summary>Ver texto lido do documento (diagnóstico)</summary>
+          <pre></pre>
+        </details>
         <div class="grade-2" id="reforcoManualCampos">
           <div class="campo"><label>Mês de referência do reforço *</label>
             <select id="reforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
@@ -411,6 +435,7 @@ const TelaNotasEmpenho = (function () {
       arquivoLido = null;
       mostrarMesesDetectados_(null);
       conferirNeReferencia_('reforcoAvisoReferencia', null, null);
+      mostrarDiagnosticoOcr_('reforcoDiagnostico', null);
       if (!arquivo) return;
       if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
       statusEl.classList.remove('oculto');
@@ -421,6 +446,7 @@ const TelaNotasEmpenho = (function () {
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
         conferirNeReferencia_('reforcoAvisoReferencia', resultado.numero_ne_referencia, grupo.numero_ne);
+        mostrarDiagnosticoOcr_('reforcoDiagnostico', resultado.texto_ocr_debug);
 
         let mensagemStatus;
         if (mesesComValor.length) {
@@ -448,6 +474,7 @@ const TelaNotasEmpenho = (function () {
           inputEl.value = '';
           mostrarMesesDetectados_(null);
           conferirNeReferencia_('reforcoAvisoReferencia', null, null);
+          mostrarDiagnosticoOcr_('reforcoDiagnostico', null);
           camposManuais.classList.remove('oculto');
           document.getElementById('reforcoMes').required = true;
           document.getElementById('reforcoValor').required = true;
@@ -554,6 +581,10 @@ const TelaNotasEmpenho = (function () {
         <div id="novaNeCronograma" class="oculto"></div>
         <div class="campo"><label>Preço Total</label><input id="novaNePrecoTotal" readonly /></div>
         <p id="novaNeAvisoDivergencia" class="aviso-divergencia oculto">⚠ A soma do cronograma não bate com o Preço Total do documento.</p>
+        <details class="ocr-diagnostico oculto" id="novaNeDiagnostico">
+          <summary>Ver texto lido do documento (diagnóstico)</summary>
+          <pre></pre>
+        </details>
         </div>
 
         <div id="blocoNovaNeReforco" class="oculto">
@@ -565,6 +596,10 @@ const TelaNotasEmpenho = (function () {
           <p id="novaNeReforcoStatusAnexo" class="ajuda oculto"></p>
           <p id="novaNeReforcoAvisoReferencia" class="aviso-divergencia oculto"></p>
           <div id="novaNeReforcoMesesDetectados" class="oculto"></div>
+          <details class="ocr-diagnostico oculto" id="novaNeReforcoDiagnostico">
+            <summary>Ver texto lido do documento (diagnóstico)</summary>
+            <pre></pre>
+          </details>
           <div class="grade-2" id="novaNeReforcoManualCampos">
             <div class="campo"><label>Mês de referência do reforço *</label>
               <select id="novaNeReforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
@@ -668,6 +703,7 @@ const TelaNotasEmpenho = (function () {
         document.getElementById('novaNePrecoTotal').value = resultado.preco_total;
         renderCronogramaPreview_(resultado.cronograma);
         document.getElementById('novaNeAvisoDivergencia').classList.toggle('oculto', !resultado.cronograma_diverge_do_total);
+        mostrarDiagnosticoOcr_('novaNeDiagnostico', resultado.texto_ocr_debug);
         statusEl.innerHTML = '🔒 Dados lidos do documento. <a href="#" id="novaNeRemoverAnexo">Remover anexo</a>';
         document.getElementById('novaNeRemoverAnexo').addEventListener('click', function (e) {
           e.preventDefault();
@@ -677,6 +713,7 @@ const TelaNotasEmpenho = (function () {
           document.getElementById('novaNePrecoTotal').value = '';
           renderCronogramaPreview_([]);
           document.getElementById('novaNeAvisoDivergencia').classList.add('oculto');
+          mostrarDiagnosticoOcr_('novaNeDiagnostico', null);
           statusEl.classList.add('oculto');
         });
       } catch (err) {
@@ -698,6 +735,7 @@ const TelaNotasEmpenho = (function () {
       arquivoReforcoLido = null;
       mostrarMesesReforcoDetectados_(null);
       conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
+      mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', null);
       if (!arquivo) return;
       if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
       statusEl.classList.remove('oculto');
@@ -708,6 +746,7 @@ const TelaNotasEmpenho = (function () {
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
         conferirNeReferencia_('novaNeReforcoAvisoReferencia', resultado.numero_ne_referencia, document.getElementById('novaNeReforcoAlvo').value);
+        mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', resultado.texto_ocr_debug);
 
         let mensagemStatus;
         if (mesesComValor.length) {
@@ -735,6 +774,7 @@ const TelaNotasEmpenho = (function () {
           inputEl.value = '';
           mostrarMesesReforcoDetectados_(null);
           conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
+          mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', null);
           camposManuais.classList.remove('oculto');
           document.getElementById('novaNeReforcoMes').required = true;
           document.getElementById('novaNeReforcoValor').required = true;

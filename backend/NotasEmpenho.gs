@@ -229,7 +229,15 @@ function lerAnexoNotaEmpenho(session, params) {
     // cronograma não bater (ou não tiver sido lido), o frontend só avisa, não bloqueia.
     cronograma_diverge_do_total: cronograma.length === 12 && Math.abs(precoTotal - somaCronograma) > 0.01,
     fonte: fonteCodigo ? classificarFonteDoCodigoOrcamentario_(fonteCodigo) : null,
-    fonte_codigo: fonteCodigo
+    fonte_codigo: fonteCodigo,
+    // texto_ocr_debug (sessão 2026-07-30): texto bruto lido por OCR do
+    // documento, truncado - só pra diagnóstico quando algum campo não é
+    // identificado corretamente (frontend mostra num <details> recolhido,
+    // não atrapalha o uso normal). Sem isso, depurar um regex que não bate
+    // com o texto real extraído pelo OCR do Google (Drive.Files.create com
+    // ocrLanguage) é adivinhação - o layout que a gente vê no PDF não é
+    // necessariamente a ordem/formatação que o OCR devolve como texto plano.
+    texto_ocr_debug: texto.slice(0, 6000)
   });
 }
 

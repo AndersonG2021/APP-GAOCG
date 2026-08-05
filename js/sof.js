@@ -1223,7 +1223,11 @@ const TelaSof = (function () {
       </div>
       <div id="neMesesDetectados" class="oculto"></div>
       <p id="neAvisoReferencia" class="aviso-divergencia oculto"></p>
-      <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
+      <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>
+      <details class="ocr-diagnostico oculto" id="neDiagnostico">
+        <summary>Ver texto lido do documento (diagnóstico)</summary>
+        <pre></pre>
+      </details>`;
 
     document.getElementById('neFonte').addEventListener('change', () => atualizarSelectObjetoNe_(sof));
     document.getElementById('neTipo').addEventListener('change', function () {
@@ -1236,6 +1240,7 @@ const TelaSof = (function () {
       alvoMeses.classList.add('oculto');
       alvoMeses.innerHTML = '';
       conferirNeReferencia_(null, null);
+      mostrarDiagnosticoOcr_(null);
       const statusAnexo = document.querySelector('.anexo-ocr-status');
       if (statusAnexo) statusAnexo.classList.add('oculto');
       document.getElementById('neValor').readOnly = false;
@@ -1299,6 +1304,24 @@ const TelaSof = (function () {
   }
 
   /**
+   * Mostra (num <details> recolhido) o texto bruto que o OCR leu do
+   * documento (sessão 2026-07-30) - diagnóstico pra quando um campo não é
+   * identificado corretamente. Mesma lógica de mostrarDiagnosticoOcr_ em
+   * js/notas-empenho.js, duplicada aqui por serem módulos/DOMs separados.
+   */
+  function mostrarDiagnosticoOcr_(texto) {
+    const el = document.getElementById('neDiagnostico');
+    if (!el) return;
+    if (texto) {
+      el.classList.remove('oculto');
+      el.querySelector('pre').textContent = texto;
+    } else {
+      el.classList.add('oculto');
+      el.querySelector('pre').textContent = '';
+    }
+  }
+
+  /**
    * Ao anexar o arquivo no mini-formulário de NE (dentro da edição de SOF),
    * lê o documento por OCR:
    * - Original: preenche Número, Fonte (classificada do código orçamentário)
@@ -1351,6 +1374,7 @@ const TelaSof = (function () {
         alvoMeses.classList.add('oculto');
         alvoMeses.innerHTML = '';
         conferirNeReferencia_(null, null);
+        mostrarDiagnosticoOcr_(null);
         valorEl.readOnly = false;
         valorEl.value = '';
         inputEl.value = '';
@@ -1402,12 +1426,14 @@ const TelaSof = (function () {
         objetoEl.disabled = false;
         document.getElementById('neValor').readOnly = false;
         document.getElementById('neValor').value = '';
+        mostrarDiagnosticoOcr_(null);
         inputEl.value = '';
         statusEl.classList.add('oculto');
       });
     }
 
     function travar(resultado) {
+      mostrarDiagnosticoOcr_(resultado.texto_ocr_debug);
       if (document.getElementById('neTipo').value === 'reforco') travarReforco_(resultado);
       else travarOriginal_(resultado);
     }

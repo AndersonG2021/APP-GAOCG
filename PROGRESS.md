@@ -1262,6 +1262,18 @@ Documentos de reforço têm um campo `Nº DA N.E. DE REFERÊNCIA:` apontando pra
 
 **Ainda não testado:** reprocessar o mesmo documento de reforço enviado e conferir que os meses Out/Nov/Dez aparecem certos (não mais Jun/Set/Dez); testar com uma NE original de verdade pra confirmar que o cronograma dela também sai correto agora; testar o aviso de "Nº DA N.E. DE REFERÊNCIA" com um número que não bate de propósito.
 
+### A correção da ordem coluna/linha NÃO resolveu de fato - achado real, ainda em aberto
+
+Usuário testou com o mesmo documento real e o app caiu no plano B ("Valor lido do documento (R$ 6.911.986,59) - não foi possível identificar o mês"), ou seja, `extrairCronogramaDesembolso_` achou **menos de 12 valores monetários** na seção do cronograma - um problema diferente (e anterior) do que eu tinha corrigido (mapeamento errado assumia que os 12 valores existiam; agora nem os 12 estão sendo encontrados).
+
+**Causa provável identificada:** o texto que eu analisei pra descobrir a ordem "coluna, não linha" veio da MINHA PRÓPRIA leitura do PDF (Claude lendo o documento anexado no chat) - não é o mesmo texto que `extrairTextoOcr_` (`Utils.gs`) produz de verdade. Essa função usa o **OCR do Google Drive** (`Drive.Files.create(..., { ocrLanguage: 'pt' })` convertendo o PDF pra Google Doc, depois lendo o texto desse Doc) - um pipeline de reconhecimento de imagem, bem diferente e menos confiável que a extração de texto que eu fiz. É plausível que o OCR do Google leia algum "0,00" errado (ex.: como "O,OO" com letra, ou grude com texto vizinho na tabela densa do formulário), o que faria a contagem de valores encontrados cair abaixo de 12 e a função inteira devolver `[]` (nenhum mês identificado) - o sintoma bate exatamente com isso.
+
+**Decisão tomada:** em vez de continuar adivinhando qual é a ordem/formatação real que o OCR devolve, adicionei um **modo de diagnóstico**: `lerAnexoNotaEmpenho` agora devolve `texto_ocr_debug` (texto bruto lido pelo OCR, truncado em 6000 caracteres) - nos 4 pontos onde o app lê um anexo de NE (card "+Reforço", modal "Nova Nota de Empenho" original e reforço, mini-formulário da SOF), um `<details>` recolhido "Ver texto lido do documento (diagnóstico)" mostra esse texto bruto, pra o usuário copiar e mandar de volta - só assim dá pra ver o que o OCR do Google realmente devolveu pra esse documento, em vez de eu continuar simulando com uma leitura minha que não é equivalente.
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs` (a mudança de `texto_ocr_debug` está no mesmo arquivo do fix anterior, ainda não confirmado se já foi colado).
+
+**Próximo passo:** usuário vai reabrir o modal de reforço com o mesmo documento, abrir "Ver texto lido do documento (diagnóstico)" e mandar o texto de volta - só com o texto real extraído dá pra ajustar `extrairCronogramaDesembolso_`/regex de forma confiável, em vez de mais uma suposição não verificada.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
