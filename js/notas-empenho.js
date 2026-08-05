@@ -295,7 +295,9 @@ const TelaNotasEmpenho = (function () {
           <div class="cartao-ne-infogrid-item"><span>Total Solicitado</span><strong>${UI.formatarMoeda(g.total_solicitado)}</strong></div>
           <div class="cartao-ne-infogrid-item"><span>Total Atendido</span><strong>${UI.formatarMoeda(g.total_atendido)}</strong></div>
           <div class="cartao-ne-infogrid-item"><span>Saldo Atual</span><strong class="${g.alerta ? 'vermelho' : ''}">${UI.formatarMoeda(g.saldo_atual)}</strong></div>
-          <div class="cartao-ne-infogrid-item"><span>Falta ser Atendido</span><strong>${UI.formatarMoeda(g.falta_atendido)}</strong></div>
+          <div class="cartao-ne-infogrid-item"><span>Falta ser Atendido</span>${g.falta_atendido <= 0.005
+            ? '<strong class="verde">O total solicitado já foi atendido!</strong>'
+            : `<strong>${UI.formatarMoeda(g.falta_atendido)}</strong>`}</div>
         </div>
         ${linhasReforcoHtml_(g)}
         <div class="cartao-ne-rodape">
