@@ -56,17 +56,25 @@ function dashboardRecibos_(session, competencia, recibosCarregados) {
 /**
  * Card "Atendido x Solicitado" (sessão 2026-07-28): compara o total empenhado
  * (soma do valor de todas as Notas de Empenho de SOFs não excluídas) com o
- * total solicitado (soma de SOF.total_solicitado das mesmas SOFs). Acumulado
- * geral - não filtra por competência (decisão de desenho, ver
+ * total solicitado (soma do total_solicitado de SofFontes das mesmas SOFs).
+ * Acumulado geral - não filtra por competência (decisão de desenho, ver
  * docs/ESPECIFICACAO_NOVO_DASHBOARD.md). sofs já vem sem excluídos de
  * obterDashboard.
+ *
+ * BUG corrigido (sessão 2026-07-29): SOF.total_solicitado nunca é persistido
+ * na aba SOF - é sempre recalculado a partir de SofFontes e devolvido só na
+ * resposta da API (ver totalSolicitadoDeFontes_, Sof.gs). Somar
+ * `s.total_solicitado` direto da linha do SOF sempre dava 0. A fonte correta
+ * é a aba SofFontes (todasFontesComCache_), que grava total_solicitado de
+ * verdade por linha (substituirFontesDoSof_).
  */
 function dashboardSofAtendido_(session, sofs) {
   var idsSof = {};
+  sofs.forEach(function (s) { idsSof[s.id] = true; });
+
   var totalSolicitado = 0;
-  sofs.forEach(function (s) {
-    idsSof[s.id] = true;
-    totalSolicitado += toNumber_(s.total_solicitado);
+  todasFontesComCache_().forEach(function (f) {
+    if (idsSof[f.sof_id]) totalSolicitado += toNumber_(f.total_solicitado);
   });
 
   var totalEmpenhado = 0;
