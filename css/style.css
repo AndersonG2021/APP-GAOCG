@@ -487,12 +487,25 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
  * reforço (agrupado por numero_ne_reforco no backend), não mais uma linha
  * por mês - ver linhasReforcoHtml_, js/notas-empenho.js.
  */
-.cartao-ne-linhas { margin: 8px 0; padding: 8px 10px; background: var(--cinza-100); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
+.cartao-ne-linhas { margin: 8px 0; padding: 8px 10px; background: var(--cinza-100); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cartao-ne-linhas label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .02em; color: var(--cinza-500); margin-bottom: 2px; }
-.tabela-reforcos { background: var(--branco); border-radius: 8px; overflow: hidden; }
-.tabela-reforcos th, .tabela-reforcos td { white-space: normal; font-size: 12.5px; vertical-align: top; }
+/* Wrapper com scroll horizontal como rede de segurança (sessão 2026-07-30) -
+   a tabela em si usa table-layout: fixed com larguras proporcionais pra
+   caber dentro do card na maioria dos casos; o scroll só entra em ação em
+   telas muito estreitas ou números de NE incomumente longos. */
+.tabela-reforcos-wrap { overflow-x: auto; border-radius: 8px; }
+.tabela-reforcos { background: var(--branco); border-radius: 8px; overflow: hidden; table-layout: fixed; width: 100%; min-width: 380px; }
+.tabela-reforcos th, .tabela-reforcos td { white-space: normal; font-size: 12.5px; vertical-align: top; word-break: break-word; padding: 8px 8px; }
+.tabela-reforcos th:nth-child(1), .tabela-reforcos td:nth-child(1) { width: 26%; }
+.tabela-reforcos th:nth-child(2), .tabela-reforcos td:nth-child(2) { width: 20%; }
+.tabela-reforcos th:nth-child(3), .tabela-reforcos td:nth-child(3) { width: 24%; }
+.tabela-reforcos th:nth-child(4), .tabela-reforcos td:nth-child(4) { width: 20%; }
+.tabela-reforcos th:nth-child(5), .tabela-reforcos td:nth-child(5) { width: 40px; padding-left: 4px; padding-right: 4px; }
 .tabela-reforcos-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .tabela-reforcos .botao-icone { width: 26px; height: 26px; background: var(--cinza-100); }
+@media (max-width: 480px) {
+  .tabela-reforcos th, .tabela-reforcos td { font-size: 11.5px; padding: 6px; }
+}
 .cartao-ne-rodape { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
 .cartao-ne-rodape-links { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cartao-ne-cronograma-caixa { background: var(--cinza-100); border-radius: 8px; padding: 12px 14px; margin-top: 2px; }
