@@ -1143,6 +1143,18 @@ Usuário reportou que, com objetos de T.A. mais longos (ex.: "Tratamento de AVC 
 - **Botão "Marcar/desmarcar todas"** ao lado do rótulo "Colunas": alterna todos os checkboxes de uma vez - se alguma estiver desmarcada, marca todas; se todas já estiverem marcadas, desmarca todas.
 
 **Bug reportado e corrigido na sequência (`css/style.css`, só CSS):** ao expandir um card de Unidade, todos os outros cards **da mesma linha da grade** também "esticavam" (ficavam mais altos, com espaço em branco embaixo), mesmo sem mostrar nenhuma informação a mais. Causa: `.grade-cards-unidade` é um grid sem `align-items` definido, que por padrão (`stretch`) estica todo item da grade pra ocupar a altura do maior item da mesma linha — ao expandir um card, ele virava o mais alto da linha e "puxava" a altura dos vizinhos. Corrigido com `align-items: start` no grid, pra cada card ter só a altura do seu próprio conteúdo.
+## Lentidão ao SALVAR SOF/NE (30-60s) — escrita das fontes em lote (sessão 2026-07-28, só backend, pendente de colar)
+
+Usuário reportou 30-60s para salvar uma SOF (após criada) e para salvar uma SOF após anexar uma NE, travando o app nesse tempo. Diagnóstico: o gargalo é `substituirFontesDoSof_` (`backend/Sof.gs`) no "apagar-e-recriar" das fontes/cronograma. Para uma SOF com 2 fontes × 12 meses (~26 linhas), ele fazia **~26 ciclos de `LockService`** (um `proximoId_` por linha, cada um com `waitLock` + leitura/escrita da aba Contadores), **~26 appends individuais** e **~26 `deleteRow`** (cada `deleteRow` desloca a planilha) — dezenas de round-trips ao serviço de Sheets por salvamento. (O `RELATORIO_LENTIDAO_SOF.md` anterior tratava só do **abrir** card; este é o caminho de **escrita**.)
+
+Correções (só backend, sem mudança de planilha):
+- **`backend/Utils.gs`:** novo `deleteRowsEmLote_(sheet, rowIndices)` — agrupa índices contíguos e apaga com `deleteRows(inicio, qtd)` de baixo pra cima, 1-2 chamadas em vez de uma por linha.
+- **`backend/Sof.gs` (`substituirFontesDoSof_`):** reserva **todos** os IDs de SofFontes/SofFontesCronograma de uma vez (`proximosIds_`, um lock por aba em vez de um por linha), grava tudo com `appendObjectRows_` (1 escrita por aba) e apaga o antigo com `deleteRowsEmLote_`. De ~26 ciclos de lock + ~26 appends + ~26 deletes para ~2 + 2 + ~2.
+- **`backend/NotasEmpenho.gs` (`criarNotaEmpenho`):** o cronograma de desembolso da NE (até 12 meses) também passou a reservar IDs em lote + `appendObjectRows_`, em vez de `proximoId_`/append por mês. (A criação do arquivo no Drive continua sendo o custo inerente restante ao anexar NE, ~2-5s.)
+
+**Passo manual pendente (backend):** colar e reimplantar `Utils.gs`, `Sof.gs`, `NotasEmpenho.gs`. Sem coluna/aba nova. Esperado: salvar SOF cair de 30-60s para poucos segundos.
+
+**Ainda não testado pelo usuário:** medir o tempo real de salvar uma SOF (com fontes) e de salvar após anexar NE, depois de reimplantar.
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
