@@ -246,18 +246,27 @@ function criarNotaEmpenho(session, dados) {
   // Nota de Empenho") - reforço não tem cronograma próprio (tem mes_referencia).
   if (tipo === 'original' && dados.cronograma && dados.cronograma.length) {
     var cronoSheet = getSheet_(SHEETS.NOTAS_EMPENHO_CRONOGRAMA);
-    dados.cronograma.forEach(function (item) {
+    var itensValidos = dados.cronograma.filter(function (item) {
       var mes = Number(item.mes);
-      if (mes < 1 || mes > 12) return;
-      appendObjectRow_(cronoSheet, {
-        id: proximoId_('NotasEmpenhoCronograma'),
-        nota_empenho_id: id,
-        mes: mes,
-        valor: toNumber_(item.valor),
-        criado_por: session.id,
-        data_criacao: nowIso_()
-      });
+      return mes >= 1 && mes <= 12;
     });
+    if (itensValidos.length) {
+      // Todos os IDs num único lock e uma escrita em lote, em vez de um
+      // proximoId_/append por mês (mesma otimização de substituirFontesDoSof_).
+      var idsCrono = proximosIds_('NotasEmpenhoCronograma', itensValidos.length);
+      var agoraCrono = nowIso_();
+      var linhasCrono = itensValidos.map(function (item, i) {
+        return {
+          id: idsCrono[i],
+          nota_empenho_id: id,
+          mes: Number(item.mes),
+          valor: toNumber_(item.valor),
+          criado_por: session.id,
+          data_criacao: agoraCrono
+        };
+      });
+      appendObjectRows_(cronoSheet, linhasCrono);
+    }
     invalidarCacheCronograma_();
   }
 

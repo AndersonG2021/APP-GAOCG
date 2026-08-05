@@ -294,6 +294,31 @@ function deleteRow_(sheet, rowIndex) {
   sheet.deleteRow(rowIndex);
 }
 
+/**
+ * Apaga várias linhas com o mínimo de chamadas ao Sheets: agrupa índices
+ * contíguos e usa deleteRows(inicio, quantidade) uma vez por bloco, sempre de
+ * baixo pra cima (maior índice primeiro), pra não deslocar as linhas ainda não
+ * apagadas. Linhas de um mesmo SOF/NE quase sempre foram gravadas em sequência,
+ * então isso costuma virar 1-2 chamadas em vez de uma por linha - grande ganho
+ * de performance no "apagar-e-recriar" das fontes do SOF (ver
+ * substituirFontesDoSof_, Sof.gs, e RELATORIO_LENTIDAO_SOF.md).
+ */
+function deleteRowsEmLote_(sheet, rowIndices) {
+  if (!rowIndices || !rowIndices.length) return;
+  var ordenados = rowIndices.slice().sort(function (a, b) { return b - a; });
+  var i = 0;
+  while (i < ordenados.length) {
+    var fim = ordenados[i];
+    var inicio = fim;
+    while (i + 1 < ordenados.length && ordenados[i + 1] === inicio - 1) {
+      inicio = ordenados[i + 1];
+      i++;
+    }
+    sheet.deleteRows(inicio, fim - inicio + 1);
+    i++;
+  }
+}
+
 /** Nunca gravamos objetos Date nativos - datas são sempre strings ISO. */
 function serializeCell_(value) {
   if (value === undefined || value === null) return '';

@@ -209,26 +209,46 @@ function validarFontes_(fontes) {
  */
 function substituirFontesDoSof_(sofId, fontesArray, session) {
   var sheet = getSheet_(SHEETS.SOF_FONTES);
+  var cronoSheet = getSheet_(SHEETS.SOF_FONTES_CRONOGRAMA);
+
   var existentes = sheetToObjects_(sheet).filter(function (f) { return String(f.sof_id) === String(sofId); });
   var idsAntigos = existentes.map(function (f) { return f.id; });
-  existentes
-    .sort(function (a, b) { return b._row - a._row; })
-    .forEach(function (f) { deleteRow_(sheet, f._row); });
-
-  var cronoSheet = getSheet_(SHEETS.SOF_FONTES_CRONOGRAMA);
   var cronoAntigo = sheetToObjects_(cronoSheet).filter(function (c) { return idsAntigos.indexOf(c.sof_fonte_id) !== -1; });
-  cronoAntigo
-    .sort(function (a, b) { return b._row - a._row; })
-    .forEach(function (c) { deleteRow_(cronoSheet, c._row); });
 
-  (fontesArray || []).forEach(function (item) {
-    var cronograma = (item.cronograma || []).filter(function (c) {
+  // Apaga cronograma e fontes antigos em lote (blocos contíguos num único
+  // deleteRows), em vez de uma chamada deleteRow por linha - ver
+  // deleteRowsEmLote_ (Utils.gs) e RELATORIO_LENTIDAO_SOF.md.
+  deleteRowsEmLote_(cronoSheet, cronoAntigo.map(function (c) { return c._row; }));
+  deleteRowsEmLote_(sheet, existentes.map(function (f) { return f._row; }));
+
+  var fontes = fontesArray || [];
+  if (!fontes.length) {
+    invalidarCacheFontes_();
+    invalidarCacheFontesCronograma_();
+    return;
+  }
+
+  // Prepara os cronogramas válidos de cada fonte e reserva TODOS os IDs de uma
+  // vez (um lock por aba, não um por linha - antes eram dezenas de ciclos de
+  // LockService/Contadores por salvamento, o maior componente da lentidão).
+  var cronogramasPorFonte = fontes.map(function (item) {
+    return (item.cronograma || []).filter(function (c) {
       return Number(c.mes) >= 1 && Number(c.mes) <= 12 && isNonEmpty_(c.valor);
     });
-    var totalSolicitado = cronograma.reduce(function (s, c) { return s + toNumber_(c.valor); }, 0);
-    var fonteId = proximoId_('SofFontes');
+  });
+  var totalCrono = cronogramasPorFonte.reduce(function (s, cr) { return s + cr.length; }, 0);
+  var idsFonte = proximosIds_('SofFontes', fontes.length);
+  var idsCrono = totalCrono ? proximosIds_('SofFontesCronograma', totalCrono) : [];
+  var agora = nowIso_();
 
-    appendObjectRow_(sheet, {
+  var linhasFonte = [];
+  var linhasCrono = [];
+  var kCrono = 0;
+  fontes.forEach(function (item, i) {
+    var cronograma = cronogramasPorFonte[i];
+    var totalSolicitado = cronograma.reduce(function (s, c) { return s + toNumber_(c.valor); }, 0);
+    var fonteId = idsFonte[i];
+    linhasFonte.push({
       id: fonteId,
       sof_id: sofId,
       fonte: sanitizeString_(item.fonte, 50),
@@ -236,20 +256,23 @@ function substituirFontesDoSof_(sofId, fontesArray, session) {
       parcela_mensal: toNumber_(item.parcela_mensal),
       total_solicitado: totalSolicitado,
       criado_por: session.id,
-      data_criacao: nowIso_()
+      data_criacao: agora
     });
-
     cronograma.forEach(function (c) {
-      appendObjectRow_(cronoSheet, {
-        id: proximoId_('SofFontesCronograma'),
+      linhasCrono.push({
+        id: idsCrono[kCrono++],
         sof_fonte_id: fonteId,
         mes: Number(c.mes),
         valor: toNumber_(c.valor),
         criado_por: session.id,
-        data_criacao: nowIso_()
+        data_criacao: agora
       });
     });
   });
+
+  // Uma escrita em lote por aba, em vez de um append por linha.
+  appendObjectRows_(sheet, linhasFonte);
+  appendObjectRows_(cronoSheet, linhasCrono);
   invalidarCacheFontes_();
   invalidarCacheFontesCronograma_();
 }
