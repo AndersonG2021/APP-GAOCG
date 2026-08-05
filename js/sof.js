@@ -53,6 +53,10 @@ const TelaSof = (function () {
   // Reforço lido por OCR no mini-formulário de NE (sessão 2026-07-29) - [{mes_referencia, valor}, ...]
   // quando o documento anexado tem um cronograma com 1+ meses; ver ligarOcrMiniFormularioNe_/lerMiniFormularioNe_.
   let itensReforcoMiniform_ = null;
+  // Número PRÓPRIO do documento de reforço lido por OCR (sessão 2026-07-30) -
+  // distinto do número da NE mãe; agrupa os meses desse mesmo documento como
+  // "um reforço só" na tela de Notas de Empenho.
+  let numeroNeReforcoMiniform_ = null;
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
@@ -1060,7 +1064,11 @@ const TelaSof = (function () {
       // itens (sessão 2026-07-29): meses reforçados detectados por OCR, quando
       // tipo=reforco e o documento tinha um cronograma com 1+ meses - ver
       // ligarOcrMiniFormularioNe_. salvarSof usa criarReforcosEmLote nesse caso.
-      itens: tipo === 'reforco' ? itensReforcoMiniform_ : null
+      itens: tipo === 'reforco' ? itensReforcoMiniform_ : null,
+      // numero_ne_reforco (sessão 2026-07-30): número PRÓPRIO do documento de
+      // reforço lido por OCR - agrupa os meses desse documento como "um
+      // reforço só" na tela de Notas de Empenho.
+      numero_ne_reforco: tipo === 'reforco' ? numeroNeReforcoMiniform_ : null
     };
   }
 
@@ -1109,12 +1117,12 @@ const TelaSof = (function () {
         // de uma vez, compartilhando o mesmo arquivo anexado (criarReforcosEmLote).
         if (dadosNe.tipo === 'reforco' && dadosNe.itens && dadosNe.itens.length) {
           await Api.chamar('criarReforcosEmLote', {
-            data: { sof_id: resposta.id, numero_ne: dadosNe.numero_ne, itens: dadosNe.itens,
+            data: { sof_id: resposta.id, numero_ne: dadosNe.numero_ne, numero_ne_reforco: dadosNe.numero_ne_reforco, itens: dadosNe.itens,
               arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
           });
         } else {
           await Api.chamar('criarNotaEmpenho', {
-            data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
+            data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, numero_ne_reforco: dadosNe.numero_ne_reforco, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
               arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
           });
         }
@@ -1204,6 +1212,7 @@ const TelaSof = (function () {
     const opcoesFonte = Array.from(new Set((sof.fontes || []).map(f => f.fonte).filter(Boolean)));
     const fontesDisponiveis = opcoesFonte.length ? opcoesFonte : OPCOES_FONTE;
     itensReforcoMiniform_ = null;
+    numeroNeReforcoMiniform_ = null;
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
@@ -1236,6 +1245,7 @@ const TelaSof = (function () {
       // vice-versa) - limpa o arquivo e o estado antes de reconstruir os campos.
       document.getElementById('neArquivo').value = '';
       itensReforcoMiniform_ = null;
+      numeroNeReforcoMiniform_ = null;
       const alvoMeses = document.getElementById('neMesesDetectados');
       alvoMeses.classList.add('oculto');
       alvoMeses.innerHTML = '';
@@ -1344,6 +1354,10 @@ const TelaSof = (function () {
       const alvoMeses = document.getElementById('neMesesDetectados');
       const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
       conferirNeReferencia_(resultado.numero_ne_referencia, document.getElementById('neNumero').value);
+      // Número PRÓPRIO do documento de reforço (sessão 2026-07-30) - vai junto
+      // no criarReforcosEmLote/criarNotaEmpenho, pra agrupar os meses desse
+      // documento como "um reforço só" na tela de Notas de Empenho.
+      numeroNeReforcoMiniform_ = resultado.numero_ne || null;
 
       if (mesesComValor.length) {
         itensReforcoMiniform_ = mesesComValor.map(c => ({ mes_referencia: c.mes, valor: c.valor }));
@@ -1371,6 +1385,7 @@ const TelaSof = (function () {
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
         e.preventDefault();
         itensReforcoMiniform_ = null;
+        numeroNeReforcoMiniform_ = null;
         alvoMeses.classList.add('oculto');
         alvoMeses.innerHTML = '';
         conferirNeReferencia_(null, null);

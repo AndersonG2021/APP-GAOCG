@@ -243,24 +243,39 @@ const TelaNotasEmpenho = (function () {
   }
 
   /**
-   * Lista dos reforços já lançados nesta NE, cada um com botão de excluir
-   * (sessão 2026-07-29, pedido do usuário). Só reforços aparecem aqui - a NE
-   * mãe não se exclui por este card (o card inteiro é "dono" desse número);
-   * excluir a mãe é feito pela tabela de NE dentro da edição da SOF, ver
-   * js/sof.js.
+   * Tabela "Reforços lançados" desta NE (sessão 2026-07-30, pedido do
+   * usuário: "a NE de reforço está sendo salva várias vezes como se fosse um
+   * arquivo para cada mês"). Cada linha da tabela é UM documento de reforço
+   * (agrupado por numero_ne_reforco no backend, ver reforcos_agrupados em
+   * montarGruposNotasEmpenho_/agruparReforcosPorNumero_, NotasEmpenho.gs),
+   * mesmo que ele cubra vários meses - não mais uma linha por mês. O botão
+   * de excluir e o link "Ver arquivo" ficam dentro da própria linha,
+   * referentes a todos os meses daquele documento de uma vez
+   * (excluirNotasEmpenhoEmLote, com os ids de todos os meses do grupo).
    */
   function linhasReforcoHtml_(g) {
-    const reforcos = (g.linhas || []).filter(l => l.tipo === 'reforco');
-    if (!reforcos.length) return '';
+    const grupos = g.reforcos_agrupados || [];
+    if (!grupos.length) return '';
     return `
       <div class="cartao-ne-linhas">
         <label>Reforços lançados</label>
-        ${reforcos.map(l => `
-          <div class="cartao-ne-linha-item" data-id="${l.id}">
-            <span>${l.mes_referencia ? UI.escaparHtml(NOMES_MESES[l.mes_referencia - 1]) : 'Reforço'}</span>
-            <span>${UI.formatarMoeda(l.valor)}</span>
-            <button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-id="${l.id}" title="Excluir este reforço">${ICONE_LIXEIRA}</button>
-          </div>`).join('')}
+        <table class="tabela tabela-reforcos">
+          <thead><tr><th>Nº da NE de reforço</th><th>Meses</th><th>Valor por mês</th><th>Arquivo</th><th></th></tr></thead>
+          <tbody>
+            ${grupos.map(rg => `
+              <tr data-ids="${rg.ids.join(',')}">
+                <td>${rg.numero_ne_reforco ? UI.escaparHtml(rg.numero_ne_reforco) : '<span class="ajuda">-</span>'}</td>
+                <td>${rg.meses.length
+                  ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.escaparHtml(NOMES_MESES[m.mes - 1])}</li>`).join('')}</ul>`
+                  : '<span class="ajuda">-</span>'}</td>
+                <td>${rg.meses.length
+                  ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.formatarMoeda(m.valor)}</li>`).join('')}</ul>`
+                  : UI.formatarMoeda(rg.valor_total)}</td>
+                <td>${rg.arquivo_url ? `<a href="${UI.escaparHtml(rg.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '<span class="ajuda">-</span>'}</td>
+                <td><button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-ids="${rg.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
       </div>`;
   }
 
@@ -313,17 +328,26 @@ const TelaNotasEmpenho = (function () {
       cartao.querySelectorAll('[data-acao="excluir-reforco"]').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
-          excluirReforcoClique_(btn.dataset.id);
+          excluirReforcoClique_(btn.dataset.ids.split(','));
         });
       });
     });
   }
 
-  /** Exclui um reforço específico (sessão 2026-07-29) - mesmo padrão de confirmação usado em SOF/Recibos. */
-  async function excluirReforcoClique_(id) {
-    if (!confirm('Excluir este reforço? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.')) return;
+  /**
+   * Exclui um reforço (sessão 2026-07-29, atualizado 2026-07-30 pra excluir
+   * em lote): um "reforço" na tabela "Reforços lançados" pode ser 1+ linhas
+   * na planilha (1 por mês, quando o documento cobre vários meses de uma
+   * vez) - o botão exclui o grupo inteiro (todos os meses daquele
+   * documento), não uma linha isolada, com uma única confirmação.
+   */
+  async function excluirReforcoClique_(ids) {
+    const mensagem = ids.length > 1
+      ? 'Excluir este reforço (todos os ' + ids.length + ' meses deste documento)? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.'
+      : 'Excluir este reforço? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.';
+    if (!confirm(mensagem)) return;
     try {
-      await Api.chamar('excluirNotaEmpenho', { id });
+      await Api.chamar('excluirNotasEmpenhoEmLote', { ids });
       CacheAbas.invalidar('notasEmpenho');
       CacheAbas.invalidar('sof');
       UI.toast('Reforço excluído.', 'sucesso');
@@ -415,6 +439,7 @@ const TelaNotasEmpenho = (function () {
 
     let itensDetectados = null; // [{mes_referencia, valor}, ...] quando o OCR acha 1+ meses no cronograma do documento
     let arquivoLido = null; // {arquivoBase64, arquivoNome, arquivoTipo}
+    let numeroNeReforcoDetectado = null; // número da própria NE de reforço (lido do documento), usado para agrupar no card
 
     function mostrarMesesDetectados_(itens) {
       const alvo = document.getElementById('reforcoMesesDetectados');
@@ -433,6 +458,7 @@ const TelaNotasEmpenho = (function () {
       erroEl.classList.add('oculto');
       itensDetectados = null;
       arquivoLido = null;
+      numeroNeReforcoDetectado = null;
       mostrarMesesDetectados_(null);
       conferirNeReferencia_('reforcoAvisoReferencia', null, null);
       mostrarDiagnosticoOcr_('reforcoDiagnostico', null);
@@ -445,6 +471,7 @@ const TelaNotasEmpenho = (function () {
         arquivoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+        numeroNeReforcoDetectado = resultado.numero_ne || null;
         conferirNeReferencia_('reforcoAvisoReferencia', resultado.numero_ne_referencia, grupo.numero_ne);
         mostrarDiagnosticoOcr_('reforcoDiagnostico', resultado.texto_ocr_debug);
 
@@ -471,6 +498,7 @@ const TelaNotasEmpenho = (function () {
           e.preventDefault();
           itensDetectados = null;
           arquivoLido = null;
+          numeroNeReforcoDetectado = null;
           inputEl.value = '';
           mostrarMesesDetectados_(null);
           conferirNeReferencia_('reforcoAvisoReferencia', null, null);
@@ -485,6 +513,7 @@ const TelaNotasEmpenho = (function () {
       } catch (err) {
         inputEl.value = '';
         arquivoLido = null;
+        numeroNeReforcoDetectado = null;
         statusEl.classList.add('oculto');
         camposManuais.classList.remove('oculto');
         UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
@@ -500,7 +529,7 @@ const TelaNotasEmpenho = (function () {
       try {
         if (itensDetectados && itensDetectados.length) {
           await Api.chamar('criarReforcosEmLote', {
-            data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, itens: itensDetectados }, arquivoLido)
+            data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, itens: itensDetectados }, arquivoLido)
           });
         } else {
           const mesReferencia = document.getElementById('reforcoMes').value;
@@ -508,7 +537,7 @@ const TelaNotasEmpenho = (function () {
           if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
           if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
           await Api.chamar('criarNotaEmpenho', {
-            data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoLido)
+            data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoLido)
           });
         }
         CacheAbas.invalidar('notasEmpenho');
@@ -620,6 +649,7 @@ const TelaNotasEmpenho = (function () {
     // lógica, duplicada aqui porque este modal tem seu próprio DOM/estado).
     let itensReforcoDetectados = null;
     let arquivoReforcoLido = null;
+    let numeroNeReforcoDetectado = null; // número da própria NE de reforço (lido do documento), usado para agrupar no card
 
     function mostrarMesesReforcoDetectados_(itens) {
       const alvo = document.getElementById('novaNeReforcoMesesDetectados');
@@ -733,6 +763,7 @@ const TelaNotasEmpenho = (function () {
       erroEl.classList.add('oculto');
       itensReforcoDetectados = null;
       arquivoReforcoLido = null;
+      numeroNeReforcoDetectado = null;
       mostrarMesesReforcoDetectados_(null);
       conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
       mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', null);
@@ -745,6 +776,7 @@ const TelaNotasEmpenho = (function () {
         arquivoReforcoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+        numeroNeReforcoDetectado = resultado.numero_ne || null;
         conferirNeReferencia_('novaNeReforcoAvisoReferencia', resultado.numero_ne_referencia, document.getElementById('novaNeReforcoAlvo').value);
         mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', resultado.texto_ocr_debug);
 
@@ -771,6 +803,7 @@ const TelaNotasEmpenho = (function () {
           e.preventDefault();
           itensReforcoDetectados = null;
           arquivoReforcoLido = null;
+          numeroNeReforcoDetectado = null;
           inputEl.value = '';
           mostrarMesesReforcoDetectados_(null);
           conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
@@ -785,6 +818,7 @@ const TelaNotasEmpenho = (function () {
       } catch (err) {
         inputEl.value = '';
         arquivoReforcoLido = null;
+        numeroNeReforcoDetectado = null;
         statusEl.classList.add('oculto');
         camposManuais.classList.remove('oculto');
         UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
@@ -805,7 +839,7 @@ const TelaNotasEmpenho = (function () {
         try {
           if (itensReforcoDetectados && itensReforcoDetectados.length) {
             await Api.chamar('criarReforcosEmLote', {
-              data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, itens: itensReforcoDetectados }, arquivoReforcoLido)
+              data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, itens: itensReforcoDetectados }, arquivoReforcoLido)
             });
           } else {
             const mesReferencia = document.getElementById('novaNeReforcoMes').value;
@@ -813,7 +847,7 @@ const TelaNotasEmpenho = (function () {
             if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
             if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido para o reforço.'); return; }
             await Api.chamar('criarNotaEmpenho', {
-              data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoReforcoLido)
+              data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoReforcoLido)
             });
           }
           CacheAbas.invalidar('notasEmpenho');
