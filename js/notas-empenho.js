@@ -346,12 +346,34 @@ const TelaNotasEmpenho = (function () {
    * leitura falhar) os campos manuais de Mês/Valor ficam disponíveis, como
    * uma rede de segurança, não o caminho principal.
    */
+  /**
+   * Confere o "Nº DA N.E. DE REFERÊNCIA:" lido do documento (só existe em
+   * documentos de reforço) contra a NE que o analista está de fato
+   * reforçando (sessão 2026-07-30, pedido do usuário) - não bloqueia (o OCR
+   * pode errar a leitura de um campo secundário), só avisa bem visível.
+   * Atualiza o <p id="{idAviso}"> indicado; some sozinho quando bate ou
+   * quando o documento não tinha esse campo preenchido (NE original, ou
+   * campo não lido).
+   */
+  function conferirNeReferencia_(idAviso, numeroLido, numeroAlvo) {
+    const el = document.getElementById(idAviso);
+    if (!el) return;
+    if (numeroLido && numeroAlvo && numeroLido !== numeroAlvo) {
+      el.classList.remove('oculto');
+      el.textContent = `⚠ O documento indica reforço da NE ${numeroLido}, mas você está reforçando a NE ${numeroAlvo} - confira antes de salvar.`;
+    } else {
+      el.classList.add('oculto');
+      el.textContent = '';
+    }
+  }
+
   function abrirModalReforco(grupo) {
     const corpo = `
       <form id="formReforcoNe">
         <p class="ajuda">Reforço para a NE ${UI.escaparHtml(grupo.numero_ne)} (fonte ${UI.escaparHtml(grupo.fonte)}). Anexe o documento - os meses reforçados e os valores são identificados automaticamente.</p>
         <div class="campo"><label>Arquivo *</label><input type="file" id="reforcoArquivo" accept=".pdf,image/*" required /></div>
         <p id="reforcoStatusAnexo" class="ajuda oculto"></p>
+        <p id="reforcoAvisoReferencia" class="aviso-divergencia oculto"></p>
         <div id="reforcoMesesDetectados" class="oculto"></div>
         <div class="grade-2" id="reforcoManualCampos">
           <div class="campo"><label>Mês de referência do reforço *</label>
@@ -388,6 +410,7 @@ const TelaNotasEmpenho = (function () {
       itensDetectados = null;
       arquivoLido = null;
       mostrarMesesDetectados_(null);
+      conferirNeReferencia_('reforcoAvisoReferencia', null, null);
       if (!arquivo) return;
       if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
       statusEl.classList.remove('oculto');
@@ -397,6 +420,7 @@ const TelaNotasEmpenho = (function () {
         arquivoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+        conferirNeReferencia_('reforcoAvisoReferencia', resultado.numero_ne_referencia, grupo.numero_ne);
 
         let mensagemStatus;
         if (mesesComValor.length) {
@@ -423,6 +447,7 @@ const TelaNotasEmpenho = (function () {
           arquivoLido = null;
           inputEl.value = '';
           mostrarMesesDetectados_(null);
+          conferirNeReferencia_('reforcoAvisoReferencia', null, null);
           camposManuais.classList.remove('oculto');
           document.getElementById('reforcoMes').required = true;
           document.getElementById('reforcoValor').required = true;
@@ -538,6 +563,7 @@ const TelaNotasEmpenho = (function () {
           <div class="campo"><label>Arquivo *</label><input type="file" id="novaNeReforcoArquivo" accept=".pdf,image/*" /></div>
           <p class="ajuda">Ao anexar, os meses reforçados e os valores são identificados automaticamente.</p>
           <p id="novaNeReforcoStatusAnexo" class="ajuda oculto"></p>
+          <p id="novaNeReforcoAvisoReferencia" class="aviso-divergencia oculto"></p>
           <div id="novaNeReforcoMesesDetectados" class="oculto"></div>
           <div class="grade-2" id="novaNeReforcoManualCampos">
             <div class="campo"><label>Mês de referência do reforço *</label>
@@ -671,6 +697,7 @@ const TelaNotasEmpenho = (function () {
       itensReforcoDetectados = null;
       arquivoReforcoLido = null;
       mostrarMesesReforcoDetectados_(null);
+      conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
       if (!arquivo) return;
       if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
       statusEl.classList.remove('oculto');
@@ -680,6 +707,7 @@ const TelaNotasEmpenho = (function () {
         arquivoReforcoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+        conferirNeReferencia_('novaNeReforcoAvisoReferencia', resultado.numero_ne_referencia, document.getElementById('novaNeReforcoAlvo').value);
 
         let mensagemStatus;
         if (mesesComValor.length) {
@@ -706,6 +734,7 @@ const TelaNotasEmpenho = (function () {
           arquivoReforcoLido = null;
           inputEl.value = '';
           mostrarMesesReforcoDetectados_(null);
+          conferirNeReferencia_('novaNeReforcoAvisoReferencia', null, null);
           camposManuais.classList.remove('oculto');
           document.getElementById('novaNeReforcoMes').required = true;
           document.getElementById('novaNeReforcoValor').required = true;
