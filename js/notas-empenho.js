@@ -11,6 +11,7 @@ const TelaNotasEmpenho = (function () {
   const OPCOES_FONTE = ['TESOURO', 'SUS', 'Outra'];
   const NOMES_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const ICONE_PASTA = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+  const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
   let unidades = [];
   let grupos = [];
   let gruposTodos = [];
@@ -241,6 +242,28 @@ const TelaNotasEmpenho = (function () {
       </div>`;
   }
 
+  /**
+   * Lista dos reforços já lançados nesta NE, cada um com botão de excluir
+   * (sessão 2026-07-29, pedido do usuário). Só reforços aparecem aqui - a NE
+   * mãe não se exclui por este card (o card inteiro é "dono" desse número);
+   * excluir a mãe é feito pela tabela de NE dentro da edição da SOF, ver
+   * js/sof.js.
+   */
+  function linhasReforcoHtml_(g) {
+    const reforcos = (g.linhas || []).filter(l => l.tipo === 'reforco');
+    if (!reforcos.length) return '';
+    return `
+      <div class="cartao-ne-linhas">
+        <label>Reforços lançados</label>
+        ${reforcos.map(l => `
+          <div class="cartao-ne-linha-item" data-id="${l.id}">
+            <span>${l.mes_referencia ? UI.escaparHtml(NOMES_MESES[l.mes_referencia - 1]) : 'Reforço'}</span>
+            <span>${UI.formatarMoeda(l.valor)}</span>
+            <button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-id="${l.id}" title="Excluir este reforço">${ICONE_LIXEIRA}</button>
+          </div>`).join('')}
+      </div>`;
+  }
+
   function cartaoNeHtml_(g) {
     const cronograma = g.cronograma || [];
     const cronogramaSolicitado = g.cronograma_solicitado || [];
@@ -259,6 +282,7 @@ const TelaNotasEmpenho = (function () {
           <div class="cartao-ne-infogrid-item"><span>Saldo Atual</span><strong class="${g.alerta ? 'vermelho' : ''}">${UI.formatarMoeda(g.saldo_atual)}</strong></div>
           <div class="cartao-ne-infogrid-item"><span>Falta ser Atendido</span><strong>${UI.formatarMoeda(g.falta_atendido)}</strong></div>
         </div>
+        ${linhasReforcoHtml_(g)}
         <div class="cartao-ne-rodape">
           <div class="cartao-ne-rodape-links">
             ${temCronograma ? '<a href="#" class="cartao-ne-ver-cronograma">Ver cronograma ↓</a>' : '<span class="ajuda">Sem cronograma</span>'}
@@ -286,7 +310,27 @@ const TelaNotasEmpenho = (function () {
         const aberto = !caixa.classList.contains('oculto');
         linkCronograma.textContent = aberto ? 'Ocultar cronograma ↑' : 'Ver cronograma ↓';
       });
+      cartao.querySelectorAll('[data-acao="excluir-reforco"]').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          excluirReforcoClique_(btn.dataset.id);
+        });
+      });
     });
+  }
+
+  /** Exclui um reforço específico (sessão 2026-07-29) - mesmo padrão de confirmação usado em SOF/Recibos. */
+  async function excluirReforcoClique_(id) {
+    if (!confirm('Excluir este reforço? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.')) return;
+    try {
+      await Api.chamar('excluirNotaEmpenho', { id });
+      CacheAbas.invalidar('notasEmpenho');
+      CacheAbas.invalidar('sof');
+      UI.toast('Reforço excluído.', 'sucesso');
+      await carregar();
+    } catch (err) {
+      UI.toast(err.message, 'erro');
+    }
   }
 
   /**

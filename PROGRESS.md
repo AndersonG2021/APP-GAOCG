@@ -1218,6 +1218,27 @@ Reaproveita o **mesmo** `lerAnexoNotaEmpenho` (que já extrai o "Cronograma de D
 
 **Ainda não testado:** anexar um reforço com um documento que tenha 1 mês só; anexar um com 2+ meses (confirmar que cria vários reforços de uma vez); anexar um documento sem a tabela de cronograma (confirmar o plano B); reabrir a SOF depois de reforçar pela tela de NE e ver o cronograma verde/vermelho atualizado; reabrir o card da NE e ver o quadro "CRONOGRAMA SOLICITADO" refletindo o novo total atendido.
 
+## Bug corrigido: card do Dashboard "Atendido x Solicitado" (backend desatualizado, não código) + excluir NE mãe/reforço (sessão 2026-07-29)
+
+**Card do Dashboard:** o usuário reportou o card continuando em R$ 0,00 solicitado mesmo após a correção anterior. Código conferido e estava correto - a causa era `Dashboard.gs` não ter sido recolado no Apps Script naquela rodada (só os arquivos citados na mensagem anterior tinham sido colados). Resolvido pelo usuário recolando o arquivo. **Lição registrada:** daqui pra frente, ao pedir pra colar/reimplantar, recomendar colar **todos** os `.gs` de uma vez (não só os citados na sessão), pra evitar esse tipo de lacuna entre sessões diferentes.
+
+**Objeto no lugar da Fonte no card de NE:** o badge do topo do card (antes "TESOURO · SOF X") passou a mostrar o Objeto específico da NE em vez da Fonte - `g.objeto` já existia no dado desde a sessão anterior, só não estava sendo usado ali (`js/notas-empenho.js`, só frontend).
+
+### Excluir uma NE mãe ou reforço já anexada (pedido do usuário)
+
+Duas opções de exclusão, cada uma no lugar certo:
+- **Card de NE (tela Notas de Empenho):** lista os reforços já lançados (com mês e valor) logo abaixo dos totais, cada um com um botão de excluir. **Só reforços aparecem aqui** - a NE mãe não se exclui por este card (o card inteiro representa aquele número de NE).
+- **Tabela de NE dentro da edição de SOF:** ganhou uma coluna de excluir - aqui dá pra excluir **tanto a mãe quanto qualquer reforço**, ação imediata (não espera o "Salvar" da SOF, mesmo padrão do "+Reforço").
+
+**Backend (exclusão lógica, mesmo padrão de SOF/Recibos - `excluido`/`excluido_por`/`excluido_em`):**
+- **`Utils.gs`:** 3 colunas novas em `HEADERS.NotasEmpenho` (⚠️ precisa criar na planilha) + registrado em `COLUNAS_BOOLEANAS.NotasEmpenho`.
+- **`NotasEmpenho.gs`:** `todasNotasEmpenhoComCache_()` agora filtra excluídas **na fonte** (diferente do padrão de SOF/Recibos, que filtra em cada ponto de uso - aqui, com tantos consumidores dessa função, filtrar uma vez só evita esquecer de filtrar em algum lugar). Nova `excluirNotaEmpenho`: **bloqueia excluir a NE original enquanto ela tiver reforços ativos** (evita órfãos - pede pra excluir os reforços primeiro); se era a última NE original ativa do SOF, `possui_ne` volta a `false` (o SOF reaparece no filtro "Sem NE emitida"); andamento (stepper) não é revertido automaticamente. `montarGruposNotasEmpenho_` ganhou `linhas` (mãe + cada reforço com id/tipo/valor/mês próprios) - é o que alimenta as duas listas de exclusão no frontend.
+- **`Code.gs`:** novo `case 'excluirNotaEmpenho'`.
+
+**Passo manual pendente (backend):** **criar as 3 colunas novas na aba NotasEmpenho** (`excluido`, `excluido_por`, `excluido_em`) antes de colar o código, senão a planilha não tem onde gravar a exclusão. Colar e reimplantar `Utils.gs`, `NotasEmpenho.gs`, `Code.gs` (e, por segurança, recomendado colar **todos** os `.gs` juntos desta vez, ver lição acima).
+
+**Ainda não testado:** excluir um reforço pelo card de NE e ver o total atendido do card cair; tentar excluir a NE mãe com reforços ainda ativos e ver a mensagem de bloqueio; excluir todos os reforços e então a mãe, e ver `possui_ne` voltar a false (SOF reaparece em "Sem NE emitida"); excluir pela tabela dentro da edição de SOF e ver a lista atualizar sem fechar o formulário.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
