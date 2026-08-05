@@ -1192,6 +1192,32 @@ Pedido grande do usuário: cada SOF costuma solicitar o orçamento do ano pra 2 
 
 **Ainda não testado:** criar uma SOF nova com "+ TES+SUS" e conferir que salva com as 2 linhas certas; anexar uma NE mãe e ver o cronograma da SOF ficar verde/vermelho; abrir o card da NE na tela de Notas de Empenho e ver o quadro "CRONOGRAMA SOLICITADO"; criar um Recibo escolhendo uma NE existente e ver o Objeto ser sugerido; reabrir uma SOF antiga (pré-migração) e confirmar a mensagem pedindo Objeto; conferir que menos NEs aparecem com o card vermelho agora (critério 20%, não mais 100%).
 
+## Reforço com OCR (meses + valor automáticos) + bug real corrigido (destaque da SOF nunca aparecia) (sessão 2026-07-29, backend pendente de colar)
+
+Pedido do usuário: ao adicionar um reforço, o OCR deve identificar sozinho quais meses foram reforçados e o valor, sem o analista digitar nada - e verificar se o cronograma da NE e da SOF atualizam depois de anexar o reforço.
+
+### Bug real encontrado ao verificar (corrigido)
+O destaque verde/vermelho do cronograma da SOF (implementado na sessão anterior) **nunca aparecia na prática**: `total_atendido` por linha de fonte só era calculado em `obterSof`, mas o fluxo real de abrir um card de SOF (`abrirSofExistente`, `js/sof.js`) **nunca chama `obterSof`** - reaproveita a linha já carregada por `listarSof` (otimização de performance de uma sessão anterior, ver `RELATORIO_LENTIDAO_SOF.md`), que não calculava esse campo. **Corrigido:** novo helper `agruparValorAtendidoPorSofFonteObjeto_` (`NotasEmpenho.gs`, uma única leitura da aba agrupada por `sof_id|fonte|objeto`), usado agora tanto por `obterSof` quanto por `listarSof` (`Sof.gs`), pra nunca mais divergir.
+
+### OCR automático no reforço (assunção a confirmar: reforço usa o mesmo formato de documento da NE original)
+Reaproveita o **mesmo** `lerAnexoNotaEmpenho` (que já extrai o "Cronograma de Desembolso" pra NE original) nos 3 pontos onde um reforço pode ser adicionado - **assumindo que o documento de reforço tem a mesma tabela de cronograma da original** (não confirmado com um documento real; se não tiver esse formato, cai no plano B abaixo):
+- Se o documento tem a tabela: cada mês com valor > 0 vira um reforço próprio automaticamente - **1 mês = 1 reforço, 2+ meses = vários reforços de uma vez**, todos compartilhando o mesmo arquivo anexado (novo `criarReforcosEmLote`, `NotasEmpenho.gs` - reserva os IDs em lote, sobe o arquivo ao Drive **uma única vez**, grava todas as linhas de uma vez). Nenhum campo manual aparece nesse caso.
+- Se o documento **não** tem essa tabela (formato mais simples): cai pro Preço Total lido como valor único, sem mês associado - mensagem avisa que o mês não foi identificado. Só nesse caso residual (ou se a leitura falhar) os campos manuais de Mês/Valor ficam disponíveis, como rede de segurança - não é mais o caminho principal.
+- **`criarNotaEmpenho`**: refatorado - lookup da NE original virou helper `buscarNotaEmpenhoOriginal_` (compartilhado com `criarReforcosEmLote`).
+
+**Os 3 pontos de entrada de reforço, todos com o mesmo comportamento agora:**
+- **`js/notas-empenho.js`** `abrirModalReforco` (botão "+ Reforço" no card da NE) - reescrito.
+- **`js/notas-empenho.js`** `abrirModalNovaNe`, branch reforço (modal "Nova Nota de Empenho") - reescrito.
+- **`js/sof.js`** mini-formulário de NE embutido na edição de SOF - esse ponto **nunca teve** campo de mês pra reforço antes (lacuna pré-existente); agora tem detecção automática (sem campo manual de mês nesse ponto específico - só o "Remover anexo" como escape).
+
+**Atualização do cronograma após reforço (parte "verifique" do pedido):** confirmado que a tela de NE já recarregava certo (`CacheAbas.invalidar('notasEmpenho')` + `carregar()`); **faltava** invalidar o cache `'sof'` nos 2 pontos de `notas-empenho.js` (agora adicionado) - sem isso, a tela de SOF podia mostrar o cronograma desatualizado se aberta logo depois de reforçar pela tela de NE. O mini-formulário embutido no `sof.js` já invalidava `'sof'` (parte do fluxo normal de salvar SOF).
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs`, `Sof.gs`, `Code.gs`. Sem coluna/aba nova.
+
+**⚠️ Ponto em aberto - precisa ser confirmado testando com um documento real:** a suposição-chave desta sessão é que um documento de **reforço** tem a mesma tabela "CRONOGRAMA DE DESEMBOLSO" que o documento de NE original usa. Se isso não for verdade (reforços podem ser documentos mais simples, sem essa tabela), o sistema vai cair automaticamente no plano B (Preço Total, sem mês) - funciona, mas sem a detecção de mês. Se o formato real dos documentos de reforço for diferente disso, avisar pra eu ajustar a extração.
+
+**Ainda não testado:** anexar um reforço com um documento que tenha 1 mês só; anexar um com 2+ meses (confirmar que cria vários reforços de uma vez); anexar um documento sem a tabela de cronograma (confirmar o plano B); reabrir a SOF depois de reforçar pela tela de NE e ver o cronograma verde/vermelho atualizado; reabrir o card da NE e ver o quadro "CRONOGRAMA SOLICITADO" refletindo o novo total atendido.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

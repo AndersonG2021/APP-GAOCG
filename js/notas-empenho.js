@@ -289,15 +289,32 @@ const TelaNotasEmpenho = (function () {
     });
   }
 
+  /**
+   * "+ Reforço" no card da NE (sessão 2026-07-29, pedido do usuário): o
+   * documento é lido por OCR (mesma extração de lerAnexoNotaEmpenho usada
+   * pra NE original) - se o documento tiver a tabela "Cronograma de
+   * Desembolso", cada mês com valor > 0 é tratado como um mês reforçado (o
+   * analista não digita nada: 1 mês vira 1 reforço, 2+ meses viram vários
+   * reforços de uma vez, todos compartilhando o mesmo arquivo anexado -
+   * criarReforcosEmLote, NotasEmpenho.gs). Se o documento não tiver essa
+   * tabela (formato mais simples, sem cronograma), cai pro Preço Total lido
+   * como valor único, sem mês associado - só nesse caso residual (ou se a
+   * leitura falhar) os campos manuais de Mês/Valor ficam disponíveis, como
+   * uma rede de segurança, não o caminho principal.
+   */
   function abrirModalReforco(grupo) {
     const corpo = `
       <form id="formReforcoNe">
-        <p class="ajuda">Reforço para a NE ${UI.escaparHtml(grupo.numero_ne)} (fonte ${UI.escaparHtml(grupo.fonte)}).</p>
-        <div class="campo"><label>Mês de referência do reforço *</label>
-          <select id="reforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
-        </div>
-        <div class="campo"><label>Valor do reforço *</label><input id="reforcoValor" type="number" step="0.01" required /></div>
+        <p class="ajuda">Reforço para a NE ${UI.escaparHtml(grupo.numero_ne)} (fonte ${UI.escaparHtml(grupo.fonte)}). Anexe o documento - os meses reforçados e os valores são identificados automaticamente.</p>
         <div class="campo"><label>Arquivo *</label><input type="file" id="reforcoArquivo" accept=".pdf,image/*" required /></div>
+        <p id="reforcoStatusAnexo" class="ajuda oculto"></p>
+        <div id="reforcoMesesDetectados" class="oculto"></div>
+        <div class="grade-2" id="reforcoManualCampos">
+          <div class="campo"><label>Mês de referência do reforço *</label>
+            <select id="reforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
+          </div>
+          <div class="campo"><label>Valor do reforço *</label><input id="reforcoValor" type="number" step="0.01" required /></div>
+        </div>
         <p id="reforcoErro" class="erro-campo oculto"></p>
       </form>`;
     UI.abrirModal('Adicionar reforço', corpo,
@@ -305,27 +322,104 @@ const TelaNotasEmpenho = (function () {
       { pequeno: true });
 
     UI.tornarPesquisavel('reforcoMes');
+
+    let itensDetectados = null; // [{mes_referencia, valor}, ...] quando o OCR acha 1+ meses no cronograma do documento
+    let arquivoLido = null; // {arquivoBase64, arquivoNome, arquivoTipo}
+
+    function mostrarMesesDetectados_(itens) {
+      const alvo = document.getElementById('reforcoMesesDetectados');
+      if (!itens || !itens.length) { alvo.classList.add('oculto'); alvo.innerHTML = ''; return; }
+      alvo.classList.remove('oculto');
+      alvo.innerHTML = `<label>Meses reforçados (lidos do documento)</label>
+        <div class="cronograma-ne-grade">${itens.map(it => `<div class="cronograma-ne-item"><span>${UI.escaparHtml(NOMES_MESES[it.mes_referencia - 1])}</span><span>${UI.formatarMoeda(it.valor)}</span></div>`).join('')}</div>`;
+    }
+
+    document.getElementById('reforcoArquivo').addEventListener('change', async function () {
+      const inputEl = this;
+      const arquivo = inputEl.files[0];
+      const statusEl = document.getElementById('reforcoStatusAnexo');
+      const erroEl = document.getElementById('reforcoErro');
+      const camposManuais = document.getElementById('reforcoManualCampos');
+      erroEl.classList.add('oculto');
+      itensDetectados = null;
+      arquivoLido = null;
+      mostrarMesesDetectados_(null);
+      if (!arquivo) return;
+      if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
+      statusEl.classList.remove('oculto');
+      statusEl.textContent = 'Lendo documento...';
+      try {
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        arquivoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+        const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
+        const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+
+        let mensagemStatus;
+        if (mesesComValor.length) {
+          itensDetectados = mesesComValor.map(c => ({ mes_referencia: c.mes, valor: c.valor }));
+          mostrarMesesDetectados_(itensDetectados);
+          camposManuais.classList.add('oculto');
+          document.getElementById('reforcoMes').required = false;
+          document.getElementById('reforcoValor').required = false;
+          const totalDetectado = itensDetectados.reduce((s, it) => s + it.valor, 0);
+          mensagemStatus = `🔒 ${itensDetectados.length} mês(es) identificado(s) automaticamente, total ${UI.formatarMoeda(totalDetectado)}.`;
+        } else if (resultado.preco_total) {
+          document.getElementById('reforcoValor').value = resultado.preco_total;
+          document.getElementById('reforcoValor').readOnly = true;
+          camposManuais.classList.remove('oculto');
+          mensagemStatus = `🔒 Valor lido do documento (${UI.formatarMoeda(resultado.preco_total)}) - não foi possível identificar o mês; selecione manualmente.`;
+        } else {
+          camposManuais.classList.remove('oculto');
+          mensagemStatus = 'Não foi possível ler meses nem valor no documento - preencha manualmente.';
+        }
+        statusEl.innerHTML = mensagemStatus + ' <a href="#" id="reforcoRemoverAnexo">Remover anexo' + (itensDetectados ? '' : ' / preencher manualmente') + '</a>';
+        document.getElementById('reforcoRemoverAnexo').addEventListener('click', e => {
+          e.preventDefault();
+          itensDetectados = null;
+          arquivoLido = null;
+          inputEl.value = '';
+          mostrarMesesDetectados_(null);
+          camposManuais.classList.remove('oculto');
+          document.getElementById('reforcoMes').required = true;
+          document.getElementById('reforcoValor').required = true;
+          document.getElementById('reforcoValor').readOnly = false;
+          document.getElementById('reforcoValor').value = '';
+          statusEl.classList.add('oculto');
+        });
+      } catch (err) {
+        inputEl.value = '';
+        arquivoLido = null;
+        statusEl.classList.add('oculto');
+        camposManuais.classList.remove('oculto');
+        UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
+      }
+    });
+
     document.getElementById('btnCancelarReforco').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarReforco').addEventListener('click', async () => {
       const erroEl = document.getElementById('reforcoErro');
       erroEl.classList.add('oculto');
-      const mesReferencia = document.getElementById('reforcoMes').value;
-      const valor = document.getElementById('reforcoValor').value;
-      const arquivo = document.getElementById('reforcoArquivo').files[0];
-      if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
-      if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
-      if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo do reforço.'); return; }
-      if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
+      if (!arquivoLido) { UI.mostrarErro(erroEl, 'Anexe o arquivo do reforço.'); return; }
 
       try {
-        const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
-        await Api.chamar('criarNotaEmpenho', {
-          data: {
-            sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor,
-            mes_referencia: mesReferencia, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
-          }
-        });
+        if (itensDetectados && itensDetectados.length) {
+          await Api.chamar('criarReforcosEmLote', {
+            data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, itens: itensDetectados }, arquivoLido)
+          });
+        } else {
+          const mesReferencia = document.getElementById('reforcoMes').value;
+          const valor = document.getElementById('reforcoValor').value;
+          if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
+          if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
+          await Api.chamar('criarNotaEmpenho', {
+            data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoLido)
+          });
+        }
         CacheAbas.invalidar('notasEmpenho');
+        // Reforço muda o valor atendido acumulado da fonte+objeto - a tela de
+        // SOF (cronograma verde/vermelho) precisa refletir isso na próxima
+        // vez que for aberta, não só a tela de NE.
+        CacheAbas.invalidar('sof');
         UI.toast('Reforço adicionado.', 'sucesso');
         UI.fecharModal();
         await carregar();
@@ -350,10 +444,13 @@ const TelaNotasEmpenho = (function () {
    *   lerAnexoNotaEmpenho) preenchendo Número/Cronograma/Preço Total e
    *   travando os campos (mesmo padrão de ligarAnexoComOcr_ em js/recibos.js)
    *   - "Remover anexo" libera pra tentar de novo.
-   * - Reforço: os campos Unidade/SOF somem - busca direto, num combo
-   *   pesquisável, a Nota de Empenho original (de qualquer SOF/unidade) a
-   *   reforçar, e informa o mês de referência + valor + arquivo, sem OCR
-   *   (mesma validação simples já usada em abrirModalReforco).
+   * - Reforço (sessão 2026-07-29, com OCR): os campos Unidade/SOF somem -
+   *   busca direto, num combo pesquisável, a Nota de Empenho original (de
+   *   qualquer SOF/unidade) a reforçar; ao anexar o arquivo, o OCR
+   *   (lerAnexoNotaEmpenho) tenta identificar sozinho quais meses foram
+   *   reforçados e o valor de cada um (mesmo mecanismo de abrirModalReforco,
+   *   duplicado aqui por ser um modal/DOM separado) - Mês/Valor manuais só
+   *   aparecem como reserva, se a leitura não achar a tabela de cronograma.
    */
   function abrirModalNovaNe() {
     const corpo = `
@@ -394,11 +491,16 @@ const TelaNotasEmpenho = (function () {
           <div class="campo"><label>Nota de Empenho a Reforçar *</label>
             <select id="novaNeReforcoAlvo" required><option value="">Selecione o tipo "Reforço" acima</option></select>
           </div>
-          <div class="campo"><label>Mês de referência do reforço *</label>
-            <select id="novaNeReforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
-          </div>
-          <div class="campo"><label>Valor do reforço *</label><input id="novaNeReforcoValor" type="number" step="0.01" /></div>
           <div class="campo"><label>Arquivo *</label><input type="file" id="novaNeReforcoArquivo" accept=".pdf,image/*" /></div>
+          <p class="ajuda">Ao anexar, os meses reforçados e os valores são identificados automaticamente.</p>
+          <p id="novaNeReforcoStatusAnexo" class="ajuda oculto"></p>
+          <div id="novaNeReforcoMesesDetectados" class="oculto"></div>
+          <div class="grade-2" id="novaNeReforcoManualCampos">
+            <div class="campo"><label>Mês de referência do reforço *</label>
+              <select id="novaNeReforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
+            </div>
+            <div class="campo"><label>Valor do reforço *</label><input id="novaNeReforcoValor" type="number" step="0.01" /></div>
+          </div>
         </div>
 
         <p id="novaNeErro" class="erro-campo oculto"></p>
@@ -409,6 +511,19 @@ const TelaNotasEmpenho = (function () {
     let sofsDaUnidade = [];
     let leituraOcr = null;
     let fontesDoSofAtual = [];
+    // Reforço lido por OCR (sessão 2026-07-29) - ver abrirModalReforco (mesma
+    // lógica, duplicada aqui porque este modal tem seu próprio DOM/estado).
+    let itensReforcoDetectados = null;
+    let arquivoReforcoLido = null;
+
+    function mostrarMesesReforcoDetectados_(itens) {
+      const alvo = document.getElementById('novaNeReforcoMesesDetectados');
+      if (!alvo) return;
+      if (!itens || !itens.length) { alvo.classList.add('oculto'); alvo.innerHTML = ''; return; }
+      alvo.classList.remove('oculto');
+      alvo.innerHTML = `<label>Meses reforçados (lidos do documento)</label>
+        <div class="cronograma-ne-grade">${itens.map(it => `<div class="cronograma-ne-item"><span>${UI.escaparHtml(NOMES_MESES[it.mes_referencia - 1])}</span><span>${UI.formatarMoeda(it.valor)}</span></div>`).join('')}</div>`;
+    }
 
     /** Repopula o <select> de Objeto a partir da Fonte escolhida (cascata, sessão 2026-07-29). */
     function atualizarObjetoNovaNe_() {
@@ -502,6 +617,67 @@ const TelaNotasEmpenho = (function () {
       }
     });
 
+    document.getElementById('novaNeReforcoArquivo').addEventListener('change', async function () {
+      const inputEl = this;
+      const arquivo = inputEl.files[0];
+      const statusEl = document.getElementById('novaNeReforcoStatusAnexo');
+      const erroEl = document.getElementById('novaNeErro');
+      const camposManuais = document.getElementById('novaNeReforcoManualCampos');
+      erroEl.classList.add('oculto');
+      itensReforcoDetectados = null;
+      arquivoReforcoLido = null;
+      mostrarMesesReforcoDetectados_(null);
+      if (!arquivo) return;
+      if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
+      statusEl.classList.remove('oculto');
+      statusEl.textContent = 'Lendo documento...';
+      try {
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        arquivoReforcoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+        const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
+        const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+
+        let mensagemStatus;
+        if (mesesComValor.length) {
+          itensReforcoDetectados = mesesComValor.map(c => ({ mes_referencia: c.mes, valor: c.valor }));
+          mostrarMesesReforcoDetectados_(itensReforcoDetectados);
+          camposManuais.classList.add('oculto');
+          document.getElementById('novaNeReforcoMes').required = false;
+          document.getElementById('novaNeReforcoValor').required = false;
+          const totalDetectado = itensReforcoDetectados.reduce((s, it) => s + it.valor, 0);
+          mensagemStatus = `🔒 ${itensReforcoDetectados.length} mês(es) identificado(s) automaticamente, total ${UI.formatarMoeda(totalDetectado)}.`;
+        } else if (resultado.preco_total) {
+          document.getElementById('novaNeReforcoValor').value = resultado.preco_total;
+          document.getElementById('novaNeReforcoValor').readOnly = true;
+          camposManuais.classList.remove('oculto');
+          mensagemStatus = `🔒 Valor lido do documento (${UI.formatarMoeda(resultado.preco_total)}) - não foi possível identificar o mês; selecione manualmente.`;
+        } else {
+          camposManuais.classList.remove('oculto');
+          mensagemStatus = 'Não foi possível ler meses nem valor no documento - preencha manualmente.';
+        }
+        statusEl.innerHTML = mensagemStatus + ' <a href="#" id="novaNeReforcoRemoverAnexo">Remover anexo' + (itensReforcoDetectados ? '' : ' / preencher manualmente') + '</a>';
+        document.getElementById('novaNeReforcoRemoverAnexo').addEventListener('click', e => {
+          e.preventDefault();
+          itensReforcoDetectados = null;
+          arquivoReforcoLido = null;
+          inputEl.value = '';
+          mostrarMesesReforcoDetectados_(null);
+          camposManuais.classList.remove('oculto');
+          document.getElementById('novaNeReforcoMes').required = true;
+          document.getElementById('novaNeReforcoValor').required = true;
+          document.getElementById('novaNeReforcoValor').readOnly = false;
+          document.getElementById('novaNeReforcoValor').value = '';
+          statusEl.classList.add('oculto');
+        });
+      } catch (err) {
+        inputEl.value = '';
+        arquivoReforcoLido = null;
+        statusEl.classList.add('oculto');
+        camposManuais.classList.remove('oculto');
+        UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
+      }
+    });
+
     document.getElementById('btnCancelarNovaNe').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarNovaNe').addEventListener('click', async () => {
       const erroEl = document.getElementById('novaNeErro');
@@ -511,23 +687,24 @@ const TelaNotasEmpenho = (function () {
       if (ehReforco) {
         const numeroNe = document.getElementById('novaNeReforcoAlvo').value;
         const grupo = gruposTodos.find(g => g.numero_ne === numeroNe);
-        const mesReferencia = document.getElementById('novaNeReforcoMes').value;
-        const valor = document.getElementById('novaNeReforcoValor').value;
-        const arquivo = document.getElementById('novaNeReforcoArquivo').files[0];
         if (!grupo) { UI.mostrarErro(erroEl, 'Selecione a Nota de Empenho a reforçar.'); return; }
-        if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
-        if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido para o reforço.'); return; }
-        if (!arquivo) { UI.mostrarErro(erroEl, 'Anexe o arquivo do reforço.'); return; }
-        if (arquivo.size > 8 * 1024 * 1024) { UI.mostrarErro(erroEl, 'Arquivo muito grande (máximo 8MB).'); return; }
+        if (!arquivoReforcoLido) { UI.mostrarErro(erroEl, 'Anexe o arquivo do reforço.'); return; }
         try {
-          const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
-          await Api.chamar('criarNotaEmpenho', {
-            data: {
-              sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor,
-              mes_referencia: mesReferencia, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type
-            }
-          });
+          if (itensReforcoDetectados && itensReforcoDetectados.length) {
+            await Api.chamar('criarReforcosEmLote', {
+              data: Object.assign({ sof_id: grupo.sof_id, numero_ne: grupo.numero_ne, itens: itensReforcoDetectados }, arquivoReforcoLido)
+            });
+          } else {
+            const mesReferencia = document.getElementById('novaNeReforcoMes').value;
+            const valor = document.getElementById('novaNeReforcoValor').value;
+            if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
+            if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido para o reforço.'); return; }
+            await Api.chamar('criarNotaEmpenho', {
+              data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoReforcoLido)
+            });
+          }
           CacheAbas.invalidar('notasEmpenho');
+          CacheAbas.invalidar('sof');
           UI.toast('Reforço adicionado.', 'sucesso');
           UI.fecharModal();
           await carregar();

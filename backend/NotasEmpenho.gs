@@ -203,6 +203,19 @@ function listarNotasEmpenhoPorUnidade(session, unidadeId) {
  * valor_atual/alerta da NE, que continua vindo só da soma bruta menos o
  * liquidado nos Recibos).
  */
+/**
+ * Localiza a NE original (tipo='original') de um número dentro de um SOF -
+ * usada pra herdar fonte/objeto ao criar um reforço (nunca escolhidos de
+ * novo, sempre vêm da original correspondente). Compartilhada por
+ * criarNotaEmpenho (reforço avulso) e criarReforcosEmLote (reforço com
+ * múltiplos meses detectados por OCR, sessão 2026-07-29).
+ */
+function buscarNotaEmpenhoOriginal_(sofId, numeroNe) {
+  return todasNotasEmpenhoComCache_().filter(function (n) {
+    return String(n.sof_id) === String(sofId) && n.tipo === 'original' && n.numero_ne === numeroNe;
+  })[0] || null;
+}
+
 function criarNotaEmpenho(session, dados) {
   dados = dados || {};
   var sofSheet = getSheet_(SHEETS.SOF);
@@ -220,9 +233,7 @@ function criarNotaEmpenho(session, dados) {
   // que a original já estabeleceu - ver docs/ESPECIFICACAO_NOVO_DASHBOARD.md.
   var fonteFinal, objetoFinal;
   if (tipo === 'reforco') {
-    var original = todasNotasEmpenhoComCache_().filter(function (n) {
-      return String(n.sof_id) === String(dados.sof_id) && n.tipo === 'original' && n.numero_ne === numeroNe;
-    })[0];
+    var original = buscarNotaEmpenhoOriginal_(dados.sof_id, numeroNe);
     if (!original) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
     fonteFinal = original.fonte;
     objetoFinal = original.objeto;
@@ -346,6 +357,103 @@ function criarNotaEmpenho(session, dados) {
   return ok_(nova);
 }
 
+/**
+ * Cria vários reforços de uma vez, a partir de UM único documento anexado
+ * (sessão 2026-07-29, pedido do usuário: ao anexar um reforço, o OCR detecta
+ * sozinho quais meses foram reforçados e o valor de cada um - reaproveita o
+ * mesmo "Cronograma de Desembolso" que lerAnexoNotaEmpenho já lê pra NE
+ * original; se o documento do reforço tiver esse formato, cada mês com valor
+ * > 0 vira um reforço próprio). O arquivo é enviado ao Drive UMA vez só;
+ * todas as linhas de reforço compartilham o mesmo arquivo_drive_id/
+ * arquivo_url. fonte/objeto sempre herdados da NE original correspondente
+ * (nunca escolhidos de novo, mesma regra de criarNotaEmpenho).
+ *
+ * dados: { sof_id, numero_ne, itens: [{ mes_referencia, valor }, ...],
+ *   arquivoBase64, arquivoNome, arquivoTipo }
+ */
+function criarReforcosEmLote(session, dados) {
+  dados = dados || {};
+  var sof = findById_(getSheet_(SHEETS.SOF), dados.sof_id);
+  if (!sof) return fail_('SOF não encontrada.');
+
+  var numeroNe = sanitizeString_(dados.numero_ne, 50);
+  if (!isNonEmpty_(numeroNe)) return fail_('Informe o número da Nota de Empenho a reforçar.');
+
+  var original = buscarNotaEmpenhoOriginal_(dados.sof_id, numeroNe);
+  if (!original) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
+
+  var itens = (dados.itens || [])
+    .map(function (item) { return { mes: Number(item.mes_referencia), valor: toNumber_(item.valor) }; })
+    .filter(function (item) { return item.mes >= 1 && item.mes <= 12 && item.valor > 0; });
+  if (!itens.length) return fail_('Informe ao menos um mês/valor válido para o reforço.');
+
+  if (!dados.arquivoBase64 || !dados.arquivoNome) return fail_('Anexe o arquivo do reforço.');
+
+  var pasta = DriveApp.getFolderById('1f10o-GB3hFQsWXqes2kPZymhuDCeMY2c');
+  var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
+  var arquivo = pasta.createFile(blob);
+
+  var neSheet = getSheet_(SHEETS.NOTAS_EMPENHO);
+  var idsNe = proximosIds_('NotasEmpenho', itens.length);
+  var agora = nowIso_();
+  var linhas = itens.map(function (item, i) {
+    return {
+      id: idsNe[i],
+      sof_id: dados.sof_id,
+      tipo: 'reforco',
+      numero_ne: numeroNe,
+      fonte: original.fonte,
+      objeto: original.objeto,
+      valor: item.valor,
+      periodo: '',
+      mes_referencia: item.mes,
+      arquivo_drive_id: arquivo.getId(),
+      arquivo_url: arquivo.getUrl(),
+      criado_por: session.id,
+      data_criacao: agora
+    };
+  });
+  appendObjectRows_(neSheet, linhas);
+  invalidarCacheNotasEmpenho_();
+
+  // Um log por reforço criado, cada um com seu próprio id de linha (mesmo
+  // princípio de registrarDiferencas_ - IDs reservados de uma vez, escrita em
+  // lote), em vez de uma linha "resumo" sem processo_id de verdade.
+  var idsLog = proximosIds_('LogAuditoria', linhas.length);
+  var linhasLog = linhas.map(function (l, i) {
+    var mesNome = NOMES_MESES_CRONOGRAMA[l.mes_referencia - 1] || l.mes_referencia;
+    return montarLinhaLog_(idsLog[i], session, 'NotaEmpenho', l.id, sof.criado_por, 'CRIACAO', '', 'reforco (OCR) - ' + mesNome + ' - valor ' + l.valor);
+  });
+  appendObjectRows_(getSheet_(SHEETS.LOG_AUDITORIA), linhasLog);
+  bumpVersao_(['notasEmpenho', 'sof', 'dashboard', 'logAuditoria']);
+
+  return ok_({ itens: linhas, total: itens.reduce(function (s, item) { return s + item.valor; }, 0) });
+}
+
+/**
+ * Soma o valor de TODAS as Notas de Empenho (mãe + reforços), agrupada por
+ * "sof_id|fonte|objeto" - numa única leitura da aba NotasEmpenho, em vez de
+ * relê-la (ou filtrá-la) uma vez por linha de fonte. Alimenta
+ * `total_atendido` de cada linha de SofFontes (sessão 2026-07-29), usado
+ * pelo destaque verde/vermelho do cronograma da SOF no frontend - consumida
+ * por `obterSof` E por `listarSof` (Sof.gs); mesmo padrão de
+ * valorLiquidadoAgrupadoPorNe_ logo abaixo.
+ *
+ * BUG corrigido nesta sessão: só `obterSof` calculava isso, mas o fluxo real
+ * de abrir um card de SOF (abrirSofExistente, js/sof.js) reaproveita a linha
+ * já carregada por `listarSof` (otimização de performance - ver
+ * RELATORIO_LENTIDAO_SOF.md) e NUNCA chama `obterSof` - então
+ * `total_atendido` ficava sempre undefined na prática, e o destaque
+ * verde/vermelho do cronograma da SOF nunca aparecia.
+ */
+function agruparValorAtendidoPorSofFonteObjeto_() {
+  var mapa = {};
+  todasNotasEmpenhoComCache_().forEach(function (n) {
+    var chave = n.sof_id + '|' + n.fonte + '|' + (n.objeto || '');
+    mapa[chave] = (mapa[chave] || 0) + toNumber_(n.valor);
+  });
+  return mapa;
+}
 
 /**
  * Soma valor_liquidado de Recibos agrupado por nota_empenho (mesma convenção
@@ -554,7 +662,7 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       saldo_atual: valorAtual,
       falta_atendido: totalSolicitadoFonte - grupo.valor,
       parcela_mensal_referencia: parcelaMensalRef,
-      // alerta (sessão 2026-07-29: unificado com o mesmo critério do card
+      // alerta (sessão 2026-07-29): unificado com o mesmo critério do card
       // "NEs com saldo baixo" do Dashboard - FRACAO_SALDO_BAIXO_NE_ = 20% da
       // parcela mensal de referência daquele objeto - ver grupoNeComSaldoBaixo_
       // logo abaixo. Antes disparava bem mais cedo, com saldo < 100% da

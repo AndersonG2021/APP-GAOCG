@@ -443,12 +443,11 @@ function obterSof(session, id) {
   // todas as Notas de Empenho (mãe + reforços) casadas por fonte+objeto com
   // esta linha - usado pelo frontend pra destacar em verde/vermelho os meses
   // do cronograma da SOF já cobertos pelo empenhado acumulado (ver
-  // docs/ESPECIFICACAO_NOVO_DASHBOARD.md).
-  var todasNes = todasNotasEmpenhoComCache_();
+  // docs/ESPECIFICACAO_NOVO_DASHBOARD.md). Mesmo helper usado por listarSof,
+  // pra nunca divergir entre os dois pontos de entrada.
+  var mapaAtendido = agruparValorAtendidoPorSofFonteObjeto_();
   fontes.forEach(function (f) {
-    f.total_atendido = todasNes
-      .filter(function (n) { return String(n.sof_id) === String(id) && n.fonte === f.fonte && String(n.objeto || '') === String(f.objeto || ''); })
-      .reduce(function (soma, n) { return soma + toNumber_(n.valor); }, 0);
+    f.total_atendido = mapaAtendido[id + '|' + f.fonte + '|' + (f.objeto || '')] || 0;
   });
 
   Object.assign(sof, calcularDestaqueParadoSof_(sof));
@@ -464,8 +463,15 @@ function listarSof(session, params) {
   rows = rows.filter(function (r) { return !toBool_(r.excluido); });
 
   var fontesPorSof = agruparFontesPorSof_();
+  // total_atendido por linha de fonte (sessão 2026-07-29, correção de bug):
+  // abrirSofExistente (js/sof.js) reaproveita a linha já carregada aqui por
+  // listarSof (nunca chama obterSof, por performance) - então esse campo
+  // precisa vir calculado também aqui, senão o destaque verde/vermelho do
+  // cronograma da SOF nunca aparece na prática. Mesmo helper de obterSof.
+  var mapaAtendido = agruparValorAtendidoPorSofFonteObjeto_();
   rows.forEach(function (r) {
     var fontes = fontesPorSof[r.id] || [];
+    fontes.forEach(function (f) { f.total_atendido = mapaAtendido[r.id + '|' + f.fonte + '|' + (f.objeto || '')] || 0; });
     r.fontes = fontes;
     r.total_solicitado = totalSolicitadoDeFontes_(fontes);
   });
