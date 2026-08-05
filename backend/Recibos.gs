@@ -19,6 +19,36 @@ var REGEX_VALOR_LIQUIDADO_DOCUMENTO = /VALOR\s+LIQUIDADO\s*:?\s*([\d.,]+)/i;
 var REGEX_VALOR_LIQUIDO_OB_DOCUMENTO = /VALOR\s+L[ÍI]QUIDO\s*:?\s*([\d.,]+)/i;
 
 /**
+ * Lê a aba Recibos inteira, com cache de 30s (sessão 2026-07-30, mesmo padrão
+ * de todasNotasEmpenhoComCache_ em NotasEmpenho.gs / todasFontesComCache_ em
+ * Sof.gs) - achado real ao investigar lentidão de 10-15s ao selecionar a
+ * unidade no "Novo processo de Recibo": listarRecibos relia a aba inteira do
+ * zero (sheetToObjects_, sem cache nenhum) em toda chamada, mesmo sendo
+ * chamada várias vezes seguidas em poucos segundos (ex.: 1x por seleção de
+ * unidade no formulário). Como cada escrita em Recibos precisa invalidar
+ * este cache (ver invalidarCacheRecibos_ logo abaixo), só é seguro usar este
+ * helper em pontos de LEITURA - pontos que escrevem (criarRecibo,
+ * atualizarRecibo etc.) continuam lendo a aba direto via findById_/
+ * sheetToObjects_, porque precisam do _row pra saber em qual linha escrever
+ * (o cache não guarda _row).
+ */
+function todasRecibosComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'recibos_todos';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
+  rows.forEach(function (r) { delete r._row; });
+  cache.put(chave, JSON.stringify(rows), 30);
+  return rows;
+}
+
+function invalidarCacheRecibos_() {
+  CacheService.getScriptCache().remove('recibos_todos');
+}
+
+/**
  * Lê (via OCR) uma Nota de Liquidação ou Ordem Bancária recém escolhida no
  * formulário - antes de salvar o Recibo - e extrai o valor correspondente
  * (Valor Liquidado / Valor Líquido), validando que a Nota de Empenho citada
@@ -165,6 +195,7 @@ function criarRecibo(session, dados) {
   appendObjectRow_(getSheet_(SHEETS.RECIBOS), novo);
   registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
   if (novo.parcela_dividida_grupo_id) recalcularAlertaRecibo_(novo.parcela_dividida_grupo_id);
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_(novo);
 }
@@ -217,6 +248,7 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   });
 
   recalcularAlertaRecibo_(parcelaDivididaGrupoId);
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_(criados);
 }
@@ -298,6 +330,7 @@ function atualizarRecibo(session, id, dados) {
     }
   }
 
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_(atualizado);
 }
@@ -324,6 +357,7 @@ function excluirRecibo(session, id) {
   updateObjectRow_(sheet, rowIndex, atualizado);
 
   registrarLog_(session, 'Recibo', id, existente.criado_por, 'EXCLUSAO', '', 'Recibo excluído (lógico)');
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_({ id: id });
 }
@@ -336,6 +370,7 @@ function marcarReciboVisualizado(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_({ id: id });
 }
@@ -426,9 +461,7 @@ function calcularIndicadoresRecibos_(rowsFiltradas) {
  */
 function listarRecibos(session, params) {
   params = params || {};
-  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
-  rows.forEach(function (r) { delete r._row; });
-  rows = filtrarLinhasRecibos_(rows, params);
+  var rows = filtrarLinhasRecibos_(todasRecibosComCache_(), params);
 
   var indicadores = calcularIndicadoresRecibos_(rows);
 
@@ -450,9 +483,7 @@ function listarRecibos(session, params) {
 
 function indicadoresRecibos(session, params) {
   params = params || {};
-  var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
-  rows.forEach(function (r) { delete r._row; });
-  rows = filtrarLinhasRecibos_(rows, params);
+  var rows = filtrarLinhasRecibos_(todasRecibosComCache_(), params);
 
   return ok_(calcularIndicadoresRecibos_(rows));
 }
@@ -491,6 +522,7 @@ function migrarRecibosHistorico(session, linhas) {
   });
 
   Object.keys(grupos).forEach(function (grupoId) { recalcularAlertaRecibo_(grupoId); });
+  invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
   return ok_({ importados: criados.length });
 }

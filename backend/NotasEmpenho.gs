@@ -245,15 +245,30 @@ function listarNotasEmpenhoPorSof(session, sofId) {
  * (sessão 2026-07-29) pra a analista escolher a NE certa em vez de digitar o
  * número à mão, com o Objeto sugerido automaticamente a partir da NE
  * escolhida (fecha a cadeia SOF->NE->Recibo). Enxuto de propósito (só os
- * campos que o formulário de Recibo precisa), reaproveitando
- * montarGruposNotasEmpenho_ (mesma fonte de dado de toda a tela de NE).
+ * campos que o formulário de Recibo precisa) - IMPORTANTE: não reaproveita
+ * montarGruposNotasEmpenho_ (achado real, sessão 2026-07-30, investigando
+ * lentidão de 10-15s ao selecionar a unidade no "Novo processo de Recibo").
+ * montarGruposNotasEmpenho_ monta o card COMPLETO de cada NE da EMPRESA
+ * INTEIRA (cronograma, cronograma_solicitado, valor liquidado, reforços
+ * agrupados, alerta de saldo baixo etc.) pra, aqui, só usar 4 campos de 1
+ * única unidade - todo aquele cálculo era jogado fora. A NE original já tem
+ * numero_ne/fonte/objeto/sof_id direto na própria linha (reforços herdam os
+ * mesmos valores da original na criação, então não precisam entrar aqui -
+ * ver criarNotaEmpenho/criarReforcosEmLote), então dá pra filtrar direto sem
+ * nenhum agrupamento.
  */
 function listarNotasEmpenhoPorUnidade(session, unidadeId) {
-  var grupos = montarGruposNotasEmpenho_(session)
-    .filter(function (g) { return String(g.sof_unidade_id) === String(unidadeId); });
-  grupos.sort(function (a, b) { return a.numero_ne < b.numero_ne ? -1 : 1; });
-  return ok_(grupos.map(function (g) {
-    return { numero_ne: g.numero_ne, objeto: g.objeto, fonte: g.fonte, sof_id: g.sof_id };
+  var sofIds = {};
+  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) {
+    if (!toBool_(s.excluido) && String(s.unidade_id) === String(unidadeId)) sofIds[s.id] = true;
+  });
+
+  var linhas = todasNotasEmpenhoComCache_()
+    .filter(function (n) { return n.tipo === 'original' && sofIds[n.sof_id]; });
+  linhas.sort(function (a, b) { return a.numero_ne < b.numero_ne ? -1 : 1; });
+
+  return ok_(linhas.map(function (n) {
+    return { numero_ne: n.numero_ne, objeto: n.objeto || '', fonte: n.fonte, sof_id: n.sof_id };
   }));
 }
 

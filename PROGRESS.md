@@ -1342,6 +1342,24 @@ Usuário reportou (com print) que a tabela nova (ver seção acima) ultrapassava
 
 Só frontend — atualiza sozinho pelo GitHub Pages depois do push.
 
+## Lentidão de 10-15s ao selecionar a Unidade em "Novo processo de Recibo" (sessão 2026-07-30, só backend, pendente de colar)
+
+Usuário reportou 10-15s de carregamento ao selecionar a Unidade no formulário de novo Recibo. Esse `change` dispara **duas chamadas em paralelo** (`js/recibos.js`, `Promise.all`): `listarRecibos` (histórico da unidade) e `listarNotasEmpenhoPorUnidade` (autocomplete de NE) - analisando as duas, **ambas** tinham uma causa raiz real de desperdício de processamento no Apps Script (não é rede/frontend):
+
+### Causa 1 (a maior): `listarNotasEmpenhoPorUnidade` reaproveitava `montarGruposNotasEmpenho_` inteira, só pra jogar fora quase tudo
+`montarGruposNotasEmpenho_` monta o card **completo** de **toda NE da empresa inteira** - cronograma (OCR), cronograma_solicitado (SOF), valor liquidado por NE (relendo Recibos), reforços agrupados por documento, alerta de saldo baixo etc. (é a função por trás da tela inteira de Notas de Empenho). `listarNotasEmpenhoPorUnidade` chamava essa função inteira, geral, sem nenhum filtro prévio, só pra no final extrair **4 campos** (`numero_ne`, `objeto`, `fonte`, `sof_id`) de UMA unidade - todo aquele cálculo (que cresce com o número total de NEs/reforços/recibos do sistema inteiro, não só da unidade escolhida) era descartado.
+
+**Corrigido:** reescrita para filtrar SOF por `unidade_id` primeiro (pega os `sof_id` da unidade) e depois filtrar `NotasEmpenho` (via `todasNotasEmpenhoComCache_`, já cacheada) só pelas linhas `tipo='original'` desses SOFs - a NE original já tem `numero_ne`/`fonte`/`objeto`/`sof_id` direto na própria linha, sem precisar de nenhum agrupamento (reforços herdam esses mesmos valores da original na criação, então nunca precisaram entrar nessa lista).
+
+### Causa 2: `listarRecibos`/`indicadoresRecibos` liam a aba Recibos inteira, sem cache nenhum
+Diferente de NotasEmpenho/SofFontes/Unidades/ListasPersonalizadas (que já têm cache de 30s server-side, `*ComCache_`), a aba **Recibos nunca teve esse cache** - toda chamada (mesmo repetida em segundos, ex. trocar de unidade duas vezes seguidas) relia a aba inteira do zero. Se a aba tiver crescido bastante (anos de histórico de pagamento), isso pesa a cada leitura.
+
+**Corrigido:** novo `todasRecibosComCache_()` (mesmo padrão de 30s dos outros), usado por `listarRecibos`/`indicadoresRecibos` (só pontos de LEITURA - os pontos de escrita continuam lendo a aba direto via `findById_`, porque precisam do `_row` pra saber onde escrever, e o cache não guarda isso). `invalidarCacheRecibos_()` adicionado em todo ponto de escrita (`criarRecibo`, `criarGrupoParcelaDivididaRecibo`, `atualizarRecibo`, `excluirRecibo`, `marcarReciboVisualizado`, `migrarRecibosHistorico`), ao lado do `bumpVersao_` já existente em cada um - sem isso, uma edição de Recibo poderia não aparecer refletida por até 30s pra quem reabrisse a tela de Recibos/o formulário de Novo Recibo.
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs`, `Recibos.gs`. Sem coluna/aba nova.
+
+**Ainda não testado:** medir o tempo real de selecionar a unidade em "Novo processo de Recibo" depois de reimplantar (esperado: cair de 10-15s pra o tempo normal de requisição, ~1-3s); confirmar que o autocomplete de NE continua sugerindo as mesmas NEs de antes; confirmar que editar/excluir/criar um Recibo continua refletindo imediatamente na lista (sem esperar até 30s pelo cache).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
