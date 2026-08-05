@@ -480,6 +480,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-ne-infogrid-item span { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--cinza-500); }
 .cartao-ne-infogrid-item strong { font-size: 14px; color: var(--cinza-900); }
 .cartao-ne-infogrid-item strong.vermelho { color: var(--vermelho); }
+.cartao-ne-infogrid-item strong.verde { color: var(--verde); }
 .cartao-ne-detalhe { font-size: 11.5px; color: var(--cinza-500); margin: 0 0 8px; }
 /*
  * Tabela "Reforços lançados" (sessão 2026-07-30): uma linha por DOCUMENTO de

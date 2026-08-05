@@ -1324,6 +1324,15 @@ Cada mês de um reforço multi-mês sempre foi salvo como uma **linha própria**
 
 **Ainda não testado:** anexar um reforço com 2+ meses e conferir que aparece **1 linha só** na tabela "Reforços Lançados" (com todos os meses/valores listados); clicar "Ver arquivo" dentro dessa linha; excluir esse grupo e confirmar que **todos** os meses somem juntos (1 clique, 1 confirmação); lançar um reforço manualmente (sem OCR reconhecer o documento) e confirmar que ele aparece como item isolado, sem se misturar com outros; conferir que o rodapé do card volta a mostrar só 1 "Ver arquivo" (o da NE mãe).
 
+## "Falta ser Atendido" mostra mensagem de concluído quando zerado (sessão 2026-07-30, só frontend)
+
+Pedido do usuário: quando o Total Atendido bate com o Total Solicitado (`falta_atendido` chega a 0, ou ligeiramente negativo se atendido passar do solicitado), o card de NE deve trocar o valor em R$ por **"O total solicitado já foi atendido!"**, em **verde** — no lugar de mostrar "R$ 0,00" (ou um valor negativo).
+
+- **`js/notas-empenho.js`** (`cartaoNeHtml_`): `g.falta_atendido <= 0.005` (pequena margem pra arredondamento de ponto flutuante) troca o `<strong>` de valor pela mensagem, com a classe `verde`.
+- **`css/style.css`**: nova `.cartao-ne-infogrid-item strong.verde` (mesmo padrão de `strong.vermelho`, já usado no Saldo Atual quando em alerta).
+
+Só frontend — nenhuma mudança de backend/planilha, atualiza sozinho pelo GitHub Pages depois do push.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
