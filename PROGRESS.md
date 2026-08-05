@@ -1375,6 +1375,24 @@ Usuário pediu (com print do formulário "Novo processo de Recibo"): ao escolher
 
 **Ainda não testado:** criar uma SOF+NE nova (sem nenhum Recibo lançado ainda) e conferir que escolher aquele Objeto no Novo Recibo preenche Parcela Contratual/Fonte/Nota de Empenho sozinho; confirmar que o comportamento anterior (preencher a partir do último Recibo, quando existir) continua igual; testar uma unidade com 2 SOFs pro mesmo Objeto (ano anterior + atual) e conferir que preenche com os dados do SOF mais recente.
 
+## Parcela dividida também na edição de Recibo (sessão 2026-07-30)
+
+Pedido do usuário: depois de criar um Recibo (sem parcela dividida) e reabri-lo pra editar, quer poder marcar "Este pagamento é feito por mais de uma parcela?" ali também - até então essa opção só existia em "Novo processo de Recibo"; "Editar Recibo" nunca teve essa opção, então converter um Recibo avulso em parcela dividida (ou adicionar mais uma parcela a um grupo já existente) não era possível depois de criado.
+
+### Backend (`Recibos.gs`)
+- Novo `listarRecibosPorGrupo(session, grupoId)`: todas as linhas (não excluídas) de um mesmo `parcela_dividida_grupo_id` - usado pra popular a edição já com todas as parcelas do grupo.
+- Novo `atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas)`: cria OU atualiza um grupo de parcela dividida a partir de um Recibo já existente, reaproveitando `montarLinhaRecibo_` (mesmo helper de `criarRecibo`/`criarGrupoParcelaDivididaRecibo`). Duas situações, mesma lógica: (a) Recibo ainda avulso → vira a 1ª parcela de um grupo novo (a própria linha, atualizada); (b) Recibo já pertence a um grupo → cada parcela com `id` atualiza a linha correspondente (o frontend sempre manda **todas** as linhas do grupo, não só as alteradas), e cada parcela sem `id` vira uma parcela nova no mesmo grupo. Por segurança, um `id` que não pertença nem ao grupo-alvo nem seja a própria linha base é ignorado silenciosamente.
+- `Code.gs`: novos `case 'listarRecibosPorGrupo'` e `case 'atualizarParcelasDivididasRecibo'`.
+
+### Frontend (`js/recibos.js`)
+- `adicionarLinhaParcelaDividida`/`atualizarBotoesRemoverParcelaDividida_` **parametrizadas** (`containerId`, `obterNotaEmpenho`, `dadosExistentes` opcional) pra serem reaproveitadas tanto em "Novo processo de Recibo" (só linhas novas) quanto em "Editar Recibo" (pode pré-popular linhas com dado já salvo). **Uma linha já salva (com `id`) não pode ser removida por essa tela** - o backend só cria/atualiza o que for enviado, então remover do formulário sem de fato excluir deixaria a linha "esquecida" na planilha; por isso o botão de remover só aparece em linhas novas, ainda não salvas (exclusão de uma parcela específica não foi pedida nesta sessão).
+- "Editar Recibo": novo checkbox "Este pagamento é feito por mais de uma parcela?" + os mesmos blocos de "Novo Recibo". Se o Recibo **já** pertence a um grupo, o checkbox nasce marcado e travado (não dá pra "desfazer" por aqui) e a tabela já nasce com **todas** as parcelas do grupo (`listarRecibosPorGrupo`), cada uma com seu "Ver arquivo atual"/anexo próprio. Se marcado pela primeira vez (Recibo ainda avulso), a própria linha em edição vira a 1ª parcela (com o que já tinha) + 1 linha nova em branco, completando o mínimo de 2.
+- `salvarReciboEdicao`: passou a ramificar como o "Novo Recibo" - com o checkbox marcado, chama `atualizarParcelasDivididasRecibo` (uma linha por parcela, com/sem `id`); sem marcar, continua chamando `atualizarRecibo` como sempre.
+
+**Passo manual pendente (backend):** colar e reimplantar `Recibos.gs`, `Code.gs`. Sem coluna/aba nova.
+
+**Ainda não testado:** editar um Recibo avulso, marcar o checkbox e salvar com 2+ parcelas (confirmar que a linha original vira a 1ª parcela do grupo, não duplica); reabrir esse mesmo Recibo depois (deve nascer já com o checkbox travado e a tabela cheia); adicionar mais uma parcela a um grupo já existente e conferir que as demais linhas não perdem dado; anexar Nota de Liquidação/Ordem Bancária em cada parcela e conferir que cada uma salva o próprio arquivo.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
