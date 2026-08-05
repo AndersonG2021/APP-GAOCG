@@ -248,7 +248,7 @@ const TelaNotasEmpenho = (function () {
     return `
       <div class="cartao-ne ${g.alerta ? 'alerta' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
         <div class="cartao-ne-topo">
-          <span class="cartao-ne-meta">${ICONE_PASTA} ${UI.escaparHtml(g.fonte || '-')} · SOF ${UI.escaparHtml(g.sof_numero || '-')}</span>
+          <span class="cartao-ne-meta">${ICONE_PASTA} ${UI.escaparHtml(g.objeto || '-')} · SOF ${UI.escaparHtml(g.sof_numero || '-')}</span>
           ${g.alerta ? '<span class="selo vermelho">Saldo abaixo da parcela</span>' : ''}
         </div>
         <h3 class="cartao-ne-numero">${UI.escaparHtml(g.numero_ne)}</h3>
