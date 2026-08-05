@@ -1239,6 +1239,29 @@ Duas opções de exclusão, cada uma no lugar certo:
 
 **Ainda não testado:** excluir um reforço pelo card de NE e ver o total atendido do card cair; tentar excluir a NE mãe com reforços ainda ativos e ver a mensagem de bloqueio; excluir todos os reforços e então a mãe, e ver `possui_ne` voltar a false (SOF reaparece em "Sem NE emitida"); excluir pela tabela dentro da edição de SOF e ver a lista atualizar sem fechar o formulário.
 
+## BUG REAL confirmado e corrigido: cronograma de desembolso lia os meses errados + Nº da NE de referência (sessão 2026-07-30)
+
+Usuário enviou um documento real de reforço (a pedido feito na sessão anterior, quando eu tinha marcado como "suposição não confirmada" que reforço usa o mesmo formato de cronograma da NE original). Isso permitiu **confirmar duas coisas de uma vez**: (1) reforço usa sim o mesmo layout/tabela; (2) só que a extração dos VALORES do cronograma sempre esteve com um bug real, não só nos reforços.
+
+### O bug: valores do cronograma lidos em ordem de LINHA, mas o PDF os imprime em ordem de COLUNA
+`extrairCronogramaDesembolso_` (`NotasEmpenho.gs`) isola a seção "CRONOGRAMA DE DESEMBOLSO" e pega os 12 valores monetários que aparecem nela, mapeando `valores[0]→Jan, valores[1]→Fev, ..., valores[11]→Dez` (ordem de linha do grid 3x4 impresso: Jan/Fev/Mar/Abr, Mai/Jun/Jul/Ago, Set/Out/Nov/Dez). Essa suposição ("Janeiro a Dezembro é a ordem sempre impressa") nunca tinha sido verificada com um documento real que tivesse valores diferentes em meses não-adjacentes.
+
+Com o documento enviado (reforço do Hospital Dom Malan, nome do arquivo "REF. OUT A DEZ 26"), os valores não-zero apareciam nas posições 6, 9 e 12 da sequência extraída. Mapeando por LINHA (como o código fazia), isso caía em **Junho/Setembro/Dezembro** - errado. O nome do arquivo e o grid visual do PDF confirmam que o reforço é de **Outubro/Novembro/Dezembro**. Mapeando por **COLUNA** (Jan,Mai,Set → Fev,Jun,Out → Mar,Jul,Nov → Abr,Ago,Dez), as posições 6/9/12 caem exatamente em Out/Nov/Dez - bate certinho. Era isso que o usuário via como "o app não conseguiu identificar os meses do reforço": a extração rodava e achava 12 valores, só que jogava os certos nos meses errados.
+
+**Corrigido:** novo `ORDEM_MESES_VALORES_CRONOGRAMA_` (mapa de posição→mês em ordem de coluna) usado por `extrairCronogramaDesembolso_`. Como esse é o **mesmo** extrator usado tanto pra NE original quanto pra reforço (e pro cronograma da SOF que alimenta o destaque verde/vermelho), a correção vale pros três de uma vez.
+
+**⚠️ Dado histórico:** NEs cadastradas ANTES desta correção podem ter o cronograma salvo com os meses trocados (a extração de novos anexos já sai certa; dados já gravados não são corrigidos retroativamente - precisaria de ajuste manual na planilha se algum cronograma antigo estiver claramente errado).
+
+### Novo: conferência do "Nº DA N.E. DE REFERÊNCIA:" (pedido do usuário)
+Documentos de reforço têm um campo `Nº DA N.E. DE REFERÊNCIA:` apontando pra NE "mãe" - o usuário pediu pra conferir esse número contra a NE que o analista selecionou pra reforçar, evitando reforçar a NE errada por engano.
+
+- **`NotasEmpenho.gs`:** novo `extrairNeReferencia_` (mesmo padrão "rótulo antes, valor mais adiante" do cronograma - acha o rótulo, procura o próximo número em formato de NE no trecho seguinte, limitado até a próxima seção "CRONOGRAMA DE DESEMBOLSO" ou 600 caracteres). `lerAnexoNotaEmpenho` devolve `numero_ne_referencia` (null em NE original, que tem o rótulo mas sem valor).
+- **Frontend (3 pontos de reforço):** depois do OCR, compara o número lido contra a NE selecionada - **não bloqueia** (o OCR pode errar a leitura de um campo secundário), só mostra um aviso amarelo bem visível quando não bate ("O documento indica reforço da NE X, mas você está reforçando a NE Y - confira antes de salvar").
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs`. Sem coluna/aba nova.
+
+**Ainda não testado:** reprocessar o mesmo documento de reforço enviado e conferir que os meses Out/Nov/Dez aparecem certos (não mais Jun/Set/Dez); testar com uma NE original de verdade pra confirmar que o cronograma dela também sai correto agora; testar o aviso de "Nº DA N.E. DE REFERÊNCIA" com um número que não bate de propósito.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

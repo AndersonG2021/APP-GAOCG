@@ -65,15 +65,42 @@ function agruparCronogramaPorNotaEmpenho_() {
 var NOMES_MESES_CRONOGRAMA = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 /**
- * Extrai o Cronograma de Desembolso (12 valores mensais). Bug corrigido com
- * um documento real do usuário: o texto extraído desse layout (tabela de
- * meses) lista os 12 RÓTULOS primeiro ("JANEIRO: FEVEREIRO: MARÇO: ABRIL:" em
- * blocos de linha) e só depois os 12 VALORES, um por linha, na mesma ordem -
- * nunca "MÊS: valor" adjacentes. A versão anterior (regex por mês, tipo
- * `/JANEIRO\s*:?\s*([\d.,]+)/i`) sempre falhava por causa disso. Em vez de
- * casar rótulo+valor, isola a seção do cronograma (entre o título e o próximo
- * cabeçalho conhecido) e pega os 12 valores monetários que aparecem nela, na
- * ordem (Janeiro a Dezembro é a ordem sempre impressa no documento).
+ * Ordem em que os 12 VALORES do cronograma aparecem no texto extraído do PDF
+ * (sessão 2026-07-30, corrigido com um documento REAL de reforço - antes era
+ * só uma suposição nunca confirmada). O grid impresso é 3 linhas x 4 colunas:
+ *   Jan  Fev  Mar  Abr
+ *   Mai  Jun  Jul  Ago
+ *   Set  Out  Nov  Dez
+ * Os RÓTULOS saem na ordem de LINHA (Jan,Fev,Mar,Abr,Mai,...,Dez - por isso a
+ * suposição anterior parecia razoável), mas os VALORES saem na ordem de
+ * COLUNA (Jan,Mai,Set, depois Fev,Jun,Out, depois Mar,Jul,Nov, depois
+ * Abr,Ago,Dez) - um artefato de como o PDF foi gerado (os campos de valor são
+ * provavelmente preenchidos coluna a coluna no template).
+ *
+ * Confirmado com um documento de reforço cujo próprio nome de arquivo dizia
+ * "REF. OUT A DEZ 26": os valores não-zero apareciam nas posições 6, 9 e 12
+ * da sequência extraída - com a ordem de LINHA (assumida antes), isso mapeava
+ * errado para Jun/Set/Dez; com a ordem de COLUNA (correta), mapeia certo para
+ * Out/Nov/Dez, batendo com o nome do arquivo e com o grid visual do PDF.
+ * ORDEM_MESES_VALORES_CRONOGRAMA_[i] = índice do mês (0=Jan) que o i-ésimo
+ * valor extraído representa.
+ *
+ * ⚠️ Dado histórico: NEs cadastradas ANTES desta correção podem ter o
+ * cronograma salvo com os meses trocados (ordem de linha, errada) - não é
+ * corrigido retroativamente aqui, só a extração de novos anexos daqui pra
+ * frente. Se precisar corrigir um cronograma já salvo, é manual na planilha.
+ */
+var ORDEM_MESES_VALORES_CRONOGRAMA_ = [0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11];
+
+/**
+ * Extrai o Cronograma de Desembolso (12 valores mensais). O texto extraído
+ * desse layout (tabela de meses) lista os 12 RÓTULOS primeiro ("JANEIRO:
+ * FEVEREIRO: MARÇO: ABRIL:" em blocos de linha) e só depois os 12 VALORES, um
+ * por linha - nunca "MÊS: valor" adjacentes (por isso não dá pra casar
+ * rótulo+valor por regex simples). Em vez disso, isola a seção do cronograma
+ * (entre o título e o próximo cabeçalho conhecido), pega os 12 valores
+ * monetários que aparecem nela e remapeia pra o mês certo usando
+ * ORDEM_MESES_VALORES_CRONOGRAMA_ (ordem de coluna, não de linha - ver acima).
  */
 function extrairCronogramaDesembolso_(texto) {
   var inicioMatch = texto.match(/CRONOGRAMA\s+DE\s+DESEMBOLSO/i);
@@ -85,11 +112,37 @@ function extrairCronogramaDesembolso_(texto) {
   var valores = trecho.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
   if (!valores || valores.length < 12) return [];
 
-  var cronograma = [];
+  var porMes = [];
   for (var i = 0; i < 12; i++) {
-    cronograma.push({ mes: i + 1, rotulo: NOMES_MESES_CRONOGRAMA[i], valor: normalizarValorMonetarioBr_(valores[i]) });
+    porMes[ORDEM_MESES_VALORES_CRONOGRAMA_[i]] = normalizarValorMonetarioBr_(valores[i]);
+  }
+  var cronograma = [];
+  for (var m = 0; m < 12; m++) {
+    cronograma.push({ mes: m + 1, rotulo: NOMES_MESES_CRONOGRAMA[m], valor: porMes[m] });
   }
   return cronograma;
+}
+
+/**
+ * "Nº DA N.E. DE REFERÊNCIA:" (sessão 2026-07-30, pedido do usuário) - só
+ * aparece preenchido em documentos de REFORÇO, apontando pra NE "mãe" que
+ * está sendo reforçada; em NE original o rótulo existe no layout, mas sem
+ * valor (fica null). Mesmo padrão "rótulo antes, valor mais adiante" do
+ * cronograma: acha o rótulo, e dentro do trecho seguinte (até "CRONOGRAMA DE
+ * DESEMBOLSO", a próxima seção conhecida do documento - ou um limite de
+ * caracteres se essa seção não existir nesse trecho) pega o primeiro número
+ * no formato de NE (mesmo REGEX_NUMERO_NE_DOCUMENTO usado pro número da
+ * própria NE, definido em Recibos.gs).
+ */
+var REGEX_LABEL_NE_REFERENCIA_ = /N[ºO°]\s*DA\s*N\.?\s*E\.?\s*DE\s*REFER[ÊE]NCIA\s*:?/i;
+function extrairNeReferencia_(texto) {
+  var labelMatch = texto.match(REGEX_LABEL_NE_REFERENCIA_);
+  if (!labelMatch) return null;
+  var trecho = texto.slice(labelMatch.index + labelMatch[0].length);
+  var fimMatch = trecho.match(/CRONOGRAMA\s+DE\s+DESEMBOLSO/i);
+  trecho = fimMatch ? trecho.slice(0, fimMatch.index) : trecho.slice(0, 600);
+  var numeroMatch = trecho.match(REGEX_NUMERO_NE_DOCUMENTO);
+  return numeroMatch ? numeroMatch[1].toUpperCase() : null;
 }
 
 /**
@@ -161,8 +214,15 @@ function lerAnexoNotaEmpenho(session, params) {
   var matchFonteCodigo = texto.match(REGEX_CODIGO_FONTE_NE_DOCUMENTO);
   var fonteCodigo = matchFonteCodigo ? matchFonteCodigo[1] : null;
 
+  // numero_ne_referencia (sessão 2026-07-30, pedido do usuário): quando o
+  // documento é um REFORÇO, esse campo aponta pra NE "mãe" - devolvido pro
+  // frontend conferir contra a NE que o analista selecionou pra reforçar
+  // (aviso, não bloqueio - o OCR pode errar a leitura).
+  var numeroNeReferencia = extrairNeReferencia_(texto);
+
   return ok_({
     numero_ne: numeroNe,
+    numero_ne_referencia: numeroNeReferencia,
     preco_total: precoTotal,
     cronograma: cronograma,
     // Informativo - o valor oficial impresso é o preco_total; se a soma do

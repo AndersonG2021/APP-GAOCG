@@ -1222,6 +1222,7 @@ const TelaSof = (function () {
         <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
       <div id="neMesesDetectados" class="oculto"></div>
+      <p id="neAvisoReferencia" class="aviso-divergencia oculto"></p>
       <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
 
     document.getElementById('neFonte').addEventListener('change', () => atualizarSelectObjetoNe_(sof));
@@ -1234,6 +1235,7 @@ const TelaSof = (function () {
       const alvoMeses = document.getElementById('neMesesDetectados');
       alvoMeses.classList.add('oculto');
       alvoMeses.innerHTML = '';
+      conferirNeReferencia_(null, null);
       const statusAnexo = document.querySelector('.anexo-ocr-status');
       if (statusAnexo) statusAnexo.classList.add('oculto');
       document.getElementById('neValor').readOnly = false;
@@ -1277,6 +1279,26 @@ const TelaSof = (function () {
   }
 
   /**
+   * Confere o "Nº DA N.E. DE REFERÊNCIA:" lido do documento de reforço
+   * contra a NE que o analista está de fato reforçando (sessão 2026-07-30,
+   * pedido do usuário) - não bloqueia (o OCR pode errar a leitura de um
+   * campo secundário), só avisa bem visível. Mesma lógica de
+   * conferirNeReferencia_ em js/notas-empenho.js, duplicada aqui por serem
+   * módulos/DOMs separados.
+   */
+  function conferirNeReferencia_(numeroLido, numeroAlvo) {
+    const el = document.getElementById('neAvisoReferencia');
+    if (!el) return;
+    if (numeroLido && numeroAlvo && numeroLido !== numeroAlvo) {
+      el.classList.remove('oculto');
+      el.textContent = `⚠ O documento indica reforço da NE ${numeroLido}, mas você está reforçando a NE ${numeroAlvo} - confira antes de salvar.`;
+    } else {
+      el.classList.add('oculto');
+      el.textContent = '';
+    }
+  }
+
+  /**
    * Ao anexar o arquivo no mini-formulário de NE (dentro da edição de SOF),
    * lê o documento por OCR:
    * - Original: preenche Número, Fonte (classificada do código orçamentário)
@@ -1298,6 +1320,7 @@ const TelaSof = (function () {
       const valorEl = document.getElementById('neValor');
       const alvoMeses = document.getElementById('neMesesDetectados');
       const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+      conferirNeReferencia_(resultado.numero_ne_referencia, document.getElementById('neNumero').value);
 
       if (mesesComValor.length) {
         itensReforcoMiniform_ = mesesComValor.map(c => ({ mes_referencia: c.mes, valor: c.valor }));
@@ -1327,6 +1350,7 @@ const TelaSof = (function () {
         itensReforcoMiniform_ = null;
         alvoMeses.classList.add('oculto');
         alvoMeses.innerHTML = '';
+        conferirNeReferencia_(null, null);
         valorEl.readOnly = false;
         valorEl.value = '';
         inputEl.value = '';
