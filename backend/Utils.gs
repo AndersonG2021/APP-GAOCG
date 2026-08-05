@@ -77,8 +77,10 @@ var HEADERS = {
   // específico do SOF (par fonte+objeto de SofFontes); o reforço sempre
   // herda fonte/objeto da NE original correspondente (nunca escolhido de
   // novo) - ver criarNotaEmpenho, NotasEmpenho.gs.
+  // excluido/excluido_por/excluido_em (sessão 2026-07-29): exclusão lógica de
+  // uma NE (mãe ou reforço), mesmo padrão de SOF/Recibos - ver excluirNotaEmpenho.
   NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'fonte', 'objeto', 'valor', 'periodo', 'mes_referencia',
-    'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao'],
+    'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao', 'excluido', 'excluido_por', 'excluido_em'],
   NotasEmpenhoCronograma: ['id', 'nota_empenho_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
@@ -127,6 +129,7 @@ var COLUNAS_BOOLEANAS = {
   ListasPersonalizadas: ['pausa_contagem_parado', 'ativo'],
   SOF: ['divergente_da_unidade', 'completo', 'visualizado_apos_alerta', 'possui_ne', 'excluido'],
   Recibos: ['divergente_da_unidade', 'alerta_divergencia_valores', 'completo', 'visualizado_apos_alerta', 'excluido'],
+  NotasEmpenho: ['excluido'],
   LogAuditoria: ['fora_do_dono']
 };
 

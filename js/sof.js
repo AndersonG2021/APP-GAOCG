@@ -1208,8 +1208,8 @@ const TelaSof = (function () {
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Objeto</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th></tr></thead>
-        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="7" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Objeto</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th><th></th></tr></thead>
+        <tbody>${notas.map(n => `<tr data-id="${n.id}"><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td><td><button type="button" class="botao-icone excluir" data-acao="excluir-ne" data-id="${n.id}" title="Excluir">${ICONE_LIXEIRA}</button></td></tr>`).join('') || '<tr><td colspan="8" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
       <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora. Em Reforço, anexe o documento primeiro - os meses reforçados e os valores são identificados automaticamente.</p>
       <div class="grade-3">
@@ -1253,6 +1253,27 @@ const TelaSof = (function () {
     });
     UI.tornarPesquisavel('neNumero');
     ligarOcrMiniFormularioNe_(sof);
+
+    // Excluir uma NE já anexada (mãe ou reforço) direto desta tabela -
+    // sessão 2026-07-29, pedido do usuário. Ação imediata (não espera o
+    // "Salvar" da SOF), mesmo padrão de excluir SOF/Recibo.
+    alvo.querySelectorAll('[data-acao="excluir-ne"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const linha = btn.closest('tr');
+        const tipo = linha ? linha.children[0].textContent : '';
+        const rotulo = tipo === 'original' ? 'a Nota de Empenho ORIGINAL (mãe)' : 'este reforço';
+        if (!confirm(`Excluir ${rotulo}? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.`)) return;
+        try {
+          await Api.chamar('excluirNotaEmpenho', { id: btn.dataset.id });
+          CacheAbas.invalidar('sof');
+          CacheAbas.invalidar('notasEmpenho');
+          UI.toast('Nota de Empenho excluída.', 'sucesso');
+          await renderNotasEmpenho(sof, undefined);
+        } catch (err) {
+          UI.toast(err.message, 'erro');
+        }
+      });
+    });
   }
 
   /**

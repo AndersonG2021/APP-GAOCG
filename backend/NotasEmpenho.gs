@@ -9,6 +9,13 @@
  * Sof.gs). Reaproveitada por listarSof (números de NE nos cards), listarNotasEmpenho,
  * listarNotasEmpenhoPorSof e totalEmpenhadoSof_ - antes cada uma relia essa
  * aba do zero.
+ *
+ * Excluídas (soft delete, sessão 2026-07-29 - ver excluirNotaEmpenho) já
+ * saem filtradas AQUI, de uma vez, pra nenhum dos muitos consumidores desta
+ * função (montarGruposNotasEmpenho_, buscarNotaEmpenhoOriginal_,
+ * agruparValorAtendidoPorSofFonteObjeto_ etc.) precisar lembrar de filtrar
+ * individualmente - diferente do padrão usado em SOF/Recibos (filtro no
+ * ponto de uso), escolhido aqui porque são bem mais pontos de leitura.
  */
 function todasNotasEmpenhoComCache_() {
   var cache = CacheService.getScriptCache();
@@ -16,7 +23,7 @@ function todasNotasEmpenhoComCache_() {
   var emCache = cache.get(chave);
   if (emCache) return JSON.parse(emCache);
 
-  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO));
+  var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).filter(function (n) { return !toBool_(n.excluido); });
   rows.forEach(function (n) { delete n._row; });
   cache.put(chave, JSON.stringify(rows), 30);
   return rows;
@@ -431,6 +438,70 @@ function criarReforcosEmLote(session, dados) {
 }
 
 /**
+ * Exclui (logicamente) uma linha de Nota de Empenho - mãe (original) ou
+ * reforço (sessão 2026-07-29, pedido do usuário: opção de excluir uma NE de
+ * reforço no card de NE, ou uma NE mãe/reforço no card de SOF). Mesmo padrão
+ * de excluirSof/excluirRecibo (soft delete: excluido/excluido_por/excluido_em).
+ *
+ * Regra: não deixa excluir a NE ORIGINAL enquanto ela tiver reforços ainda
+ * ativos (evita órfãos - o reforço perderia a referência de fonte/objeto
+ * "oficial", mesmo já tendo o snapshot próprio). O analista precisa excluir
+ * os reforços primeiro.
+ *
+ * Se a excluída era a ÚNICA NE original ativa do SOF, `SOF.possui_ne` volta
+ * pra false (o SOF volta a aparecer no filtro "Sem NE emitida" da tela de
+ * SOF) - o andamento (stepper) NÃO é revertido automaticamente, por ser um
+ * campo de fluxo de trabalho que o analista já pode ter avançado manualmente
+ * por outros motivos.
+ */
+function excluirNotaEmpenho(session, id) {
+  var sheet = getSheet_(SHEETS.NOTAS_EMPENHO);
+  var existente = findById_(sheet, id);
+  if (!existente) return fail_('Nota de Empenho não encontrada.');
+  if (toBool_(existente.excluido)) return fail_('Esta Nota de Empenho já foi excluída.');
+
+  if (existente.tipo === 'original') {
+    var temReforcoAtivo = todasNotasEmpenhoComCache_().some(function (n) {
+      return String(n.sof_id) === String(existente.sof_id) && n.numero_ne === existente.numero_ne && n.tipo === 'reforco';
+    });
+    if (temReforcoAtivo) return fail_('Não é possível excluir a Nota de Empenho original enquanto houver reforços lançados nela. Exclua os reforços primeiro.');
+  }
+
+  var atualizado = Object.assign({}, existente, {
+    excluido: true,
+    excluido_por: session.id,
+    excluido_em: nowIso_()
+  });
+  var rowIndex = existente._row;
+  delete atualizado._row;
+  updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheNotasEmpenho_();
+
+  // Se essa era a única NE original ativa do SOF, possui_ne volta a false.
+  if (existente.tipo === 'original') {
+    var sofSheet = getSheet_(SHEETS.SOF);
+    var sof = findById_(sofSheet, existente.sof_id);
+    if (sof && toBool_(sof.possui_ne)) {
+      var aindaTemOriginal = todasNotasEmpenhoComCache_().some(function (n) {
+        return String(n.sof_id) === String(existente.sof_id) && n.tipo === 'original';
+      });
+      if (!aindaTemOriginal) {
+        var sofAtualizado = Object.assign({}, sof, { possui_ne: false });
+        var sofRowIndex = sof._row;
+        delete sofAtualizado._row;
+        updateObjectRow_(sofSheet, sofRowIndex, sofAtualizado);
+        registrarLog_(session, 'SOF', sof.id, sof.criado_por, 'possui_ne', 'true', 'false');
+      }
+    }
+  }
+
+  registrarLog_(session, 'NotaEmpenho', id, existente.criado_por, 'EXCLUSAO', '',
+    (existente.tipo === 'original' ? 'NE original' : 'Reforço') + ' excluído(a) - valor ' + existente.valor);
+  bumpVersao_(['notasEmpenho', 'sof', 'dashboard']);
+  return ok_({ id: id });
+}
+
+/**
  * Soma o valor de TODAS as Notas de Empenho (mãe + reforços), agrupada por
  * "sof_id|fonte|objeto" - numa única leitura da aba NotasEmpenho, em vez de
  * relê-la (ou filtrá-la) uma vez por linha de fonte. Alimenta
@@ -559,9 +630,13 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
     // herda os dela na criação, ver criarNotaEmpenho); se por algum motivo a
     // original ainda não foi processada, o valor inicial é sobrescrito quando
     // ela aparecer, abaixo.
-    if (!grupos[chave]) grupos[chave] = { numero_ne: chave, sof_id: n.sof_id, fonte: n.fonte, objeto: n.objeto || '', valor: 0, arquivos: [], original_id: null, reforcos: [] };
+    if (!grupos[chave]) grupos[chave] = { numero_ne: chave, sof_id: n.sof_id, fonte: n.fonte, objeto: n.objeto || '', valor: 0, arquivos: [], original_id: null, reforcos: [], linhasNe: [] };
     grupos[chave].valor += toNumber_(n.valor);
     if (n.arquivo_url) grupos[chave].arquivos.push({ tipo: n.tipo, url: n.arquivo_url, data: n.data_criacao });
+    // linhasNe (sessão 2026-07-29): linhas individuais (mãe + cada reforço),
+    // com id próprio - alimenta a opção de excluir uma linha específica no
+    // frontend (card de NE e tabela de NE dentro da edição de SOF).
+    grupos[chave].linhasNe.push({ id: n.id, tipo: n.tipo, valor: toNumber_(n.valor), mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null });
     if (n.tipo === 'original') {
       grupos[chave].original_id = n.id;
       grupos[chave].fonte = n.fonte;
@@ -673,7 +748,15 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       cronograma: cronograma,
       // cronograma_solicitado (sessão 2026-07-29): meses solicitados pela SOF
       // (fonte+objeto casada), verde quando cobertos pelo acumulado atendido.
-      cronograma_solicitado: cronogramaSolicitado
+      cronograma_solicitado: cronogramaSolicitado,
+      // linhas (sessão 2026-07-29): mãe + cada reforço individualmente, com
+      // id próprio - permite excluir uma linha específica (mãe ou reforço)
+      // sem afetar as demais. Original sempre primeiro, reforços em seguida
+      // ordenados por mês de referência (sem mês por último).
+      linhas: grupo.linhasNe.slice().sort(function (a, b) {
+        if (a.tipo !== b.tipo) return a.tipo === 'original' ? -1 : 1;
+        return (a.mes_referencia || 99) - (b.mes_referencia || 99);
+      })
     };
   });
 
