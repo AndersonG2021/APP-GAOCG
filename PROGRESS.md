@@ -1156,6 +1156,16 @@ Correções (só backend, sem mudança de planilha):
 
 **Ainda não testado pelo usuário:** medir o tempo real de salvar uma SOF (com fontes) e de salvar após anexar NE, depois de reimplantar.
 
+## Bug corrigido: card "Atendido x Solicitado" do Dashboard mostrava R$ 0,00 solicitado (sessão 2026-07-29, só backend, pendente de colar)
+
+Usuário reportou (com print) que o card mostrava algo como "R$ 85.134.581,03 atendido de R$ 0,00 solicitado" — o solicitado nunca aparecia. Causa raiz: `SOF.total_solicitado` **nunca é persistido** na aba SOF — é sempre recalculado a partir de `SofFontes` (`totalSolicitadoDeFontes_`, `backend/Sof.gs`) e devolvido só na resposta da API (`criarSof`/`atualizarSof`/`obterSof`), nunca gravado na célula. `dashboardSofAtendido_` (`backend/Dashboard.gs`, Parte 1 do redesign) somava `s.total_solicitado` direto das linhas da aba SOF — sempre 0.
+
+**Corrigido:** `dashboardSofAtendido_` agora soma o `total_solicitado` de cada linha da aba **SofFontes** (via `todasFontesComCache_()`, que É persistida de verdade por `substituirFontesDoSof_`), filtrando pelas SOFs não excluídas — a mesma fonte de dado que o resto do app já usa.
+
+**Passo manual pendente (backend):** colar `Dashboard.gs` atualizado e reimplantar. Sem coluna/aba nova.
+
+**Ainda não testado:** conferir que o card do Dashboard passa a mostrar um valor de solicitado condizente com a soma real das SOFs (não mais R$ 0,00).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
