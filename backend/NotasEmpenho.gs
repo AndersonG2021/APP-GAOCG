@@ -65,60 +65,51 @@ function agruparCronogramaPorNotaEmpenho_() {
 var NOMES_MESES_CRONOGRAMA = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 /**
- * Ordem em que os 12 VALORES do cronograma aparecem no texto extraído do PDF
- * (sessão 2026-07-30, corrigido com um documento REAL de reforço - antes era
- * só uma suposição nunca confirmada). O grid impresso é 3 linhas x 4 colunas:
- *   Jan  Fev  Mar  Abr
- *   Mai  Jun  Jul  Ago
- *   Set  Out  Nov  Dez
- * Os RÓTULOS saem na ordem de LINHA (Jan,Fev,Mar,Abr,Mai,...,Dez - por isso a
- * suposição anterior parecia razoável), mas os VALORES saem na ordem de
- * COLUNA (Jan,Mai,Set, depois Fev,Jun,Out, depois Mar,Jul,Nov, depois
- * Abr,Ago,Dez) - um artefato de como o PDF foi gerado (os campos de valor são
- * provavelmente preenchidos coluna a coluna no template).
+ * Extrai o Cronograma de Desembolso (12 valores mensais).
  *
- * Confirmado com um documento de reforço cujo próprio nome de arquivo dizia
- * "REF. OUT A DEZ 26": os valores não-zero apareciam nas posições 6, 9 e 12
- * da sequência extraída - com a ordem de LINHA (assumida antes), isso mapeava
- * errado para Jun/Set/Dez; com a ordem de COLUNA (correta), mapeia certo para
- * Out/Nov/Dez, batendo com o nome do arquivo e com o grid visual do PDF.
- * ORDEM_MESES_VALORES_CRONOGRAMA_[i] = índice do mês (0=Jan) que o i-ésimo
- * valor extraído representa.
+ * Histórico da sessão 2026-07-30 (registrado aqui pra não repetir o erro):
+ * a hipótese inicial era que os 12 VALORES saíam do OCR em um bloco só,
+ * depois dos 12 RÓTULOS ("JANEIRO: FEVEREIRO: MARÇO: ABRIL:" em blocos de
+ * linha, e só então "0,00 / 0,00 / ..."), e nessa hipótese cheguei a suspeitar
+ * (com base numa leitura MINHA do PDF, não do OCR de verdade) que a ordem dos
+ * valores era por COLUNA em vez de por LINHA - **essa suspeita estava
+ * errada** e foi revertida.
  *
- * ⚠️ Dado histórico: NEs cadastradas ANTES desta correção podem ter o
- * cronograma salvo com os meses trocados (ordem de linha, errada) - não é
- * corrigido retroativamente aqui, só a extração de novos anexos daqui pra
- * frente. Se precisar corrigir um cronograma já salvo, é manual na planilha.
- */
-var ORDEM_MESES_VALORES_CRONOGRAMA_ = [0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11];
-
-/**
- * Extrai o Cronograma de Desembolso (12 valores mensais). O texto extraído
- * desse layout (tabela de meses) lista os 12 RÓTULOS primeiro ("JANEIRO:
- * FEVEREIRO: MARÇO: ABRIL:" em blocos de linha) e só depois os 12 VALORES, um
- * por linha - nunca "MÊS: valor" adjacentes (por isso não dá pra casar
- * rótulo+valor por regex simples). Em vez disso, isola a seção do cronograma
- * (entre o título e o próximo cabeçalho conhecido), pega os 12 valores
- * monetários que aparecem nela e remapeia pra o mês certo usando
- * ORDEM_MESES_VALORES_CRONOGRAMA_ (ordem de coluna, não de linha - ver acima).
+ * Com o texto REAL devolvido por extrairTextoOcr_ (OCR do Google Drive,
+ * Utils.gs) enviado pelo usuário, ficou claro que:
+ * 1. Os rótulos e valores de cada LINHA do grid (4 meses) saem juntos, um
+ *    bloco de cada vez ("JANEIRO: FEVEREIRO: MARÇO: ABRIL:" seguido dos 4
+ *    valores daquela linha, depois a próxima linha de 4 meses, etc.) - não é
+ *    "todos os rótulos, depois todos os valores" como a hipótese inicial
+ *    assumia. Os valores, dentro de cada linha, já saem na ordem correta
+ *    (Jan,Fev,Mar,Abr,Mai,...,Dez - ordem de LINHA mesmo, 1 pra 1).
+ * 2. O BUG DE VERDADE: o cabeçalho da próxima seção do documento
+ *    ("ITENS DO EMPENHO") aparecia, no texto do OCR, ENTRE os rótulos
+ *    Setembro/Outubro/Novembro/Dezembro e os 4 valores correspondentes a eles
+ *    (um artefato de posição física do PDF, não da tabela em si). O código
+ *    antigo cortava o trecho no primeiro "ITENS DO EMPENHO" encontrado -
+ *    então os 4 últimos valores (Set/Out/Nov/Dez) ficavam de fora, sobrando
+ *    só 8 valores, menos que os 12 exigidos, e a função devolvia vazio. Era
+ *    isso que o usuário via como "não identificou o mês" - não era um
+ *    mapeamento errado, era uma truncagem prematura.
+ *
+ * Corrigido removendo esse corte por cabeçalho de seção: em vez disso, pega
+ * os 12 primeiros valores monetários que aparecem depois de "CRONOGRAMA DE
+ * DESEMBOLSO" (ignorando qualquer texto de outro campo que apareça
+ * intercalado, como "ITENS DO EMPENHO" ou "PROPOSTA:") e mapeia 1 pra 1 com
+ * Janeiro..Dezembro, na ordem em que aparecem.
  */
 function extrairCronogramaDesembolso_(texto) {
   var inicioMatch = texto.match(/CRONOGRAMA\s+DE\s+DESEMBOLSO/i);
   if (!inicioMatch) return [];
   var trecho = texto.slice(inicioMatch.index + inicioMatch[0].length);
-  var fimMatch = trecho.match(/FICHA\s+FINANCEIRA|ITENS\s+DO\s+EMPENHO|MODALIDADE\s+DE\s+EMPENHO/i);
-  if (fimMatch) trecho = trecho.slice(0, fimMatch.index);
 
   var valores = trecho.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
   if (!valores || valores.length < 12) return [];
 
-  var porMes = [];
-  for (var i = 0; i < 12; i++) {
-    porMes[ORDEM_MESES_VALORES_CRONOGRAMA_[i]] = normalizarValorMonetarioBr_(valores[i]);
-  }
   var cronograma = [];
-  for (var m = 0; m < 12; m++) {
-    cronograma.push({ mes: m + 1, rotulo: NOMES_MESES_CRONOGRAMA[m], valor: porMes[m] });
+  for (var i = 0; i < 12; i++) {
+    cronograma.push({ mes: i + 1, rotulo: NOMES_MESES_CRONOGRAMA[i], valor: normalizarValorMonetarioBr_(valores[i]) });
   }
   return cronograma;
 }
