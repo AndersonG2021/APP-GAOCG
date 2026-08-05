@@ -50,6 +50,9 @@ const TelaSof = (function () {
   let linhasFontes = [];
   let ultimoFiltroJson = null;
   let opcoesObjetoAtuais = [];
+  // Reforço lido por OCR no mini-formulário de NE (sessão 2026-07-29) - [{mes_referencia, valor}, ...]
+  // quando o documento anexado tem um cronograma com 1+ meses; ver ligarOcrMiniFormularioNe_/lerMiniFormularioNe_.
+  let itensReforcoMiniform_ = null;
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
@@ -1052,7 +1055,13 @@ const TelaSof = (function () {
     if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo da Nota de Empenho muito grande (máximo 8MB).');
 
     const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
-    return { tipo, numero_ne: numero, fonte, objeto, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+    return {
+      tipo, numero_ne: numero, fonte, objeto, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type,
+      // itens (sessão 2026-07-29): meses reforçados detectados por OCR, quando
+      // tipo=reforco e o documento tinha um cronograma com 1+ meses - ver
+      // ligarOcrMiniFormularioNe_. salvarSof usa criarReforcosEmLote nesse caso.
+      itens: tipo === 'reforco' ? itensReforcoMiniform_ : null
+    };
   }
 
   /**
@@ -1096,10 +1105,19 @@ const TelaSof = (function () {
       }
 
       if (dadosNe) {
-        await Api.chamar('criarNotaEmpenho', {
-          data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
-            arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
-        });
+        // Reforço com meses detectados por OCR (sessão 2026-07-29): cria todos
+        // de uma vez, compartilhando o mesmo arquivo anexado (criarReforcosEmLote).
+        if (dadosNe.tipo === 'reforco' && dadosNe.itens && dadosNe.itens.length) {
+          await Api.chamar('criarReforcosEmLote', {
+            data: { sof_id: resposta.id, numero_ne: dadosNe.numero_ne, itens: dadosNe.itens,
+              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
+          });
+        } else {
+          await Api.chamar('criarNotaEmpenho', {
+            data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
+              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
+          });
+        }
         if (dadosNe.tipo === 'original') {
           resposta.possui_ne = true;
           const idxAtual = ETAPAS_ANDAMENTO.indexOf(resposta.andamento);
@@ -1185,6 +1203,7 @@ const TelaSof = (function () {
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
     const opcoesFonte = Array.from(new Set((sof.fontes || []).map(f => f.fonte).filter(Boolean)));
     const fontesDisponiveis = opcoesFonte.length ? opcoesFonte : OPCOES_FONTE;
+    itensReforcoMiniform_ = null;
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
@@ -1192,20 +1211,34 @@ const TelaSof = (function () {
         <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Objeto</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th></tr></thead>
         <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="7" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
-      <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora.</p>
+      <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora. Em Reforço, anexe o documento primeiro - os meses reforçados e os valores são identificados automaticamente.</p>
       <div class="grade-3">
         <div class="campo"><label>Tipo</label><select id="neTipo"><option value="original">Original</option><option value="reforco">Reforço</option></select></div>
         <div class="campo"><label>Número</label><div id="neNumeroContainer">${camposNumeroNeHtml(notas, 'original')}</div></div>
         <div class="campo"><label>Fonte</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
       </div>
-      <div class="grade-3">
+      <div class="grade-3" id="neCamposManuais">
         <div class="campo"><label>Objeto</label><select id="neObjeto"><option value="">Selecione a fonte primeiro</option></select></div>
         <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
+      <div id="neMesesDetectados" class="oculto"></div>
       <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
 
     document.getElementById('neFonte').addEventListener('change', () => atualizarSelectObjetoNe_(sof));
     document.getElementById('neTipo').addEventListener('change', function () {
+      // Trocar o Tipo invalida qualquer anexo/leitura de OCR já feita (o
+      // reforço detectado por mês não faz sentido pra uma original, e
+      // vice-versa) - limpa o arquivo e o estado antes de reconstruir os campos.
+      document.getElementById('neArquivo').value = '';
+      itensReforcoMiniform_ = null;
+      const alvoMeses = document.getElementById('neMesesDetectados');
+      alvoMeses.classList.add('oculto');
+      alvoMeses.innerHTML = '';
+      const statusAnexo = document.querySelector('.anexo-ocr-status');
+      if (statusAnexo) statusAnexo.classList.add('oculto');
+      document.getElementById('neValor').readOnly = false;
+      document.getElementById('neValor').value = '';
+
       document.getElementById('neNumeroContainer').innerHTML = camposNumeroNeHtml(notas, this.value);
       UI.tornarPesquisavel('neNumero');
       const fonteEl = document.getElementById('neFonte');
@@ -1224,11 +1257,15 @@ const TelaSof = (function () {
 
   /**
    * Ao anexar o arquivo no mini-formulário de NE (dentro da edição de SOF),
-   * lê o documento por OCR e preenche Número (só quando Tipo = original - em
-   * Reforço o Número já vem de um <select> com os números existentes),
-   * Fonte (classificada do código orçamentário do documento) e Valor
-   * Empenhado, travando os campos (mesmo padrão de ligarAnexoComOcr_ em
-   * js/recibos.js) com link "Remover anexo" pra refazer.
+   * lê o documento por OCR:
+   * - Original: preenche Número, Fonte (classificada do código orçamentário)
+   *   e Valor Empenhado, travando os campos - mesmo padrão de
+   *   ligarAnexoComOcr_ em js/recibos.js.
+   * - Reforço (sessão 2026-07-29): detecta sozinho quais meses foram
+   *   reforçados e o valor de cada um (via o mesmo "Cronograma de
+   *   Desembolso" que a original usa) - sem o analista digitar nada; Fonte/
+   *   Objeto continuam vindo travados da NE original (sincronizarFonteObjetoReforco_).
+   * Link "Remover anexo" sempre disponível pra refazer/preencher manualmente.
    */
   function ligarOcrMiniFormularioNe_(sof) {
     const inputEl = document.getElementById('neArquivo');
@@ -1236,18 +1273,58 @@ const TelaSof = (function () {
     statusEl.className = 'ajuda anexo-ocr-status oculto';
     inputEl.insertAdjacentElement('afterend', statusEl);
 
-    function travar(resultado) {
+    function travarReforco_(resultado) {
+      const valorEl = document.getElementById('neValor');
+      const alvoMeses = document.getElementById('neMesesDetectados');
+      const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
+
+      if (mesesComValor.length) {
+        itensReforcoMiniform_ = mesesComValor.map(c => ({ mes_referencia: c.mes, valor: c.valor }));
+        const totalDetectado = itensReforcoMiniform_.reduce((s, it) => s + it.valor, 0);
+        alvoMeses.classList.remove('oculto');
+        alvoMeses.innerHTML = `<label>Meses reforçados (lidos do documento)</label>
+          <div class="cronograma-ne-grade">${itensReforcoMiniform_.map(it => `<div class="cronograma-ne-item"><span>${NOMES_MESES_ABREV_FONTE_[it.mes_referencia - 1]}</span><span>${UI.formatarMoeda(it.valor)}</span></div>`).join('')}</div>`;
+        valorEl.value = totalDetectado;
+        valorEl.readOnly = true;
+        statusEl.innerHTML = `🔒 ${itensReforcoMiniform_.length} mês(es) identificado(s) automaticamente, total ${UI.formatarMoeda(totalDetectado)}.`;
+      } else {
+        itensReforcoMiniform_ = null;
+        alvoMeses.classList.add('oculto');
+        alvoMeses.innerHTML = '';
+        if (resultado.preco_total) {
+          valorEl.value = resultado.preco_total;
+          valorEl.readOnly = true;
+          statusEl.innerHTML = `🔒 Valor lido do documento (${UI.formatarMoeda(resultado.preco_total)}) - mês não identificado no documento.`;
+        } else {
+          statusEl.innerHTML = 'Não foi possível ler o valor do documento - preencha manualmente.';
+        }
+      }
+      statusEl.classList.remove('oculto');
+      statusEl.innerHTML += ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
+      statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
+        e.preventDefault();
+        itensReforcoMiniform_ = null;
+        alvoMeses.classList.add('oculto');
+        alvoMeses.innerHTML = '';
+        valorEl.readOnly = false;
+        valorEl.value = '';
+        inputEl.value = '';
+        statusEl.classList.add('oculto');
+      });
+    }
+
+    function travarOriginal_(resultado) {
       const numeroEl = document.getElementById('neNumero');
-      if (numeroEl && document.getElementById('neTipo').value === 'original') {
+      if (numeroEl) {
         numeroEl.value = resultado.numero_ne;
         numeroEl.readOnly = true;
       }
       const fonteEl = document.getElementById('neFonte');
       const objetoEl = document.getElementById('neObjeto');
       const fonteEncontrada = resultado.fonte && Array.from(fonteEl.options).some(o => o.value === resultado.fonte);
-      // Objeto (sessão 2026-07-29): só trava sozinho quando a fonte lida tem
-      // UM único objeto cadastrado no SOF - com mais de um, o analista escolhe
-      // manualmente (não dá pra adivinhar qual dos dois o documento é).
+      // Objeto: só trava sozinho quando a fonte lida tem UM único objeto
+      // cadastrado no SOF - com mais de um, o analista escolhe manualmente
+      // (não dá pra adivinhar qual dos dois o documento é).
       let objetoTravado = false;
       if (fonteEncontrada) {
         fonteEl.value = resultado.fonte;
@@ -1270,7 +1347,7 @@ const TelaSof = (function () {
         + ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
         e.preventDefault();
-        if (numeroEl && document.getElementById('neTipo').value === 'original') {
+        if (numeroEl) {
           numeroEl.readOnly = false;
           numeroEl.value = '';
         }
@@ -1283,6 +1360,11 @@ const TelaSof = (function () {
         inputEl.value = '';
         statusEl.classList.add('oculto');
       });
+    }
+
+    function travar(resultado) {
+      if (document.getElementById('neTipo').value === 'reforco') travarReforco_(resultado);
+      else travarOriginal_(resultado);
     }
 
     inputEl.addEventListener('change', async function () {
