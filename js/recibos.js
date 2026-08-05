@@ -15,6 +15,11 @@ const TelaRecibos = (function () {
   // <datalist> de "Nota de Empenho" e o autopreenchimento de Objeto ao
   // escolher/digitar uma NE existente (fecha a cadeia SOF->NE->Recibo).
   let nesDaUnidadeAtual = [];
+  // Objetos com SOF/NE já cadastrados pra unidade selecionada (sessão
+  // 2026-07-30) - só usada em "Novo processo de Recibo", como fallback do
+  // autopreenchimento por Objeto quando ainda não existe nenhum Recibo
+  // anterior daquele Objeto (ver recObjeto/listarObjetosSofPorUnidade).
+  let objetosSofDaUnidadeNovo = [];
   let abrindoLinha = false;
   let ultimoFiltroJson = null;
 
@@ -465,7 +470,7 @@ const TelaRecibos = (function () {
               <option value="">Selecione...</option>
               ${opcoesObjeto.map(o => `<option>${UI.escaparHtml(o.valor)}</option>`).join('')}
             </select>
-            <p class="ajuda">Escolhendo um objeto já usado antes para essa unidade, os campos abaixo são preenchidos com o último lançamento.</p>
+            <p class="ajuda">Escolhendo um objeto já usado antes para essa unidade, os campos abaixo são preenchidos com o último lançamento (ou, se ainda não houver Recibo, com a Fonte/Nota de Empenho/Parcela já cadastradas na SOF).</p>
           </div>
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
@@ -513,15 +518,18 @@ const TelaRecibos = (function () {
       document.getElementById('recObjeto').value = '';
       historicoRecibosUnidade = [];
       nesDaUnidadeAtual = [];
+      objetosSofDaUnidadeNovo = [];
       document.getElementById('listaNeUnidadeNovo').innerHTML = '';
       if (!unidade) return;
 
-      const [resposta, nes] = await Promise.all([
+      const [resposta, nes, objetosSof] = await Promise.all([
         Api.chamar('listarRecibos', { unidade_id: unidade.id, pageSize: 1000 }),
-        Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: unidade.id })
+        Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: unidade.id }),
+        Api.chamar('listarObjetosSofPorUnidade', { unidadeId: unidade.id })
       ]);
       historicoRecibosUnidade = resposta.items.slice().sort((a, b) => b.data_criacao < a.data_criacao ? -1 : 1);
       nesDaUnidadeAtual = nes;
+      objetosSofDaUnidadeNovo = objetosSof;
       document.getElementById('listaNeUnidadeNovo').innerHTML = opcoesDatalistNe_(nesDaUnidadeAtual);
     });
     ligarAutopreenchimentoNe_('recNotaEmpenho', 'recObjeto', 'recFonte', () => nesDaUnidadeAtual);
@@ -529,11 +537,23 @@ const TelaRecibos = (function () {
     document.getElementById('recObjeto').addEventListener('change', async function () {
       const objeto = this.value.trim();
       const ultimoLancamento = historicoRecibosUnidade.find(r => (r.objeto || '').trim().toLowerCase() === objeto.toLowerCase());
-      if (!ultimoLancamento) return;
-      document.getElementById('recInstrumento').value = ultimoLancamento.instrumento || '';
-      document.getElementById('recParcelaContratual').value = ultimoLancamento.parcela_contratual || '';
-      document.getElementById('recFonte').value = ultimoLancamento.fonte || '';
-      document.getElementById('recNotaEmpenho').value = ultimoLancamento.nota_empenho || '';
+      if (ultimoLancamento) {
+        document.getElementById('recInstrumento').value = ultimoLancamento.instrumento || '';
+        document.getElementById('recParcelaContratual').value = ultimoLancamento.parcela_contratual || '';
+        document.getElementById('recFonte').value = ultimoLancamento.fonte || '';
+        document.getElementById('recNotaEmpenho').value = ultimoLancamento.nota_empenho || '';
+      } else {
+        // Sem Recibo lançado antes pra esse Objeto (sessão 2026-07-30) - cai
+        // pro SOF/NE já cadastrados pra essa unidade+objeto, se existirem
+        // (ver listarObjetosSofPorUnidade). Continua tudo editável depois -
+        // é só um ponto de partida, não trava nenhum campo.
+        const objetoSof = objetosSofDaUnidadeNovo.find(o => (o.objeto || '').trim().toLowerCase() === objeto.toLowerCase());
+        if (objetoSof) {
+          document.getElementById('recParcelaContratual').value = objetoSof.parcela_mensal || '';
+          document.getElementById('recFonte').value = objetoSof.fonte || '';
+          document.getElementById('recNotaEmpenho').value = objetoSof.numero_ne || '';
+        }
+      }
       document.getElementById('recStatus').innerHTML = await opcoesStatus(document.getElementById('recStatus').value, document.getElementById('recFonte').value);
       UI.tornarPesquisavel('recStatus');
     });

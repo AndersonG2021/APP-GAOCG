@@ -1360,6 +1360,21 @@ Diferente de NotasEmpenho/SofFontes/Unidades/ListasPersonalizadas (que já têm 
 
 **Ainda não testado:** medir o tempo real de selecionar a unidade em "Novo processo de Recibo" depois de reimplantar (esperado: cair de 10-15s pra o tempo normal de requisição, ~1-3s); confirmar que o autocomplete de NE continua sugerindo as mesmas NEs de antes; confirmar que editar/excluir/criar um Recibo continua refletindo imediatamente na lista (sem esperar até 30s pelo cache).
 
+## Autopreenchimento por Objeto no Novo Recibo: fallback direto da SOF/NE (sessão 2026-07-30)
+
+Usuário pediu (com print do formulário "Novo processo de Recibo"): ao escolher o Objeto, se já houver SOF/Nota de Empenho pra esse Objeto, os campos Parcela Contratual, Fonte e Nota de Empenho (se já existir) devem ser preenchidos automaticamente, continuando editáveis - pediu pra eu **verificar se isso já acontecia** antes de implementar.
+
+**Verificado: já acontecia, mas só parcialmente.** O `change` de Objeto (`js/recibos.js`) já preenchia esses campos - mas só a partir do **último Recibo já lançado** com aquele Objeto (`historicoRecibosUnidade`). Funciona bem quando a unidade já tem histórico de pagamento pra aquele Objeto, mas **não cobria o caso de uma SOF/NE nova, recém-cadastrada, sem nenhum Recibo lançado ainda** - exatamente o que o usuário descreveu ("se já houver uma SOF/NE"). Faltava mesmo esse pedaço.
+
+**Implementado (fallback, sem tirar o que já existia):**
+- **`NotasEmpenho.gs`**: novo `listarObjetosSofPorUnidade(session, unidadeId)` - 1 item por Objeto já usado em alguma linha de `SofFontes` de algum SOF ativo da unidade, com `fonte`/`parcela_mensal` (a "Parcela Contratual" vem daqui - é o mesmo valor usado no cronograma/alerta da SOF) e `numero_ne` (preenchido só se existir uma NE original com aquele Objeto **no mesmo SOF** que "venceu" a disputa por Objeto - evita puxar a NE de um SOF antigo já superado). Quando a unidade tem 2+ SOFs com o mesmo Objeto (ex.: renovação anual), o mais recente vence.
+- **`Code.gs`**: novo `case 'listarObjetosSofPorUnidade'`.
+- **`js/recibos.js`** (só "Novo processo de Recibo" - o pedido/print era especificamente desse formulário, não do de Editar Recibo): terceira chamada em paralelo no `change` de Unidade, junto das outras duas já existentes. No `change` de Objeto: se não achar um "último lançamento" no histórico de Recibos, cai pro resultado desta nova função (Parcela/Fonte/Nota de Empenho, quando existirem) - tudo continua em campos normais, editáveis manualmente. Texto de ajuda abaixo do campo Objeto atualizado pra citar as duas fontes.
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs`, `Code.gs`. Sem coluna/aba nova.
+
+**Ainda não testado:** criar uma SOF+NE nova (sem nenhum Recibo lançado ainda) e conferir que escolher aquele Objeto no Novo Recibo preenche Parcela Contratual/Fonte/Nota de Empenho sozinho; confirmar que o comportamento anterior (preencher a partir do último Recibo, quando existir) continua igual; testar uma unidade com 2 SOFs pro mesmo Objeto (ano anterior + atual) e conferir que preenche com os dados do SOF mais recente.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

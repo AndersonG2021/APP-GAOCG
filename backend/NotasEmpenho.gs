@@ -273,6 +273,52 @@ function listarNotasEmpenhoPorUnidade(session, unidadeId) {
 }
 
 /**
+ * Um item por Objeto já usado em alguma linha de fonte de algum SOF ativo da
+ * Unidade (sessão 2026-07-30, pedido do usuário) - complementa
+ * listarNotasEmpenhoPorUnidade: ali o autopreenchimento de Fonte/Nota de
+ * Empenho só existia indiretamente, via histórico de Recibos já lançados
+ * pra aquele Objeto (ver ligarAutopreenchimentoNe_/recObjeto,
+ * js/recibos.js) - ou seja, só funcionava se já existisse ALGUM Recibo
+ * anterior daquele Objeto. Esta função cobre o caso que faltava: SOF/NE já
+ * cadastrados mas **ainda sem nenhum Recibo lançado** - direto da fonte da
+ * verdade (SofFontes/NotasEmpenho), não do histórico de Recibos.
+ *
+ * Cada Objeto aparece só 1 vez: se a Unidade tem 2+ SOFs com a mesma
+ * combinação Fonte+Objeto (ex.: SOF do ano anterior e o do ano atual), o SOF
+ * mais recente (linha de SofFontes mais recente, pela ordem natural da
+ * aba - inserida quando o SOF foi salvo) vence, e só entra numero_ne se essa
+ * NE pertencer ao MESMO sof_id que "venceu" (evita atrelar a um Objeto atual
+ * uma NE de um SOF antigo/já superado, mesmo que por coincidência tenham o
+ * mesmo Objeto).
+ */
+function listarObjetosSofPorUnidade(session, unidadeId) {
+  var sofIds = {};
+  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) {
+    if (!toBool_(s.excluido) && String(s.unidade_id) === String(unidadeId)) sofIds[s.id] = true;
+  });
+
+  var porObjeto = {};
+  todasFontesComCache_().forEach(function (f) {
+    if (!sofIds[f.sof_id] || !f.objeto) return;
+    // Sem sort explícito por data - a ordem natural da aba (linha mais nova
+    // por último) já reflete a ordem de criação, então a última encontrada
+    // pra um Objeto é a mais recente.
+    porObjeto[f.objeto] = { objeto: f.objeto, fonte: f.fonte, parcela_mensal: toNumber_(f.parcela_mensal), sof_id: f.sof_id, numero_ne: '' };
+  });
+
+  todasNotasEmpenhoComCache_().forEach(function (n) {
+    if (n.tipo !== 'original' || !sofIds[n.sof_id]) return;
+    var entrada = porObjeto[n.objeto];
+    if (entrada && entrada.sof_id === n.sof_id) entrada.numero_ne = n.numero_ne;
+  });
+
+  return ok_(Object.keys(porObjeto).map(function (k) {
+    var e = porObjeto[k];
+    return { objeto: e.objeto, fonte: e.fonte, parcela_mensal: e.parcela_mensal, numero_ne: e.numero_ne };
+  }));
+}
+
+/**
  * numero_ne é obrigatório pra original e reforço (usado pra agrupar as duas
  * sob o mesmo "card" na tela de Notas de Empenho). Reforço exige que já
  * exista uma NE original com esse número no mesmo SOF.
