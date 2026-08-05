@@ -93,6 +93,8 @@ function handleRequest_(params) {
       case 'criarRecibo': return jsonOut_(criarRecibo(session, params.data));
       case 'criarGrupoParcelaDivididaRecibo': return jsonOut_(criarGrupoParcelaDivididaRecibo(session, params.dadosBase, params.parcelas));
       case 'atualizarRecibo': return jsonOut_(atualizarRecibo(session, params.id, params.data));
+      case 'listarRecibosPorGrupo': return jsonOut_(listarRecibosPorGrupo(session, params.grupoId));
+      case 'atualizarParcelasDivididasRecibo': return jsonOut_(atualizarParcelasDivididasRecibo(session, params.id, params.dadosBase, params.parcelas));
       case 'excluirRecibo': return jsonOut_(excluirRecibo(session, params.id));
       case 'marcarReciboVisualizado': return jsonOut_(marcarReciboVisualizado(session, params.id));
       case 'migrarRecibosHistorico': return jsonOut_(migrarRecibosHistorico(session, params.linhas));

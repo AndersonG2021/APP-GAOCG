@@ -253,6 +253,127 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   return ok_(criados);
 }
 
+/** Todas as linhas (não excluídas) de um mesmo grupo de parcela dividida - usado pela edição de Recibo pra mostrar/editar as parcelas já lançadas (ver atualizarParcelasDivididasRecibo, logo abaixo). */
+function listarRecibosPorGrupo(session, grupoId) {
+  if (!grupoId) return ok_([]);
+  var linhas = todasRecibosComCache_().filter(function (r) {
+    return !toBool_(r.excluido) && String(r.parcela_dividida_grupo_id || '') === String(grupoId);
+  });
+  linhas.sort(function (a, b) { return String(a.id) < String(b.id) ? -1 : 1; });
+  return ok_(linhas);
+}
+
+/**
+ * Cria ou atualiza um grupo de parcela dividida a partir da edição de um
+ * Recibo já existente (sessão 2026-07-30, pedido do usuário: "quando eu
+ * clicar nele, no Editar Recibo apareça a opção de adicionar mais de uma
+ * parcela, e pode anexar as liquidações e ordens bancárias, para cada
+ * parcela"). Reaproveita montarLinhaRecibo_ (mesmo helper de
+ * criarRecibo/criarGrupoParcelaDivididaRecibo) pra montar os campos de
+ * negócio de cada linha - só os campos de auditoria/anexo/id são tratados à
+ * parte aqui.
+ *
+ * Duas situações, resolvidas pela mesma lógica:
+ * (a) o Recibo `id` ainda é avulso (sem parcela_dividida_grupo_id): um
+ *     grupo novo é criado - o item de `parcelas` com `id` igual ao Recibo
+ *     em edição vira a atualização dessa MESMA linha (não uma linha nova),
+ *     virando a 1ª parcela do grupo.
+ * (b) o Recibo `id` já pertence a um grupo: cada item de `parcelas` com
+ *     `id` próprio atualiza a linha correspondente (valor/anexo/percentual
+ *     - o frontend sempre manda TODAS as linhas do grupo, não só as que
+ *     mudaram, senão as omitidas ficariam com dado desatualizado); itens
+ *     sem `id` viram parcelas novas no mesmo grupo.
+ *
+ * Por segurança, um item de `parcelas` com `id` que não pertença nem ao
+ * grupo-alvo nem seja o próprio Recibo em edição é ignorado silenciosamente
+ * (nunca deveria acontecer vindo do frontend, mas evita cruzar dado de
+ * outro Recibo por um id externo/errado).
+ */
+function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
+  dadosBase = dadosBase || {};
+  if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas.');
+
+  var sheet = getSheet_(SHEETS.RECIBOS);
+  var existente = findById_(sheet, id);
+  if (!existente) return fail_('Recibo não encontrado.');
+
+  var grupoId = existente.parcela_dividida_grupo_id || (proximoId_('Recibos') + '-PD');
+  var unidade = buscarUnidadePorId_(existente.unidade_id);
+  var resultado = [];
+
+  parcelas.forEach(function (parcela) {
+    if (parcela.id) {
+      var linha = findById_(sheet, parcela.id);
+      if (!linha) return;
+      var pertenceAoGrupo = String(linha.parcela_dividida_grupo_id || '') === String(grupoId);
+      var ehLinhaBase = String(linha.id) === String(existente.id);
+      if (!pertenceAoGrupo && !ehLinhaBase) return;
+
+      var combinado = Object.assign({ unidade_id: existente.unidade_id }, linha, dadosBase, parcela, { parcela_dividida_grupo_id: grupoId });
+      var camposCalculados = montarLinhaRecibo_(session, combinado, unidade);
+      var atualizado = Object.assign({}, linha, camposCalculados, {
+        divergente_da_unidade: !!unidade && (String(camposCalculados.oss_snapshot) !== String(unidade.oss || '') || String(camposCalculados.cnpj_snapshot) !== String(unidade.cnpj || ''))
+      });
+      if (dadosBase.status !== undefined && dadosBase.status !== linha.status) {
+        atualizado.data_ultima_alteracao_status = nowIso_();
+        atualizado.visualizado_apos_alerta = false;
+      }
+      if (parcela.removerNotaLiquidacaoArquivo) { atualizado.nota_liquidacao_drive_id = ''; atualizado.nota_liquidacao_url = ''; }
+      if (parcela.notaLiquidacaoArquivoBase64 && parcela.notaLiquidacaoArquivoNome) {
+        var nl = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, parcela.notaLiquidacaoArquivoBase64, parcela.notaLiquidacaoArquivoNome, parcela.notaLiquidacaoArquivoTipo);
+        atualizado.nota_liquidacao_drive_id = nl.driveId;
+        atualizado.nota_liquidacao_url = nl.url;
+      }
+      if (parcela.removerOrdemBancariaArquivo) { atualizado.ordem_bancaria_arquivo_drive_id = ''; atualizado.ordem_bancaria_arquivo_url = ''; }
+      if (parcela.ordemBancariaArquivoBase64 && parcela.ordemBancariaArquivoNome) {
+        var ob = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, parcela.ordemBancariaArquivoBase64, parcela.ordemBancariaArquivoNome, parcela.ordemBancariaArquivoTipo);
+        atualizado.ordem_bancaria_arquivo_drive_id = ob.driveId;
+        atualizado.ordem_bancaria_arquivo_url = ob.url;
+      }
+
+      var rowIndex = linha._row;
+      delete atualizado._row;
+      updateObjectRow_(sheet, rowIndex, atualizado);
+      registrarDiferencas_(session, 'Recibo', linha.id, linha.criado_por, linha, atualizado, ['_row']);
+      resultado.push(atualizado);
+    } else {
+      var combinadoNovo = Object.assign({ unidade_id: existente.unidade_id }, existente, dadosBase, parcela, { parcela_dividida_grupo_id: grupoId });
+      var camposNovo = montarLinhaRecibo_(session, combinadoNovo, unidade);
+      var novoId = proximoId_('Recibos');
+      var novo = Object.assign({ id: novoId }, camposNovo, {
+        divergente_da_unidade: !!unidade && (String(camposNovo.oss_snapshot) !== String(unidade.oss || '') || String(camposNovo.cnpj_snapshot) !== String(unidade.cnpj || '')),
+        alerta_divergencia_valores: false,
+        origem: 'manual',
+        criado_por: session.id,
+        data_criacao: nowIso_(),
+        data_ultima_alteracao_status: nowIso_(),
+        visualizado_apos_alerta: true,
+        excluido: false
+      });
+
+      if (parcela.notaLiquidacaoArquivoBase64 && parcela.notaLiquidacaoArquivoNome) {
+        var nl2 = anexarArquivoRecibo_(PASTA_NOTA_LIQUIDACAO_ID, parcela.notaLiquidacaoArquivoBase64, parcela.notaLiquidacaoArquivoNome, parcela.notaLiquidacaoArquivoTipo);
+        novo.nota_liquidacao_drive_id = nl2.driveId;
+        novo.nota_liquidacao_url = nl2.url;
+      }
+      if (parcela.ordemBancariaArquivoBase64 && parcela.ordemBancariaArquivoNome) {
+        var ob2 = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, parcela.ordemBancariaArquivoBase64, parcela.ordemBancariaArquivoNome, parcela.ordemBancariaArquivoTipo);
+        novo.ordem_bancaria_arquivo_drive_id = ob2.driveId;
+        novo.ordem_bancaria_arquivo_url = ob2.url;
+      }
+
+      appendObjectRow_(sheet, novo);
+      registrarLog_(session, 'Recibo', novoId, novo.criado_por, 'CRIACAO', '', 'Parcela adicionada (grupo ' + grupoId + ')');
+      resultado.push(novo);
+    }
+  });
+
+  recalcularAlertaRecibo_(grupoId);
+  invalidarCacheRecibos_();
+  bumpVersao_(['recibos', 'dashboard']);
+  return ok_(resultado);
+}
+
 /** Qualquer analista ou gerente pode editar qualquer Recibo (sem segmentação por dono). */
 function atualizarRecibo(session, id, dados) {
   dados = dados || {};

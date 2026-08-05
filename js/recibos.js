@@ -563,18 +563,19 @@ const TelaRecibos = (function () {
       UI.tornarPesquisavel('recStatus');
     });
 
+    const obterNotaEmpenhoNovo_ = () => document.getElementById('recNotaEmpenho').value;
     document.getElementById('recTemParcelaDividida').addEventListener('change', function () {
       document.getElementById('blocoParcelaUnica').classList.toggle('oculto', this.checked);
       document.getElementById('blocoComParcelaDividida').classList.toggle('oculto', !this.checked);
       if (this.checked && !document.getElementById('linhasParcelaDividida').children.length) {
-        adicionarLinhaParcelaDividida(); adicionarLinhaParcelaDividida();
+        adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_);
+        adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_);
       }
     });
-    document.getElementById('btnAddParcelaDividida').addEventListener('click', adicionarLinhaParcelaDividida);
+    document.getElementById('btnAddParcelaDividida').addEventListener('click', () => adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_));
     document.getElementById('btnCancelarRec').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRec').addEventListener('click', salvarReciboNovo);
 
-    const obterNotaEmpenhoNovo_ = () => document.getElementById('recNotaEmpenho').value;
     ligarAnexoComOcr_({
       inputEl: document.getElementById('recNotaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
       obterNotaEmpenho: obterNotaEmpenhoNovo_, valorInputEl: document.getElementById('recValorLiquidado')
@@ -585,48 +586,77 @@ const TelaRecibos = (function () {
     });
   }
 
-  function adicionarLinhaParcelaDividida() {
+  /**
+   * Monta uma linha do editor de parcela dividida dentro do container
+   * `containerId` (sessão 2026-07-30: parametrizada pra ser reaproveitada
+   * tanto em "Novo processo de Recibo" - `linhasParcelaDividida`, sempre
+   * linhas novas - quanto em "Editar Recibo" - `linhasParcelaDividedaEd`,
+   * ver abrirFormularioEdicao, que também pode pré-popular linhas com dado
+   * já existente na planilha).
+   *
+   * `dadosExistentes` (opcional) - quando presente, pré-preenche a linha:
+   * `{ id, percentual_parcela_dividida, valor_liquidado, valor_pago,
+   * nota_liquidacao_url, ordem_bancaria_arquivo_url }`. Uma linha com `id`
+   * (já salva na planilha) **não pode ser removida por aqui** - o backend
+   * (atualizarParcelasDivididasRecibo) só cria/atualiza o que estiver
+   * presente no envio; remover do formulário sem apagar de fato deixaria a
+   * linha "esquecida" na planilha, órfã do que a tela mostra - por isso o
+   * botão de remover só aparece em linhas novas (ainda não salvas).
+   */
+  function adicionarLinhaParcelaDividida_(containerId, obterNotaEmpenho, dadosExistentes) {
     contadorLinhasParcelaDividida++;
     const id = contadorLinhasParcelaDividida;
+    const jaSalva = !!(dadosExistentes && dadosExistentes.id);
     const div = document.createElement('div');
     div.className = 'linha-parcela-dividida';
     div.dataset.linhaParcelaDividida = id;
+    if (jaSalva) div.dataset.idExistente = dadosExistentes.id;
     div.innerHTML = `
       <div class="linha-parcela-dividida-corpo">
         <div class="grade-3">
-          <div class="campo"><label>Percentual (%)</label><input type="number" step="0.01" class="pd-percentual" /></div>
-          <div class="campo"><label>Valor Liquidado</label><input type="number" step="0.01" class="pd-liquidado" /></div>
-          <div class="campo"><label>Valor Pago</label><input type="number" step="0.01" class="pd-pago" /></div>
+          <div class="campo"><label>Percentual (%)</label><input type="number" step="0.01" class="pd-percentual" value="${dadosExistentes && dadosExistentes.percentual_parcela_dividida ? dadosExistentes.percentual_parcela_dividida : ''}" /></div>
+          <div class="campo"><label>Valor Liquidado</label><input type="number" step="0.01" class="pd-liquidado" value="${dadosExistentes && dadosExistentes.valor_liquidado ? dadosExistentes.valor_liquidado : ''}" /></div>
+          <div class="campo"><label>Valor Pago</label><input type="number" step="0.01" class="pd-pago" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" /></div>
         </div>
         <div class="grade-2">
-          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" class="pd-notaLiquidacaoArquivo" accept=".pdf,image/*" /></div>
-          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" class="pd-ordemBancariaArquivo" accept=".pdf,image/*" /></div>
+          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" class="pd-notaLiquidacaoArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" class="pd-ordemBancariaArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
         </div>
       </div>
-      <button type="button" class="linha-parcela-dividida-remover" title="Remover parcela">&times;</button>`;
-    document.getElementById('linhasParcelaDividida').appendChild(div);
-    div.querySelector('.linha-parcela-dividida-remover').addEventListener('click', () => {
-      div.remove();
-      atualizarBotoesRemoverParcelaDividida_();
-    });
-    atualizarBotoesRemoverParcelaDividida_();
+      ${jaSalva ? '' : '<button type="button" class="linha-parcela-dividida-remover" title="Remover parcela">&times;</button>'}`;
+    document.getElementById(containerId).appendChild(div);
+    if (!jaSalva) {
+      div.querySelector('.linha-parcela-dividida-remover').addEventListener('click', () => {
+        div.remove();
+        atualizarBotoesRemoverParcelaDividida_(containerId);
+      });
+    }
+    atualizarBotoesRemoverParcelaDividida_(containerId);
 
-    const obterNotaEmpenhoPd_ = () => document.getElementById('recNotaEmpenho').value;
-    ligarAnexoComOcr_({
+    const anexoNl = ligarAnexoComOcr_({
       inputEl: div.querySelector('.pd-notaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
-      obterNotaEmpenho: obterNotaEmpenhoPd_, valorInputEl: div.querySelector('.pd-liquidado')
+      obterNotaEmpenho, valorInputEl: div.querySelector('.pd-liquidado')
     });
-    ligarAnexoComOcr_({
+    if (dadosExistentes && dadosExistentes.nota_liquidacao_url) anexoNl.travar(dadosExistentes.valor_liquidado, true);
+    const anexoOb = ligarAnexoComOcr_({
       inputEl: div.querySelector('.pd-ordemBancariaArquivo'), tipo: 'ordem_bancaria',
-      obterNotaEmpenho: obterNotaEmpenhoPd_, valorInputEl: div.querySelector('.pd-pago')
+      obterNotaEmpenho, valorInputEl: div.querySelector('.pd-pago')
     });
+    if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url) anexoOb.travar(dadosExistentes.valor_pago, true);
   }
 
-  /** criarGrupoParcelaDivididaRecibo exige no mínimo 2 parcelas - esconde o botão de remover quando restam só 2. */
-  function atualizarBotoesRemoverParcelaDividida_() {
-    const linhas = document.querySelectorAll('#linhasParcelaDividida [data-linha-parcela-dividida]');
+  /**
+   * criarGrupoParcelaDivididaRecibo/atualizarParcelasDivididasRecibo exigem
+   * no mínimo 2 parcelas - esconde o botão de remover quando restam só 2.
+   * Só considera linhas que TÊM botão de remover (linhas novas) - linhas já
+   * salvas (ver adicionarLinhaParcelaDividida_) nunca têm botão, então não
+   * contam pra essa trava.
+   */
+  function atualizarBotoesRemoverParcelaDividida_(containerId) {
+    const linhas = document.querySelectorAll('#' + containerId + ' [data-linha-parcela-dividida]');
     linhas.forEach(linha => {
-      linha.querySelector('.linha-parcela-dividida-remover').classList.toggle('oculto', linhas.length <= 2);
+      const botao = linha.querySelector('.linha-parcela-dividida-remover');
+      if (botao) botao.classList.toggle('oculto', linhas.length <= 2);
     });
   }
 
@@ -692,15 +722,16 @@ const TelaRecibos = (function () {
   // ===================== EDIÇÃO DE RECIBO EXISTENTE =====================
 
   async function abrirFormularioEdicao(recibo) {
-    const [statusOpcoes, opcoesObjeto, nesDaUnidade] = await Promise.all([
+    const grupoId = recibo.parcela_dividida_grupo_id || '';
+    const [statusOpcoes, opcoesObjeto, nesDaUnidade, siblingsGrupo] = await Promise.all([
       opcoesStatus(recibo.status, recibo.fonte),
       TelaListas.obterOpcoes('OBJETO'),
-      Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: recibo.unidade_id })
+      Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: recibo.unidade_id }),
+      grupoId ? Api.chamar('listarRecibosPorGrupo', { grupoId }) : Promise.resolve([])
     ]);
     nesDaUnidadeAtual = nesDaUnidade;
     const corpo = `
       <form id="formReciboEdicao">
-        ${recibo.parcela_dividida_grupo_id ? `<p class="ajuda">Esta linha faz parte de um grupo de parcela dividida (${UI.escaparHtml(recibo.parcela_dividida_grupo_id)}).</p>` : ''}
         ${recibo.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ OSS/CNPJ divergem do cadastro atual da unidade.</p>' : ''}
         ${recibo.alerta_divergencia_valores ? '<p class="aviso-divergencia">⚠ Divergência entre valor liquidado/pago (ou soma da parcela dividida x parcela contratual).</p>' : ''}
         <div class="grade-2">
@@ -722,14 +753,23 @@ const TelaRecibos = (function () {
             <datalist id="listaNeUnidadeEd">${opcoesDatalistNe_(nesDaUnidade)}</datalist>
           </div>
           <div class="campo"><label>Competência</label><select id="recEdCompetencia">${UI.opcoesCompetenciaHtml(recibo.competencia)}</select></div>
-          <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
-          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
-          <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="number" step="0.01" value="${recibo.valor_pago}" /></div>
-          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recEdOrdemBancariaArquivo" accept=".pdf,image/*" />${recibo.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
           <div class="campo"><label>Ordem Bancária (nº)</label><input id="recEdOrdemBancaria" value="${UI.escaparHtml(recibo.ordem_bancaria)}" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recEdNumeroProcesso" value="${UI.escaparHtml(recibo.numero_processo)}" /></div>
           <div class="campo"><label>Status</label><select id="recEdStatus">${statusOpcoes}</select></div>
         </div>
+        <div class="campo"><label><input type="checkbox" id="recEdTemParcelaDividida" ${grupoId ? 'checked disabled' : ''} /> Este pagamento é feito por mais de uma parcela?</label></div>
+
+        <div id="blocoParcelaUnicaEd" class="grade-2 ${grupoId ? 'oculto' : ''}">
+          <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
+          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+          <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="number" step="0.01" value="${recibo.valor_pago}" /></div>
+          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recEdOrdemBancariaArquivo" accept=".pdf,image/*" />${recibo.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+        </div>
+        <div id="blocoComParcelaDivididaEd" class="${grupoId ? '' : 'oculto'}">
+          <div id="linhasParcelaDivididaEd" class="linhas-parcela-dividida"></div>
+          <button type="button" class="botao" id="btnAddParcelaDivididaEd">+ Adicionar parcela</button>
+        </div>
+
         <div class="campo"><label>Observação</label><textarea id="recEdObservacao" rows="2">${UI.escaparHtml(recibo.observacao)}</textarea></div>
         <div class="campo"><label><input type="checkbox" id="recEdCompleto" ${recibo.completo ? 'checked' : ''} /> Cadastro completo</label></div>
         <p id="recEdErro" class="erro-campo oculto"></p>
@@ -759,6 +799,32 @@ const TelaRecibos = (function () {
     });
     if (recibo.ordem_bancaria_arquivo_url) anexoOb.travar(recibo.valor_pago, true);
 
+    // Parcela dividida na edição (sessão 2026-07-30, pedido do usuário): se
+    // este Recibo já faz parte de um grupo, a tabela já nasce populada com
+    // TODAS as parcelas do grupo (checkbox travado marcado - já é um grupo,
+    // não dá pra "desfazer" por aqui, só adicionar mais parcelas); senão,
+    // nasce vazia e some até o analista marcar o checkbox.
+    if (grupoId) {
+      siblingsGrupo.forEach(s => adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, s));
+    }
+    document.getElementById('recEdTemParcelaDividida').addEventListener('change', function () {
+      document.getElementById('blocoParcelaUnicaEd').classList.toggle('oculto', this.checked);
+      document.getElementById('blocoComParcelaDivididaEd').classList.toggle('oculto', !this.checked);
+      if (this.checked && !document.getElementById('linhasParcelaDivididaEd').children.length) {
+        // Primeira vez convertendo pra parcela dividida - a própria linha do
+        // Recibo em edição vira a 1ª parcela (com o que ela já tinha), + 1
+        // linha nova em branco pra completar o mínimo de 2 (ver
+        // atualizarParcelasDivididasRecibo, backend/Recibos.gs).
+        adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, {
+          id: recibo.id, percentual_parcela_dividida: recibo.percentual_parcela_dividida,
+          valor_liquidado: recibo.valor_liquidado, valor_pago: recibo.valor_pago,
+          nota_liquidacao_url: recibo.nota_liquidacao_url, ordem_bancaria_arquivo_url: recibo.ordem_bancaria_arquivo_url
+        });
+        adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_);
+      }
+    });
+    document.getElementById('btnAddParcelaDivididaEd').addEventListener('click', () => adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_));
+
     document.getElementById('btnCancelarRecEd').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRecEd').addEventListener('click', () => salvarReciboEdicao(recibo));
   }
@@ -776,8 +842,6 @@ const TelaRecibos = (function () {
       fonte: document.getElementById('recEdFonte').value,
       nota_empenho: document.getElementById('recEdNotaEmpenho').value.trim(),
       competencia: document.getElementById('recEdCompetencia').value.trim(),
-      valor_liquidado: document.getElementById('recEdValorLiquidado').value,
-      valor_pago: document.getElementById('recEdValorPago').value,
       ordem_bancaria: document.getElementById('recEdOrdemBancaria').value.trim(),
       numero_processo: document.getElementById('recEdNumeroProcesso').value.trim(),
       status: document.getElementById('recEdStatus').value,
@@ -786,17 +850,46 @@ const TelaRecibos = (function () {
     };
 
     try {
-      const inputNl = document.getElementById('recEdNotaLiquidacaoArquivo');
-      const inputOb = document.getElementById('recEdOrdemBancariaArquivo');
-      if (inputNl.dataset.removerExistente === '1') dados.removerNotaLiquidacaoArquivo = true;
-      if (inputOb.dataset.removerExistente === '1') dados.removerOrdemBancariaArquivo = true;
+      if (document.getElementById('recEdTemParcelaDividida').checked) {
+        // Parcela dividida (sessão 2026-07-30) - cada linha da tabela vira um
+        // item de `parcelas`; linhas já salvas trazem `id` (atualizam a
+        // própria linha no backend), linhas novas não trazem (viram parcela
+        // nova no mesmo grupo). Ver atualizarParcelasDivididasRecibo.
+        const linhas = Array.from(document.querySelectorAll('#linhasParcelaDivididaEd [data-linha-parcela-dividida]'));
+        if (linhas.length < 2) { UI.mostrarErro(erroEl, 'Informe ao menos duas parcelas.'); return; }
+        const parcelas = await Promise.all(linhas.map(async div => {
+          const parcela = {
+            percentual_parcela_dividida: div.querySelector('.pd-percentual').value,
+            valor_liquidado: div.querySelector('.pd-liquidado').value,
+            valor_pago: div.querySelector('.pd-pago').value
+          };
+          if (div.dataset.idExistente) parcela.id = div.dataset.idExistente;
+          const inputNl = div.querySelector('.pd-notaLiquidacaoArquivo');
+          const inputOb = div.querySelector('.pd-ordemBancariaArquivo');
+          if (inputNl.dataset.removerExistente === '1') parcela.removerNotaLiquidacaoArquivo = true;
+          if (inputOb.dataset.removerExistente === '1') parcela.removerOrdemBancariaArquivo = true;
+          const nl = await lerAnexoDoInput_(inputNl);
+          if (nl) Object.assign(parcela, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
+          const ob = await lerAnexoDoInput_(inputOb);
+          if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+          return parcela;
+        }));
+        await Api.chamar('atualizarParcelasDivididasRecibo', { id: recibo.id, dadosBase: dados, parcelas });
+      } else {
+        const inputNl = document.getElementById('recEdNotaLiquidacaoArquivo');
+        const inputOb = document.getElementById('recEdOrdemBancariaArquivo');
+        dados.valor_liquidado = document.getElementById('recEdValorLiquidado').value;
+        dados.valor_pago = document.getElementById('recEdValorPago').value;
+        if (inputNl.dataset.removerExistente === '1') dados.removerNotaLiquidacaoArquivo = true;
+        if (inputOb.dataset.removerExistente === '1') dados.removerOrdemBancariaArquivo = true;
 
-      const nl = await lerAnexoDoInput_(inputNl);
-      if (nl) Object.assign(dados, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-      const ob = await lerAnexoDoInput_(inputOb);
-      if (ob) Object.assign(dados, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+        const nl = await lerAnexoDoInput_(inputNl);
+        if (nl) Object.assign(dados, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
+        const ob = await lerAnexoDoInput_(inputOb);
+        if (ob) Object.assign(dados, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
 
-      await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
+        await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
+      }
       CacheAbas.invalidar('recibos');
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
       UI.fecharModal();
