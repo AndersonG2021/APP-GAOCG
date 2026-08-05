@@ -193,6 +193,10 @@ function validarFontes_(fontes) {
     if (!isNonEmpty_(f.fonte) || !isNonEmpty_(f.parcela_mensal)) {
       return 'Preencha fonte e parcela mensal em todas as linhas de fonte.';
     }
+    // objeto por fonte (sessão 2026-07-29): obrigatório - é o que amarra
+    // NE/Recibo ao objeto certo dentro do SOF (ver montarGruposNotasEmpenho_,
+    // NotasEmpenho.gs, e docs/ESPECIFICACAO_NOVO_DASHBOARD.md).
+    if (!isNonEmpty_(f.objeto)) return 'Informe o objeto de cada linha de fonte.';
     var soma = (f.cronograma || []).reduce(function (s, c) { return s + toNumber_(c.valor); }, 0);
     if (soma <= 0) return 'Preencha ao menos um mês com valor maior que zero em cada linha de fonte.';
   }
@@ -252,6 +256,7 @@ function substituirFontesDoSof_(sofId, fontesArray, session) {
       id: fonteId,
       sof_id: sofId,
       fonte: sanitizeString_(item.fonte, 50),
+      objeto: sanitizeString_(item.objeto, 300),
       codigo_poas: sanitizeString_(item.codigo_poas, 50),
       parcela_mensal: toNumber_(item.parcela_mensal),
       total_solicitado: totalSolicitado,
@@ -433,6 +438,19 @@ function obterSof(session, id) {
   var fontes = listarFontesPorSof_(id);
   sof.fontes = fontes;
   sof.total_solicitado = totalSolicitadoDeFontes_(fontes);
+
+  // total_atendido por linha de fonte (sessão 2026-07-29): soma do valor de
+  // todas as Notas de Empenho (mãe + reforços) casadas por fonte+objeto com
+  // esta linha - usado pelo frontend pra destacar em verde/vermelho os meses
+  // do cronograma da SOF já cobertos pelo empenhado acumulado (ver
+  // docs/ESPECIFICACAO_NOVO_DASHBOARD.md).
+  var todasNes = todasNotasEmpenhoComCache_();
+  fontes.forEach(function (f) {
+    f.total_atendido = todasNes
+      .filter(function (n) { return String(n.sof_id) === String(id) && n.fonte === f.fonte && String(n.objeto || '') === String(f.objeto || ''); })
+      .reduce(function (soma, n) { return soma + toNumber_(n.valor); }, 0);
+  });
+
   Object.assign(sof, calcularDestaqueParadoSof_(sof));
   return ok_(sof);
 }

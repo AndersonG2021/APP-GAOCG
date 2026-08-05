@@ -175,6 +175,23 @@ function listarNotasEmpenhoPorSof(session, sofId) {
 }
 
 /**
+ * Notas de Empenho (agrupadas por número) de uma Unidade - usado pelo Recibo
+ * (sessão 2026-07-29) pra a analista escolher a NE certa em vez de digitar o
+ * número à mão, com o Objeto sugerido automaticamente a partir da NE
+ * escolhida (fecha a cadeia SOF->NE->Recibo). Enxuto de propósito (só os
+ * campos que o formulário de Recibo precisa), reaproveitando
+ * montarGruposNotasEmpenho_ (mesma fonte de dado de toda a tela de NE).
+ */
+function listarNotasEmpenhoPorUnidade(session, unidadeId) {
+  var grupos = montarGruposNotasEmpenho_(session)
+    .filter(function (g) { return String(g.sof_unidade_id) === String(unidadeId); });
+  grupos.sort(function (a, b) { return a.numero_ne < b.numero_ne ? -1 : 1; });
+  return ok_(grupos.map(function (g) {
+    return { numero_ne: g.numero_ne, objeto: g.objeto, fonte: g.fonte, sof_id: g.sof_id };
+  }));
+}
+
+/**
  * numero_ne é obrigatório pra original e reforço (usado pra agrupar as duas
  * sob o mesmo "card" na tela de Notas de Empenho). Reforço exige que já
  * exista uma NE original com esse número no mesmo SOF.
@@ -195,13 +212,34 @@ function criarNotaEmpenho(session, dados) {
   var tipo = dados.tipo === 'reforco' ? 'reforco' : 'original';
   var numeroNe = sanitizeString_(dados.numero_ne, 50);
   if (!isNonEmpty_(numeroNe)) return fail_('Informe o número da Nota de Empenho.');
-  if (!isNonEmpty_(dados.fonte)) return fail_('Selecione a fonte da Nota de Empenho.');
 
+  // fonte/objeto (sessão 2026-07-29): a NE original é associada a um par
+  // fonte+objeto específico do SOF (SofFontes) - fecha a cadeia SOF->NE do
+  // objeto certo. O reforço NUNCA escolhe fonte/objeto de novo: sempre herda
+  // da NE original correspondente (mesmo numero_ne), pra nunca divergir do
+  // que a original já estabeleceu - ver docs/ESPECIFICACAO_NOVO_DASHBOARD.md.
+  var fonteFinal, objetoFinal;
   if (tipo === 'reforco') {
-    var existeOriginal = todasNotasEmpenhoComCache_().some(function (n) {
+    var original = todasNotasEmpenhoComCache_().filter(function (n) {
       return String(n.sof_id) === String(dados.sof_id) && n.tipo === 'original' && n.numero_ne === numeroNe;
+    })[0];
+    if (!original) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
+    fonteFinal = original.fonte;
+    objetoFinal = original.objeto;
+  } else {
+    if (!isNonEmpty_(dados.fonte)) return fail_('Selecione a fonte da Nota de Empenho.');
+    if (!isNonEmpty_(dados.objeto)) return fail_('Selecione o objeto da Nota de Empenho.');
+    fonteFinal = sanitizeString_(dados.fonte, 50);
+    objetoFinal = sanitizeString_(dados.objeto, 300);
+
+    // Integridade: a fonte+objeto escolhidos precisam corresponder a uma
+    // linha de fonte de fato solicitada neste SOF (SofFontes) - evita uma NE
+    // "órfã", que não bate com nada solicitado.
+    var fontesDoSof = listarFontesPorSof_(dados.sof_id);
+    var bateAlgumaFonte = fontesDoSof.some(function (f) {
+      return f.fonte === fonteFinal && String(f.objeto || '') === objetoFinal;
     });
-    if (!existeOriginal) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
+    if (!bateAlgumaFonte) return fail_('Essa combinação de fonte e objeto não corresponde a nenhuma fonte solicitada neste SOF.');
   }
 
   var mesReferencia = '';
@@ -228,7 +266,8 @@ function criarNotaEmpenho(session, dados) {
     sof_id: dados.sof_id,
     tipo: tipo,
     numero_ne: numeroNe,
-    fonte: sanitizeString_(dados.fonte, 50),
+    fonte: fonteFinal,
+    objeto: objetoFinal,
     valor: valor,
     periodo: sanitizeString_(dados.periodo, 100),
     mes_referencia: mesReferencia,
@@ -408,11 +447,20 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
   linhas.forEach(function (n) {
     var chave = n.numero_ne;
     if (!chave) return;
-    if (!grupos[chave]) grupos[chave] = { numero_ne: chave, sof_id: n.sof_id, fonte: n.fonte, valor: 0, arquivos: [], original_id: null, reforcos: [] };
+    // fonte/objeto do grupo vêm da linha ORIGINAL (autoridade - reforço sempre
+    // herda os dela na criação, ver criarNotaEmpenho); se por algum motivo a
+    // original ainda não foi processada, o valor inicial é sobrescrito quando
+    // ela aparecer, abaixo.
+    if (!grupos[chave]) grupos[chave] = { numero_ne: chave, sof_id: n.sof_id, fonte: n.fonte, objeto: n.objeto || '', valor: 0, arquivos: [], original_id: null, reforcos: [] };
     grupos[chave].valor += toNumber_(n.valor);
     if (n.arquivo_url) grupos[chave].arquivos.push({ tipo: n.tipo, url: n.arquivo_url, data: n.data_criacao });
-    if (n.tipo === 'original') grupos[chave].original_id = n.id;
-    else grupos[chave].reforcos.push({ id: n.id, mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null });
+    if (n.tipo === 'original') {
+      grupos[chave].original_id = n.id;
+      grupos[chave].fonte = n.fonte;
+      grupos[chave].objeto = n.objeto || '';
+    } else {
+      grupos[chave].reforcos.push({ id: n.id, mes_referencia: n.mes_referencia ? Number(n.mes_referencia) : null });
+    }
   });
 
   var resultado = Object.keys(grupos)
@@ -422,11 +470,17 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
     var sof = sofsPorId[grupo.sof_id];
     var unidade = sof ? unidadesPorId[sof.unidade_id] : null;
     var fontesDoSof = fontesPorSof[grupo.sof_id] || [];
-    var fontesDaMesmaFonte = fontesDoSof.filter(function (f) { return f.fonte === grupo.fonte; });
+    // Casamento por FONTE + OBJETO (sessão 2026-07-29, antes era só por
+    // fonte): permite duas linhas de mesma fonte (ex.: 2x TESOURO) com
+    // objetos diferentes no mesmo SOF, sem misturar parcela/saldo/cronograma
+    // de uma no cálculo da outra - ver docs/ESPECIFICACAO_NOVO_DASHBOARD.md.
+    var fontesDaMesmaFonte = fontesDoSof.filter(function (f) {
+      return f.fonte === grupo.fonte && String(f.objeto || '') === String(grupo.objeto || '');
+    });
     var parcelaMensalRef = fontesDaMesmaFonte
       .reduce(function (soma, f) { return soma + toNumber_(f.parcela_mensal); }, 0);
     // Total solicitado desta NE = total_solicitado das fontes do SOF que batem
-    // com a fonte da NE (soma dos meses no cronograma da fonte). Base do
+    // com a fonte+objeto da NE (soma dos meses no cronograma da fonte). Base do
     // "Falta ser Atendido" (padronização de nomenclatura 2026-07-28: Atendido =
     // empenhado; Falta = Solicitado - Atendido).
     var totalSolicitadoFonte = fontesDaMesmaFonte
@@ -452,10 +506,34 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       };
     });
 
+    // cronograma_solicitado (sessão 2026-07-29, pedido do usuário): meses
+    // SOLICITADOS pela SOF (SofFontesCronograma da fonte+objeto casada),
+    // marcados como "atendido" (verde) quando o valor acumulado empenhado
+    // (grupo.valor = total_atendido, mãe + reforços) já cobre o acumulado
+    // solicitado até aquele mês, e "não atendido" (vermelho) quando ainda não
+    // cobre - independe de já ter sido liquidado/pago (isso é o `cronograma`
+    // acima, via Recibos). Diferente do cronograma OCR: a fonte é sempre o
+    // que a SOF pediu, não o que o documento da NE registrou.
+    var acumuladoSolicitado = 0;
+    var mesesSolicitados = [];
+    fontesDaMesmaFonte.forEach(function (f) {
+      (f.cronograma || []).forEach(function (c) {
+        if (toNumber_(c.valor) > 0) mesesSolicitados.push({ mes: Number(c.mes), valor: toNumber_(c.valor) });
+      });
+    });
+    mesesSolicitados.sort(function (a, b) { return a.mes - b.mes; });
+    var cronogramaSolicitado = mesesSolicitados.map(function (c) {
+      acumuladoSolicitado += c.valor;
+      return { mes: c.mes, valor: c.valor, atendido: acumuladoSolicitado <= grupo.valor + 0.01 };
+    });
+
     return {
       numero_ne: numeroNe,
       sof_id: grupo.sof_id,
       fonte: grupo.fonte,
+      // objeto (sessão 2026-07-29): objeto específico (de SofFontes) que esta
+      // NE atende - distinto de sof_objeto (o Objeto geral do SOF, abaixo).
+      objeto: grupo.objeto || '',
       sof_sei: sof ? sof.sei : '',
       sof_numero: sof ? sof.sof_numero : '',
       sof_objeto: sof ? sof.objeto : '',
@@ -476,10 +554,18 @@ function montarGruposNotasEmpenho_(session, sofsCarregados) {
       saldo_atual: valorAtual,
       falta_atendido: totalSolicitadoFonte - grupo.valor,
       parcela_mensal_referencia: parcelaMensalRef,
-      alerta: parcelaMensalRef > 0 && valorAtual < parcelaMensalRef && mesesPreenchidosFonte > 1,
+      // alerta (sessão 2026-07-29: unificado com o mesmo critério do card
+      // "NEs com saldo baixo" do Dashboard - FRACAO_SALDO_BAIXO_NE_ = 20% da
+      // parcela mensal de referência daquele objeto - ver grupoNeComSaldoBaixo_
+      // logo abaixo. Antes disparava bem mais cedo, com saldo < 100% da
+      // parcela, divergindo do critério dos 20% usado em outros lugares do app.
+      alerta: parcelaMensalRef > 0 && valorAtual < FRACAO_SALDO_BAIXO_NE_ * parcelaMensalRef && mesesPreenchidosFonte > 1,
       arquivos: grupo.arquivos,
       ano: ano,
-      cronograma: cronograma
+      cronograma: cronograma,
+      // cronograma_solicitado (sessão 2026-07-29): meses solicitados pela SOF
+      // (fonte+objeto casada), verde quando cobertos pelo acumulado atendido.
+      cronograma_solicitado: cronogramaSolicitado
     };
   });
 

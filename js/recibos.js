@@ -11,6 +11,10 @@ const TelaRecibos = (function () {
   const TAMANHO_PAGINA = 20;
   let contadorLinhasParcelaDividida = 0;
   let historicoRecibosUnidade = [];
+  // Notas de Empenho da unidade selecionada (sessão 2026-07-29) - alimenta o
+  // <datalist> de "Nota de Empenho" e o autopreenchimento de Objeto ao
+  // escolher/digitar uma NE existente (fecha a cadeia SOF->NE->Recibo).
+  let nesDaUnidadeAtual = [];
   let abrindoLinha = false;
   let ultimoFiltroJson = null;
 
@@ -350,6 +354,35 @@ const TelaRecibos = (function () {
     return { base64, nome: arquivo.name, tipo: arquivo.type };
   }
 
+  /** Monta as <option> de um <datalist> de Notas de Empenho (sessão 2026-07-29). */
+  function opcoesDatalistNe_(nes) {
+    return nes.map(n => `<option value="${UI.escaparHtml(n.numero_ne)}">${UI.escaparHtml(n.objeto || '')}</option>`).join('');
+  }
+
+  /**
+   * Ao digitar/escolher (via datalist) um número de Nota de Empenho que bate
+   * exatamente com uma NE cadastrada na unidade, sugere o Objeto (e a Fonte)
+   * dela nos campos indicados - fecha a cadeia SOF->NE->Recibo (sessão
+   * 2026-07-29). Não sobrescreve nada se não houver correspondência exata
+   * (nem toda "Nota de Empenho" digitada precisa corresponder a uma NE
+   * rastreada no sistema - ex. dado histórico migrado).
+   */
+  function ligarAutopreenchimentoNe_(inputId, objetoElId, fonteElId, obterNes) {
+    const inputEl = document.getElementById(inputId);
+    const aplicar = function () {
+      const valor = inputEl.value.trim().toLowerCase();
+      if (!valor) return;
+      const bateu = obterNes().find(n => String(n.numero_ne || '').toLowerCase() === valor);
+      if (!bateu) return;
+      const objetoEl = document.getElementById(objetoElId);
+      if (objetoEl && bateu.objeto) objetoEl.value = bateu.objeto;
+      const fonteEl = document.getElementById(fonteElId);
+      if (fonteEl && bateu.fonte) fonteEl.value = bateu.fonte;
+    };
+    inputEl.addEventListener('input', aplicar);
+    inputEl.addEventListener('change', aplicar);
+  }
+
   /**
    * Liga um <input type="file"> de anexo (Nota de Liquidação/Ordem Bancária)
    * à leitura automática por OCR (backend `lerAnexoRecibo`): ao escolher o
@@ -437,7 +470,10 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
           <div class="campo"><label>Fonte</label><select id="recFonte"><option value="">-</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select></div>
-          <div class="campo"><label>Nota de Empenho</label><input id="recNotaEmpenho" /></div>
+          <div class="campo"><label>Nota de Empenho</label>
+            <input id="recNotaEmpenho" list="listaNeUnidadeNovo" placeholder="Selecione a unidade pra ver as NEs cadastradas" />
+            <datalist id="listaNeUnidadeNovo"></datalist>
+          </div>
           <div class="campo"><label>Competência</label><select id="recCompetencia">${UI.opcoesCompetenciaHtml('')}</select></div>
           <div class="campo"><label>Ordem Bancária (nº)</label><input id="recOrdemBancaria" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recNumeroProcesso" /></div>
@@ -476,11 +512,19 @@ const TelaRecibos = (function () {
       document.getElementById('recNotaEmpenho').value = '';
       document.getElementById('recObjeto').value = '';
       historicoRecibosUnidade = [];
+      nesDaUnidadeAtual = [];
+      document.getElementById('listaNeUnidadeNovo').innerHTML = '';
       if (!unidade) return;
 
-      const resposta = await Api.chamar('listarRecibos', { unidade_id: unidade.id, pageSize: 1000 });
+      const [resposta, nes] = await Promise.all([
+        Api.chamar('listarRecibos', { unidade_id: unidade.id, pageSize: 1000 }),
+        Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: unidade.id })
+      ]);
       historicoRecibosUnidade = resposta.items.slice().sort((a, b) => b.data_criacao < a.data_criacao ? -1 : 1);
+      nesDaUnidadeAtual = nes;
+      document.getElementById('listaNeUnidadeNovo').innerHTML = opcoesDatalistNe_(nesDaUnidadeAtual);
     });
+    ligarAutopreenchimentoNe_('recNotaEmpenho', 'recObjeto', 'recFonte', () => nesDaUnidadeAtual);
 
     document.getElementById('recObjeto').addEventListener('change', async function () {
       const objeto = this.value.trim();
@@ -628,7 +672,12 @@ const TelaRecibos = (function () {
   // ===================== EDIÇÃO DE RECIBO EXISTENTE =====================
 
   async function abrirFormularioEdicao(recibo) {
-    const [statusOpcoes, opcoesObjeto] = await Promise.all([opcoesStatus(recibo.status, recibo.fonte), TelaListas.obterOpcoes('OBJETO')]);
+    const [statusOpcoes, opcoesObjeto, nesDaUnidade] = await Promise.all([
+      opcoesStatus(recibo.status, recibo.fonte),
+      TelaListas.obterOpcoes('OBJETO'),
+      Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: recibo.unidade_id })
+    ]);
+    nesDaUnidadeAtual = nesDaUnidade;
     const corpo = `
       <form id="formReciboEdicao">
         ${recibo.parcela_dividida_grupo_id ? `<p class="ajuda">Esta linha faz parte de um grupo de parcela dividida (${UI.escaparHtml(recibo.parcela_dividida_grupo_id)}).</p>` : ''}
@@ -648,7 +697,10 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Instrumento</label><input id="recEdInstrumento" value="${UI.escaparHtml(recibo.instrumento)}" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="number" step="0.01" value="${recibo.parcela_contratual}" /></div>
           <div class="campo"><label>Fonte</label><select id="recEdFonte">${['', 'TESOURO', 'SUS', 'Outra'].map(f => `<option ${recibo.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
-          <div class="campo"><label>Nota de Empenho</label><input id="recEdNotaEmpenho" value="${UI.escaparHtml(recibo.nota_empenho)}" /></div>
+          <div class="campo"><label>Nota de Empenho</label>
+            <input id="recEdNotaEmpenho" list="listaNeUnidadeEd" value="${UI.escaparHtml(recibo.nota_empenho)}" />
+            <datalist id="listaNeUnidadeEd">${opcoesDatalistNe_(nesDaUnidade)}</datalist>
+          </div>
           <div class="campo"><label>Competência</label><select id="recEdCompetencia">${UI.opcoesCompetenciaHtml(recibo.competencia)}</select></div>
           <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
           <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
@@ -668,6 +720,7 @@ const TelaRecibos = (function () {
     UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
 
     ['recEdObjeto', 'recEdCompetencia', 'recEdStatus'].forEach(id => UI.tornarPesquisavel(id));
+    ligarAutopreenchimentoNe_('recEdNotaEmpenho', 'recEdObjeto', 'recEdFonte', () => nesDaUnidadeAtual);
 
     document.getElementById('recEdFonte').addEventListener('change', async function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);

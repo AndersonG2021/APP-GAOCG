@@ -483,7 +483,9 @@ const TelaSof = (function () {
     document.getElementById('sofOss').dispatchEvent(new Event('change', { bubbles: true }));
 
     if (template.fontes && template.fontes.length) {
-      linhasFontes = template.fontes.map(f => ({ fonte: f.fonte, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [] }));
+      // total_atendido não entra aqui de propósito: é o empenhado da SOF de
+      // ORIGEM do template, não desta SOF nova (que ainda não tem NE nenhuma).
+      linhasFontes = template.fontes.map(f => ({ fonte: f.fonte, objeto: f.objeto, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [] }));
       renderFontesFormulario();
     }
     linhasManutencaoSei_ = parseManutencaoSei_(template.sei_manutencao_linhas);
@@ -502,8 +504,8 @@ const TelaSof = (function () {
     const editando = !!sof;
     sofEmEdicaoId = editando ? sof.id : null;
     linhasFontes = (sof && sof.fontes && sof.fontes.length)
-      ? sof.fontes.map(f => ({ fonte: f.fonte, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [] }))
-      : [{ fonte: '', codigo_poas: '', parcela_mensal: '', cronograma: [] }];
+      ? sof.fontes.map(f => ({ fonte: f.fonte, objeto: f.objeto, codigo_poas: f.codigo_poas, parcela_mensal: f.parcela_mensal, cronograma: f.cronograma || [], total_atendido: f.total_atendido }))
+      : [{ fonte: '', objeto: '', codigo_poas: '', parcela_mensal: '', cronograma: [] }];
     linhasManutencaoSei_ = parseManutencaoSei_(sof ? sof.sei_manutencao_linhas : null);
     const unidadeAtual = sof ? unidades.find(u => u.id === sof.unidade_id) : null;
     const snapshot = camposAutopreenchimento(unidadeAtual, sof);
@@ -593,12 +595,14 @@ const TelaSof = (function () {
 
         <div class="campo">
           <label>Fontes de recurso e cronograma de desembolso *</label>
+          <datalist id="listaObjetosSof">${opcoesObjeto.map(o => `<option value="${UI.escaparHtml(o.valor)}">`).join('')}</datalist>
           <div id="sofFontesContainer" class="linhas-fonte"></div>
           <div class="linhas-fonte-rodape">
             <button type="button" class="botao" id="btnAdicionarFonte">+ Adicionar fonte</button>
+            <button type="button" class="botao" id="btnFonteTesSus" title="Adiciona TESOURO (objeto Contrato de Gestão TES) + SUS (objeto Contrato de Gestão SUS)">+ TES+SUS</button>
             <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
           </div>
-          <p class="ajuda">Preencha só os meses que se aplicam - pagamento único usa 1 mês, pagamento recorrente usa vários.</p>
+          <p class="ajuda">Preencha só os meses que se aplicam - pagamento único usa 1 mês, pagamento recorrente usa vários. Cada fonte tem seu próprio Objeto (ex.: TES/SUS), pra rastrear o valor atendido por objeto.</p>
         </div>
 
         <h4 class="sei-secao-titulo">Medida compensatória POAS</h4>
@@ -665,7 +669,23 @@ const TelaSof = (function () {
     renderFontesFormulario();
     document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
       linhasFontes = lerLinhasFontesDoDom_();
-      linhasFontes.push({ fonte: '', codigo_poas: '', parcela_mensal: '', cronograma: [] });
+      linhasFontes.push({ fonte: '', objeto: '', codigo_poas: '', parcela_mensal: '', cronograma: [] });
+      renderFontesFormulario();
+    });
+    // "+ TES+SUS" (sessão 2026-07-29, pedido do usuário): atalho pro caso mais
+    // comum - uma SOF pedindo o orçamento do ano todo com Tesouro (Contrato de
+    // Gestão TES) e SUS (Contrato de Gestão SUS) numa linha cada. Se a única
+    // linha existente ainda estiver em branco (estado inicial), substitui;
+    // senão, só acrescenta as duas linhas às que já existirem.
+    document.getElementById('btnFonteTesSus').addEventListener('click', () => {
+      linhasFontes = lerLinhasFontesDoDom_();
+      const vazia = linhasFontes.length === 1 && !linhasFontes[0].fonte && !linhasFontes[0].objeto && !linhasFontes[0].parcela_mensal
+        && !(linhasFontes[0].cronograma || []).some(c => c.valor);
+      const novasLinhas = [
+        { fonte: 'TESOURO', objeto: 'CONTRATO DE GESTÃO (TES)', codigo_poas: '', parcela_mensal: '', cronograma: [] },
+        { fonte: 'SUS', objeto: 'CONTRATO DE GESTÃO (SUS)', codigo_poas: '', parcela_mensal: '', cronograma: [] }
+      ];
+      linhasFontes = vazia ? novasLinhas : linhasFontes.concat(novasLinhas);
       renderFontesFormulario();
     });
 
@@ -774,35 +794,70 @@ const TelaSof = (function () {
 
   /** Lê as linhas de fonte direto do DOM (fonte da verdade entre re-renders). */
   function lerLinhasFontesDoDom_() {
-    return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma')).map(linha => ({
-      fonte: linha.querySelector('.linha-fonte-select').value,
-      codigo_poas: linha.querySelector('.linha-fonte-codigo-poas').value.trim(),
-      parcela_mensal: linha.querySelector('.linha-fonte-parcela').value,
-      cronograma: Array.from(linha.querySelectorAll('.linha-fonte-mes')).map(i => ({ mes: Number(i.dataset.mes), valor: i.value }))
-    }));
+    return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma')).map(linha => {
+      // total_atendido (sessão 2026-07-29): não é editável (só leitura, vem de
+      // obterSof), mas precisa sobreviver aos re-renders (+Adicionar
+      // fonte/Remover) - guardado num data-attribute pra não se perder.
+      const totalAtendidoAttr = linha.dataset.totalAtendido;
+      return {
+        fonte: linha.querySelector('.linha-fonte-select').value,
+        objeto: linha.querySelector('.linha-fonte-objeto').value.trim(),
+        codigo_poas: linha.querySelector('.linha-fonte-codigo-poas').value.trim(),
+        parcela_mensal: linha.querySelector('.linha-fonte-parcela').value,
+        cronograma: Array.from(linha.querySelectorAll('.linha-fonte-mes')).map(i => ({ mes: Number(i.dataset.mes), valor: i.value })),
+        total_atendido: totalAtendidoAttr === undefined || totalAtendidoAttr === '' ? undefined : Number(totalAtendidoAttr)
+      };
+    });
   }
 
   /**
-   * Cada Fonte virou um mini-cronograma: Fonte/Código POAS/Parcela Mensal numa
-   * linha, e 12 valores mensais (Jan-Dez) preenchidos manualmente embaixo -
-   * pode ter só 1 mês (pagamento único) ou vários (pagamento recorrente).
-   * Total Solicitado deixou de ser digitado - vira somente leitura, soma dos
-   * meses. Parcela Mensal continua separada, não entra no documento gerado e
-   * segue sendo só a base do alerta da Nota de Empenho.
+   * Cada Fonte virou um mini-cronograma: Fonte/Objeto/Código POAS/Parcela
+   * Mensal numa linha, e 12 valores mensais (Jan-Dez) preenchidos manualmente
+   * embaixo - pode ter só 1 mês (pagamento único) ou vários (pagamento
+   * recorrente). Total Solicitado deixou de ser digitado - vira somente
+   * leitura, soma dos meses. Parcela Mensal continua separada, não entra no
+   * documento gerado e segue sendo só a base do alerta da Nota de Empenho.
    * Classe própria "linha-fonte-cronograma" (em vez de reaproveitar
    * ".linha-fonte") porque essa linha não cabe mais no grid de 4 colunas numa
    * única linha que ".linha-fonte" pressupõe (usado também pelas linhas de
    * Manutenção, que continuam simples e não podem mudar de layout).
+   *
+   * Objeto (sessão 2026-07-29): campo próprio por linha de fonte (ex.:
+   * "CONTRATO DE GESTÃO (TES)"), obrigatório - é o que amarra NE/Recibo ao
+   * objeto certo (ver botão "TES+SUS" em renderFontesFormulario). Input com
+   * <datalist> (sugestões da mesma lista de Objeto usada em todo o app),
+   * mas aceita texto livre - não é um <select> fechado.
+   *
+   * Destaque verde/vermelho no cronograma (sessão 2026-07-29, pedido do
+   * usuário): só aparece quando o SOF já está salvo e tem total_atendido
+   * calculado (obterSof) - marca em verde os meses cujo acumulado solicitado
+   * já está coberto pelo total empenhado (NE mãe + reforços) desta fonte+
+   * objeto, e vermelho os que ainda não. SOF novo (sem total_atendido ainda)
+   * não mostra destaque nenhum.
    */
   function linhaFonteHtml(item, indice, podeRemover) {
     const porMes = {};
     (item.cronograma || []).forEach(c => { porMes[c.mes] = c.valor; });
+
+    const temAtendido = item.total_atendido !== undefined && item.total_atendido !== null;
+    const statusPorMes = {};
+    if (temAtendido) {
+      let acumulado = 0;
+      Object.keys(porMes).map(Number).sort((a, b) => a - b).forEach(mes => {
+        acumulado += Number(porMes[mes]) || 0;
+        statusPorMes[mes] = acumulado <= item.total_atendido + 0.01 ? 'atendido' : 'pendente';
+      });
+    }
+
     const mesesHtml = NOMES_MESES_ABREV_FONTE_.map((nome, i) => {
       const mes = i + 1;
-      return `<div class="campo linha-fonte-mes-campo"><label>${nome}</label><input class="linha-fonte-mes" type="number" step="0.01" data-mes="${mes}" value="${porMes[mes] || ''}" /></div>`;
+      const valorMes = porMes[mes];
+      const classeStatus = (temAtendido && valorMes) ? ` mes-${statusPorMes[mes]}` : '';
+      return `<div class="campo linha-fonte-mes-campo${classeStatus}"><label>${nome}</label><input class="linha-fonte-mes" type="number" step="0.01" data-mes="${mes}" value="${valorMes || ''}" /></div>`;
     }).join('');
+
     return `
-      <div class="linha-fonte-cronograma" data-indice="${indice}">
+      <div class="linha-fonte-cronograma" data-indice="${indice}" data-total-atendido="${temAtendido ? item.total_atendido : ''}">
         ${podeRemover ? '<button type="button" class="botao-icone linha-fonte-remover" title="Remover fonte">&times;</button>' : ''}
         <div class="linha-fonte-cabecalho">
           <div class="campo"><label>Fonte</label>
@@ -811,11 +866,14 @@ const TelaSof = (function () {
               ${OPCOES_FONTE.map(f => `<option ${item.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}
             </select>
           </div>
+          <div class="campo"><label>Objeto</label><input class="linha-fonte-objeto" list="listaObjetosSof" value="${UI.escaparHtml(item.objeto || '')}" placeholder="Ex.: CONTRATO DE GESTÃO (TES)" /></div>
           <div class="campo"><label>Código POAS</label><input class="linha-fonte-codigo-poas" value="${UI.escaparHtml(item.codigo_poas || '')}" /></div>
           <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela" type="number" step="0.01" value="${item.parcela_mensal || ''}" /></div>
           <div class="campo"><label>Total Solicitado</label><strong class="linha-fonte-total-exibicao">R$ 0,00</strong></div>
+          ${temAtendido ? `<div class="campo"><label>Total Atendido</label><strong class="linha-fonte-total-atendido-exibicao">${UI.formatarMoeda(item.total_atendido)}</strong></div>` : ''}
         </div>
         <div class="linha-fonte-meses">${mesesHtml}</div>
+        ${temAtendido ? '<p class="ajuda linha-fonte-legenda">🟩 mês já coberto pelo total atendido (empenhado) · 🟥 ainda não atendido</p>' : ''}
       </div>`;
   }
 
@@ -977,6 +1035,7 @@ const TelaSof = (function () {
     const tipo = document.getElementById('neTipo').value;
     const numero = numeroEl.value.trim();
     const fonte = document.getElementById('neFonte').value;
+    const objeto = document.getElementById('neObjeto').value;
     const valor = document.getElementById('neValor').value;
     const arquivoInput = document.getElementById('neArquivo');
     const arquivo = arquivoInput.files[0];
@@ -986,11 +1045,14 @@ const TelaSof = (function () {
 
     if (!numero) throw new Error('Informe o número da Nota de Empenho (ou limpe os outros campos da NE pra não adicionar nenhuma).');
     if (!fonte) throw new Error('Selecione a fonte da Nota de Empenho.');
+    // Objeto só é exigido na original - reforço herda da NE original no
+    // backend (sempre), o valor aqui é só informativo/travado.
+    if (tipo === 'original' && !objeto) throw new Error('Selecione o objeto da Nota de Empenho.');
     if (!arquivo) throw new Error('Anexe o arquivo da Nota de Empenho.');
     if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo da Nota de Empenho muito grande (máximo 8MB).');
 
     const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
-    return { tipo, numero_ne: numero, fonte, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+    return { tipo, numero_ne: numero, fonte, objeto, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
   }
 
   /**
@@ -1035,7 +1097,7 @@ const TelaSof = (function () {
 
       if (dadosNe) {
         await Api.chamar('criarNotaEmpenho', {
-          data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, valor: dadosNe.valor,
+          data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
             arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
         });
         if (dadosNe.tipo === 'original') {
@@ -1082,17 +1144,53 @@ const TelaSof = (function () {
     return '<input id="neNumero" />';
   }
 
+  /** Objetos distintos, entre as fontes do SOF, que batem com a fonte escolhida. */
+  function opcoesObjetoParaFonte_(sof, fonteValor) {
+    if (!fonteValor) return [];
+    return Array.from(new Set((sof.fontes || []).filter(f => f.fonte === fonteValor).map(f => f.objeto).filter(Boolean)));
+  }
+
+  /** Repopula o <select> de Objeto a partir da Fonte escolhida no mini-formulário de NE. */
+  function atualizarSelectObjetoNe_(sof) {
+    const objetoEl = document.getElementById('neObjeto');
+    if (!objetoEl) return;
+    const opcoes = opcoesObjetoParaFonte_(sof, document.getElementById('neFonte').value);
+    objetoEl.innerHTML = opcoes.length
+      ? opcoes.map(o => `<option value="${UI.escaparHtml(o)}">${UI.escaparHtml(o)}</option>`).join('')
+      : '<option value="">Selecione a fonte primeiro</option>';
+    objetoEl.disabled = !opcoes.length;
+  }
+
+  /**
+   * Reforço nunca escolhe fonte/objeto de novo (o backend sempre herda da NE
+   * original correspondente) - ao trocar o Tipo pra "Reforço" (ou trocar qual
+   * NE está sendo reforçada), Fonte/Objeto ficam travados mostrando os
+   * valores da original, só informativos.
+   */
+  function sincronizarFonteObjetoReforco_(sof, notas) {
+    const numeroEl = document.getElementById('neNumero');
+    const fonteEl = document.getElementById('neFonte');
+    const objetoEl = document.getElementById('neObjeto');
+    if (!numeroEl || !fonteEl || !objetoEl) return;
+    const original = notas.find(n => n.tipo === 'original' && n.numero_ne === numeroEl.value);
+    fonteEl.value = original ? (original.fonte || '') : '';
+    atualizarSelectObjetoNe_(sof);
+    objetoEl.innerHTML = `<option value="${UI.escaparHtml(original ? original.objeto || '' : '')}">${UI.escaparHtml(original ? original.objeto || '-' : '-')}</option>`;
+    fonteEl.disabled = true;
+    objetoEl.disabled = true;
+  }
+
   async function renderNotasEmpenho(sof, notasPromise) {
     const notas = await (notasPromise || Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id }));
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
-    const opcoesFonte = (sof.fontes || []).map(f => f.fonte).filter(Boolean);
+    const opcoesFonte = Array.from(new Set((sof.fontes || []).map(f => f.fonte).filter(Boolean)));
     const fontesDisponiveis = opcoesFonte.length ? opcoesFonte : OPCOES_FONTE;
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
-        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th></tr></thead>
-        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
+        <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Objeto</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th></tr></thead>
+        <tbody>${notas.map(n => `<tr><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td></tr>`).join('') || '<tr><td colspan="7" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
       </table>
       <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora.</p>
       <div class="grade-3">
@@ -1101,16 +1199,27 @@ const TelaSof = (function () {
         <div class="campo"><label>Fonte</label><select id="neFonte"><option value="">-</option>${fontesDisponiveis.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')}</select></div>
       </div>
       <div class="grade-3">
+        <div class="campo"><label>Objeto</label><select id="neObjeto"><option value="">Selecione a fonte primeiro</option></select></div>
         <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="number" step="0.01" /></div>
       </div>
       <div class="campo"><label>Arquivo da Nota de Empenho</label><input type="file" id="neArquivo" accept=".pdf,image/*" /></div>`;
 
+    document.getElementById('neFonte').addEventListener('change', () => atualizarSelectObjetoNe_(sof));
     document.getElementById('neTipo').addEventListener('change', function () {
       document.getElementById('neNumeroContainer').innerHTML = camposNumeroNeHtml(notas, this.value);
       UI.tornarPesquisavel('neNumero');
+      const fonteEl = document.getElementById('neFonte');
+      if (this.value === 'reforco') {
+        sincronizarFonteObjetoReforco_(sof, notas);
+        document.getElementById('neNumero').addEventListener('change', () => sincronizarFonteObjetoReforco_(sof, notas));
+      } else {
+        fonteEl.disabled = false;
+        fonteEl.value = '';
+        atualizarSelectObjetoNe_(sof);
+      }
     });
     UI.tornarPesquisavel('neNumero');
-    ligarOcrMiniFormularioNe_();
+    ligarOcrMiniFormularioNe_(sof);
   }
 
   /**
@@ -1121,7 +1230,7 @@ const TelaSof = (function () {
    * Empenhado, travando os campos (mesmo padrão de ligarAnexoComOcr_ em
    * js/recibos.js) com link "Remover anexo" pra refazer.
    */
-  function ligarOcrMiniFormularioNe_() {
+  function ligarOcrMiniFormularioNe_(sof) {
     const inputEl = document.getElementById('neArquivo');
     const statusEl = document.createElement('p');
     statusEl.className = 'ajuda anexo-ocr-status oculto';
@@ -1134,17 +1243,29 @@ const TelaSof = (function () {
         numeroEl.readOnly = true;
       }
       const fonteEl = document.getElementById('neFonte');
+      const objetoEl = document.getElementById('neObjeto');
       const fonteEncontrada = resultado.fonte && Array.from(fonteEl.options).some(o => o.value === resultado.fonte);
+      // Objeto (sessão 2026-07-29): só trava sozinho quando a fonte lida tem
+      // UM único objeto cadastrado no SOF - com mais de um, o analista escolhe
+      // manualmente (não dá pra adivinhar qual dos dois o documento é).
+      let objetoTravado = false;
       if (fonteEncontrada) {
         fonteEl.value = resultado.fonte;
         fonteEl.disabled = true;
+        atualizarSelectObjetoNe_(sof);
+        const opcoesObjeto = opcoesObjetoParaFonte_(sof, resultado.fonte);
+        if (opcoesObjeto.length === 1) {
+          objetoEl.value = opcoesObjeto[0];
+          objetoEl.disabled = true;
+          objetoTravado = true;
+        }
       }
       document.getElementById('neValor').value = resultado.preco_total;
       document.getElementById('neValor').readOnly = true;
 
       statusEl.classList.remove('oculto');
       statusEl.innerHTML = (fonteEncontrada
-        ? '🔒 Número/Fonte/Valor lidos do documento.'
+        ? '🔒 Número/Fonte/Valor lidos do documento.' + (objetoTravado ? '' : ' Selecione o Objeto.')
         : '🔒 Número/Valor lidos do documento (Fonte não identificada - selecione manualmente).')
         + ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
@@ -1155,6 +1276,8 @@ const TelaSof = (function () {
         }
         fonteEl.disabled = false;
         if (fonteEncontrada) fonteEl.value = '';
+        atualizarSelectObjetoNe_(sof);
+        objetoEl.disabled = false;
         document.getElementById('neValor').readOnly = false;
         document.getElementById('neValor').value = '';
         inputEl.value = '';

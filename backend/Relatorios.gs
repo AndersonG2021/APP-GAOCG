@@ -64,7 +64,10 @@ function montarLinhasNe_(session, filtros) {
     .map(function (g) {
       return {
         numero_ne: g.numero_ne || '', unidade: g.unidade_nome || '', oss: g.sof_oss || '', fonte: g.fonte || '',
-        objeto: g.sof_objeto || '',
+        // objeto (sessão 2026-07-29): objeto ESPECÍFICO da fonte casada com
+        // esta NE (SofFontes.objeto - ex. "CONTRATO DE GESTÃO (TES)"), mais
+        // preciso que o Objeto geral do SOF usado antes aqui.
+        objeto: g.objeto || '',
         total_solicitado: g.total_solicitado, total_atendido: g.total_atendido,
         saldo_atual: g.saldo_atual, falta_atendido: g.falta_atendido
       };

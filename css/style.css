@@ -163,11 +163,17 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .linha-fonte-cronograma { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 40px 12px 12px; background: var(--cinza-100); border-radius: 8px; }
 .linha-fonte-cronograma .campo { margin-bottom: 0; }
 .linha-fonte-cronograma .linha-fonte-remover { position: absolute; top: 8px; right: 8px; margin-top: 0; }
-.linha-fonte-cabecalho { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0 16px; }
+.linha-fonte-cabecalho { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0 16px; }
 .linha-fonte-total-exibicao { display: block; padding: 8px 10px; background: #fff; border: 1px solid var(--cinza-200); border-radius: 6px; font-size: 14px; }
+.linha-fonte-total-atendido-exibicao { display: block; padding: 8px 10px; background: var(--verde-claro); color: var(--verde); border: 1px solid var(--verde-claro); border-radius: 6px; font-size: 14px; }
 .linha-fonte-meses { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 12px; }
 .linha-fonte-mes-campo { margin-bottom: 0; }
 .linha-fonte-mes-campo label { font-size: 11px; }
+/* Destaque verde/vermelho no cronograma da SOF (sessão 2026-07-29): mês já
+   coberto pelo total atendido (empenhado) x mês ainda não coberto. */
+.linha-fonte-mes-campo.mes-atendido input { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); font-weight: 600; }
+.linha-fonte-mes-campo.mes-pendente input { background: var(--vermelho-claro); border-color: var(--vermelho); color: var(--vermelho); font-weight: 600; }
+.linha-fonte-legenda { margin: 4px 0 0; }
 
 /*
  * Linha de Termo Aditivo da Unidade (sessão 2026-07-27): ganhou Tipo de
@@ -483,6 +489,17 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-ne-cronograma-caixa table.tabela { background: var(--branco); border-radius: 8px; overflow: hidden; }
 .cartao-ne-cronograma-caixa table.tabela th, .cartao-ne-cronograma-caixa table.tabela td { white-space: normal; }
 .barra-progresso-preenchimento.completo { background: var(--verde); }
+
+/* "Cronograma solicitado" no card de NE (sessão 2026-07-29): meses pedidos
+   pela SOF, verde quando cobertos pelo total atendido acumulado, vermelho
+   quando ainda não. */
+.cartao-ne-cronograma-solicitado { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--cinza-300); }
+.cronograma-solicitado-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.cronograma-solicitado-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 6px; font-size: 11px; }
+.cronograma-solicitado-item.atendido { background: var(--verde-claro); color: var(--verde); }
+.cronograma-solicitado-item.pendente { background: var(--vermelho-claro); color: var(--vermelho); }
+.cronograma-solicitado-mes { font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.cronograma-solicitado-valor { font-size: 10.5px; }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--cinza-300); border-radius: 999px; }

@@ -174,15 +174,52 @@ const TelaNotasEmpenho = (function () {
     return 'cinza';
   }
 
+  /**
+   * "Cronograma solicitado" (sessão 2026-07-29, pedido do usuário): meses
+   * SOLICITADOS pela SOF (fonte+objeto casada com esta NE), verde quando o
+   * acumulado empenhado (mãe + reforços) já cobre o acumulado solicitado até
+   * aquele mês, vermelho quando ainda não - vem pronto do backend
+   * (g.cronograma_solicitado, montarGruposNotasEmpenho_ em NotasEmpenho.gs).
+   * Diferente do cronograma abaixo (que é o lido por OCR do documento da NE,
+   * com Situação vinda dos Recibos/pagamento) - aqui o sinal é só "o valor
+   * empenhado já dá pra cobrir esse mês do que a SOF pediu", sem depender de
+   * já ter sido liquidado/pago.
+   */
+  function cronogramaSolicitadoBoxHtml_(g) {
+    const meses = g.cronograma_solicitado || [];
+    if (!meses.length) return '';
+    const total = meses.reduce((s, c) => s + Number(c.valor || 0), 0);
+    return `
+      <div class="cartao-ne-cronograma-solicitado">
+        <div class="cartao-ne-cronograma-cabecalho">
+          <div>
+            <strong>CRONOGRAMA SOLICITADO (SOF)</strong>
+            <div class="ajuda">${UI.escaparHtml(g.objeto || g.sof_objeto || '-')}</div>
+          </div>
+          <span class="cartao-ne-cronograma-badge">${meses.length} meses</span>
+        </div>
+        <div class="cronograma-solicitado-grade">
+          ${meses.map(c => `
+            <div class="cronograma-solicitado-item ${c.atendido ? 'atendido' : 'pendente'}" title="${c.atendido ? 'Coberto pelo total atendido' : 'Ainda não atendido'}">
+              <span class="cronograma-solicitado-mes">${UI.escaparHtml(NOMES_MESES[c.mes - 1] || c.mes)}</span>
+              <span class="cronograma-solicitado-valor">${UI.formatarMoeda(c.valor)}</span>
+            </div>`).join('')}
+        </div>
+        <p class="ajuda">🟩 já coberto pelo total atendido (R$ ${UI.formatarMoeda(g.total_atendido)}) · 🟥 ainda não atendido · Total solicitado: ${UI.formatarMoeda(total)}</p>
+      </div>`;
+  }
+
   function cronogramaBoxHtml_(g) {
     const cronograma = g.cronograma || [];
     const total = cronograma.reduce((s, c) => s + Number(c.valor || 0), 0);
     const confereTotal = Math.abs(total - Number(g.valor_bruto || 0)) < 0.01;
     return `
       <div class="cartao-ne-cronograma-caixa oculto">
+        ${cronogramaSolicitadoBoxHtml_(g)}
+        ${cronograma.length ? `
         <div class="cartao-ne-cronograma-cabecalho">
           <div>
-            <strong>CRONOGRAMA DE DESEMBOLSO</strong>
+            <strong>CRONOGRAMA DE DESEMBOLSO (documento)</strong>
             <div class="ajuda">Pagamentos mensais · ${g.ano || ''}</div>
           </div>
           <span class="cartao-ne-cronograma-badge">${cronograma.length} meses</span>
@@ -200,12 +237,14 @@ const TelaNotasEmpenho = (function () {
             <td><strong>${UI.formatarMoeda(total)}</strong></td>
             <td class="ajuda">${confereTotal ? 'Conforme valor bruto' : 'Diverge do valor bruto'}</td>
           </tr></tfoot>
-        </table>
+        </table>` : ''}
       </div>`;
   }
 
   function cartaoNeHtml_(g) {
     const cronograma = g.cronograma || [];
+    const cronogramaSolicitado = g.cronograma_solicitado || [];
+    const temCronograma = cronograma.length > 0 || cronogramaSolicitado.length > 0;
     return `
       <div class="cartao-ne ${g.alerta ? 'alerta' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
         <div class="cartao-ne-topo">
@@ -222,12 +261,12 @@ const TelaNotasEmpenho = (function () {
         </div>
         <div class="cartao-ne-rodape">
           <div class="cartao-ne-rodape-links">
-            ${cronograma.length ? '<a href="#" class="cartao-ne-ver-cronograma">Ver cronograma ↓</a>' : '<span class="ajuda">Sem cronograma</span>'}
+            ${temCronograma ? '<a href="#" class="cartao-ne-ver-cronograma">Ver cronograma ↓</a>' : '<span class="ajuda">Sem cronograma</span>'}
             ${(g.arquivos || []).map((a, i) => `<a href="${UI.escaparHtml(a.url)}" target="_blank" rel="noopener">Ver arquivo${g.arquivos.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('')}
           </div>
           <button type="button" class="botao sucesso" data-acao="reforco">+ Reforço</button>
         </div>
-        ${cronograma.length ? cronogramaBoxHtml_(g) : ''}
+        ${temCronograma ? cronogramaBoxHtml_(g) : ''}
       </div>`;
   }
 
@@ -334,9 +373,14 @@ const TelaNotasEmpenho = (function () {
           </div>
         </div>
         <div id="blocoNovaNeOriginal">
-        <div class="campo"><label>Fonte *</label>
+        <div class="grade-2">
+          <div class="campo"><label>Fonte *</label>
             <select id="novaNeFonte" required><option value="">Selecione o SOF primeiro</option></select>
           </div>
+          <div class="campo"><label>Objeto *</label>
+            <select id="novaNeObjeto" required><option value="">Selecione a fonte primeiro</option></select>
+          </div>
+        </div>
         <div class="campo"><label>Anexo da Nota de Empenho *</label><input type="file" id="novaNeArquivo" accept=".pdf,image/*" /></div>
         <p class="ajuda">Ao anexar, o número, o cronograma de desembolso e o preço total são lidos automaticamente do documento.</p>
         <p id="novaNeStatusAnexo" class="ajuda oculto"></p>
@@ -364,6 +408,18 @@ const TelaNotasEmpenho = (function () {
 
     let sofsDaUnidade = [];
     let leituraOcr = null;
+    let fontesDoSofAtual = [];
+
+    /** Repopula o <select> de Objeto a partir da Fonte escolhida (cascata, sessão 2026-07-29). */
+    function atualizarObjetoNovaNe_() {
+      const selectObjeto = document.getElementById('novaNeObjeto');
+      const fonteValor = document.getElementById('novaNeFonte').value;
+      const opcoes = Array.from(new Set(fontesDoSofAtual.filter(f => f.fonte === fonteValor).map(f => f.objeto).filter(Boolean)));
+      selectObjeto.innerHTML = opcoes.length
+        ? opcoes.map(o => `<option value="${UI.escaparHtml(o)}">${UI.escaparHtml(o)}</option>`).join('')
+        : '<option value="">Selecione a fonte primeiro</option>';
+      selectObjeto.disabled = !opcoes.length;
+    }
 
     ['novaNeUnidade', 'novaNeSof', 'novaNeReforcoAlvo', 'novaNeReforcoMes'].forEach(id => UI.tornarPesquisavel(id));
 
@@ -400,11 +456,14 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('novaNeSof').addEventListener('change', function () {
       const selectFonte = document.getElementById('novaNeFonte');
       const sof = sofsDaUnidade.find(s => s.id === this.value);
-      const fontes = sof ? (sof.fontes || []) : [];
-      selectFonte.innerHTML = fontes.length
-        ? '<option value="">Selecione...</option>' + fontes.map(f => `<option>${UI.escaparHtml(f.fonte)}</option>`).join('')
+      fontesDoSofAtual = sof ? (sof.fontes || []) : [];
+      const fontesUnicas = Array.from(new Set(fontesDoSofAtual.map(f => f.fonte).filter(Boolean)));
+      selectFonte.innerHTML = fontesUnicas.length
+        ? '<option value="">Selecione...</option>' + fontesUnicas.map(f => `<option>${UI.escaparHtml(f)}</option>`).join('')
         : '<option value="">Nenhuma fonte cadastrada neste SOF</option>';
+      atualizarObjetoNovaNe_();
     });
+    document.getElementById('novaNeFonte').addEventListener('change', atualizarObjetoNovaNe_);
 
     document.getElementById('novaNeArquivo').addEventListener('change', async function () {
       const inputEl = this;
@@ -482,11 +541,13 @@ const TelaNotasEmpenho = (function () {
       if (!sofId) { UI.mostrarErro(erroEl, 'Selecione o SOF.'); return; }
       const fonte = document.getElementById('novaNeFonte').value;
       if (!fonte) { UI.mostrarErro(erroEl, 'Selecione a fonte.'); return; }
+      const objeto = document.getElementById('novaNeObjeto').value;
+      if (!objeto) { UI.mostrarErro(erroEl, 'Selecione o objeto.'); return; }
       if (!leituraOcr) { UI.mostrarErro(erroEl, 'Anexe o documento da Nota de Empenho.'); return; }
       try {
         await Api.chamar('criarNotaEmpenho', {
           data: {
-            sof_id: sofId, tipo: 'original', numero_ne: leituraOcr.numero_ne, fonte, valor: leituraOcr.preco_total,
+            sof_id: sofId, tipo: 'original', numero_ne: leituraOcr.numero_ne, fonte, objeto, valor: leituraOcr.preco_total,
             cronograma: leituraOcr.cronograma,
             arquivoBase64: leituraOcr.arquivoBase64, arquivoNome: leituraOcr.arquivoNome, arquivoTipo: leituraOcr.arquivoTipo
           }

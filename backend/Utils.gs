@@ -48,9 +48,14 @@ var HEADERS = {
     // próprio, distinto de sei_area_setor_solicitante (seção "Contexto"); o
     // frontend só usa esse último como valor inicial sugerido, sem travar os dois juntos.
     'sei_solicitante_setor'],
-  // codigo_poas: novo (mesma sessão) - coluna "CÓDIGO POAS" da tabela de cronograma
+  // codigo_poas: novo - coluna "CÓDIGO POAS" da tabela de cronograma
   // de desembolso do documento SEI, opcional, sem entrar em nenhum cálculo.
-  SofFontes: ['id', 'sof_id', 'fonte', 'codigo_poas', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
+  // objeto (sessão 2026-07-29): cada linha de fonte passa a ter seu próprio
+  // objeto (ex.: "CONTRATO DE GESTÃO (TES)"/"CONTRATO DE GESTÃO (SUS)"), pra
+  // rastrear o valor atendido por objeto específico, não só por fonte - ver
+  // docs/ESPECIFICACAO_NOVO_DASHBOARD.md e PROGRESS.md. Coexiste com o Objeto
+  // geral do SOF (não substitui).
+  SofFontes: ['id', 'sof_id', 'fonte', 'objeto', 'codigo_poas', 'parcela_mensal', 'total_solicitado', 'criado_por', 'data_criacao'],
   // Cronograma mensal (Jan-Dez) por Fonte do SOF - mesmo padrão child-table de
   // NotasEmpenhoCronograma. total_solicitado (em SofFontes) passa a ser a soma
   // destas linhas, calculada no backend (substituirFontesDoSof_), não mais
@@ -68,7 +73,11 @@ var HEADERS = {
   // sessão (2026-07-20) - precisa da coluna criada na planilha antes de
   // colar este arquivo, senão criarNotaEmpenho segue funcionando mas esse
   // campo específico é descartado silenciosamente (mesmo mecanismo).
-  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'fonte', 'valor', 'periodo', 'mes_referencia',
+  // objeto (sessão 2026-07-29): a NE original é associada a um objeto
+  // específico do SOF (par fonte+objeto de SofFontes); o reforço sempre
+  // herda fonte/objeto da NE original correspondente (nunca escolhido de
+  // novo) - ver criarNotaEmpenho, NotasEmpenho.gs.
+  NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'fonte', 'objeto', 'valor', 'periodo', 'mes_referencia',
     'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao'],
   NotasEmpenhoCronograma: ['id', 'nota_empenho_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
