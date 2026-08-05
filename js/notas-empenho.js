@@ -259,23 +259,25 @@ const TelaNotasEmpenho = (function () {
     return `
       <div class="cartao-ne-linhas">
         <label>Reforços lançados</label>
-        <table class="tabela tabela-reforcos">
-          <thead><tr><th>Nº da NE de reforço</th><th>Meses</th><th>Valor por mês</th><th>Arquivo</th><th></th></tr></thead>
-          <tbody>
-            ${grupos.map(rg => `
-              <tr data-ids="${rg.ids.join(',')}">
-                <td>${rg.numero_ne_reforco ? UI.escaparHtml(rg.numero_ne_reforco) : '<span class="ajuda">-</span>'}</td>
-                <td>${rg.meses.length
-                  ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.escaparHtml(NOMES_MESES[m.mes - 1])}</li>`).join('')}</ul>`
-                  : '<span class="ajuda">-</span>'}</td>
-                <td>${rg.meses.length
-                  ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.formatarMoeda(m.valor)}</li>`).join('')}</ul>`
-                  : UI.formatarMoeda(rg.valor_total)}</td>
-                <td>${rg.arquivo_url ? `<a href="${UI.escaparHtml(rg.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '<span class="ajuda">-</span>'}</td>
-                <td><button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-ids="${rg.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+        <div class="tabela-reforcos-wrap">
+          <table class="tabela tabela-reforcos">
+            <thead><tr><th>Nº da NE de reforço</th><th>Meses</th><th>Valor por mês</th><th>Arquivo</th><th></th></tr></thead>
+            <tbody>
+              ${grupos.map(rg => `
+                <tr data-ids="${rg.ids.join(',')}">
+                  <td>${rg.numero_ne_reforco ? UI.escaparHtml(rg.numero_ne_reforco) : '<span class="ajuda">-</span>'}</td>
+                  <td>${rg.meses.length
+                    ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.escaparHtml(NOMES_MESES[m.mes - 1])}</li>`).join('')}</ul>`
+                    : '<span class="ajuda">-</span>'}</td>
+                  <td>${rg.meses.length
+                    ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.formatarMoeda(m.valor)}</li>`).join('')}</ul>`
+                    : UI.formatarMoeda(rg.valor_total)}</td>
+                  <td>${rg.arquivo_url ? `<a href="${UI.escaparHtml(rg.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '<span class="ajuda">-</span>'}</td>
+                  <td><button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-ids="${rg.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>`;
   }
 

@@ -1333,6 +1333,15 @@ Pedido do usuário: quando o Total Atendido bate com o Total Solicitado (`falta_
 
 Só frontend — nenhuma mudança de backend/planilha, atualiza sozinho pelo GitHub Pages depois do push.
 
+## Tabela "Reforços Lançados" transbordava do card (sessão 2026-07-30, só frontend)
+
+Usuário reportou (com print) que a tabela nova (ver seção acima) ultrapassava a borda direita do card — as colunas "Arquivo" e o botão de excluir ficavam fora do card em vez de se ajustarem à largura disponível.
+
+- **`css/style.css`**: `.tabela-reforcos` ganhou `table-layout: fixed` com larguras proporcionais por coluna (nth-child) em vez de largura automática por conteúdo (que deixava o número da NE de reforço, a lista de meses e o link "Ver arquivo" empurrarem a tabela pra além do card); `word-break: break-word` evita que um número de NE longo force a coluna a alargar. Breakpoint `@media (max-width: 480px)` reduz fonte/padding em telas bem estreitas.
+- **`js/notas-empenho.js`**: a tabela passou a ficar dentro de um `.tabela-reforcos-wrap { overflow-x: auto }` — rede de segurança: com as larguras fixas a tabela cabe na maioria dos casos, mas se ainda assim não couber (tela muito estreita ou conteúdo incomum), ela ganha scroll horizontal **dentro do próprio card**, em vez de vazar visualmente por cima do resto da página.
+
+Só frontend — atualiza sozinho pelo GitHub Pages depois do push.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
