@@ -1274,6 +1274,21 @@ Usuário testou com o mesmo documento real e o app caiu no plano B ("Valor lido 
 
 **Próximo passo:** usuário vai reabrir o modal de reforço com o mesmo documento, abrir "Ver texto lido do documento (diagnóstico)" e mandar o texto de volta - só com o texto real extraído dá pra ajustar `extrairCronogramaDesembolso_`/regex de forma confiável, em vez de mais uma suposição não verificada.
 
+### Diagnóstico real recebido - bug de verdade era outro (truncagem, não ordem) - CORRIGIDO
+
+Usuário mandou o texto bruto real (lido pelo OCR do Google Drive via `extrairTextoOcr_`). Isso revelou que **a correção anterior (ordem de coluna) estava errada** - baseada numa leitura minha do PDF que não equivale ao texto real do OCR - e que **o bug de verdade sempre foi outro**:
+
+- No texto real, cada LINHA do grid (4 meses) sai com seus rótulos e valores juntos, um bloco de cada vez - e dentro de cada linha, os valores **já saem na ordem certa** (não é "coluna", é linha mesmo, 1 pra 1 com Jan..Dez). A hipótese inicial ("todos os 12 rótulos primeiro, depois todos os 12 valores") também estava errada - só coincidiu de "parecer" bater no documento que eu tinha lido por conta própria.
+- **O bug real:** o cabeçalho "ITENS DO EMPENHO" (da PRÓXIMA seção do documento) aparecia, no texto do OCR, **intercalado entre os rótulos Set/Out/Nov/Dez e os 4 valores correspondentes a eles** (posição física do PDF, não da tabela). O código cortava o trecho no primeiro "ITENS DO EMPENHO" encontrado (pra isolar só a seção do cronograma) - só que aqui isso cortava ANTES dos 4 últimos valores existirem no trecho, sobrando só 8 dos 12 valores exigidos, e a função devolvia vazio. Era isso que o usuário via como "não identificou o mês" - nunca foi um problema de mapeamento, sempre foi truncagem prematura.
+
+**Corrigido:** removida a truncagem por cabeçalho de seção (`fimMatch`) - agora pega os 12 primeiros valores monetários que aparecem depois de "CRONOGRAMA DE DESEMBOLSO", ignorando qualquer texto de outro campo intercalado no meio, e mapeia 1 pra 1 com Janeiro..Dezembro (ordem de linha, confirmada correta com o texto real). Removida também `ORDEM_MESES_VALORES_CRONOGRAMA_` (a suposição de coluna, revertida).
+
+**Lição registrada no código:** a extração por regex desse app depende do texto exato que `extrairTextoOcr_` (OCR do Google Drive) devolve - **nunca simular/assumir esse texto a partir de uma leitura própria do PDF**; sempre pedir o texto real via o modo de diagnóstico (`texto_ocr_debug`, já implementado) antes de mexer nos regexes de extração.
+
+**Passo manual pendente (backend):** colar e reimplantar `NotasEmpenho.gs`.
+
+**Ainda não testado:** reprocessar o mesmo documento e confirmar que os 12 meses saem certos agora (Set=0, Out/Nov/Dez=2.303.995,53, resto 0) e que o cronograma não diverge mais do Preço Total.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
