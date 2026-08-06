@@ -360,6 +360,18 @@ numa edição com anexo pré-existente; o mesmo fluxo dentro de uma linha de
 parcela dividida; leitura do segundo tipo de documento (só um dos dois -
 Nota de Liquidação ou Ordem Bancária - foi testado até agora).
 
+**Bug real corrigido (sessão 2026-08-06):** ao anexar uma Ordem Bancária real
+em "Editar Recibo", o sistema dava "Não foi possível identificar o valor no
+documento anexado." O rótulo usado em `REGEX_VALOR_LIQUIDO_OB_DOCUMENTO`
+("VALOR LÍQUIDO:") era um chute de quando essa leitura foi implementada - só
+a Nota de Liquidação havia sido confirmada contra um documento real (ver
+nota logo acima, "Ainda não testado"). O usuário anexou uma OB real
+(2026OB010537) e o rótulo verdadeiro do documento é **"VALOR DA ORDEM
+BANCÁRIA:"**. Corrigido em `backend/Recibos.gs`: constante renomeada para
+`REGEX_VALOR_ORDEM_BANCARIA_DOCUMENTO` com o rótulo certo. **Falta o usuário
+colar a nova versão de `Recibos.gs` no editor do Apps Script e reimplantar**
+para o fix valer em produção.
+
 ## Layout responsivo (CONCLUÍDO, testado e confirmado pelo usuário — sessão 2026-07-14)
 
 Pedido do usuário: o site precisava funcionar bem em qualquer tamanho de tela, de celular a monitor ultrawide. Mudança só de frontend (`index.html`, `js/app.js`, `css/style.css`), sem tocar em backend.
