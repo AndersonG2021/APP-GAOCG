@@ -16,7 +16,15 @@ var PASTA_ORDEM_BANCARIA_ID = '1BtvWiTqnwxOS52SZZCpvC1HjGbWSDaoN';
  */
 var REGEX_NUMERO_NE_DOCUMENTO = /\b(\d{4}NE\d{6})\b/i;
 var REGEX_VALOR_LIQUIDADO_DOCUMENTO = /VALOR\s+LIQUIDADO\s*:?\s*([\d.,]+)/i;
-var REGEX_VALOR_LIQUIDO_OB_DOCUMENTO = /VALOR\s+L[ÍI]QUIDO\s*:?\s*([\d.,]+)/i;
+/**
+ * Bug corrigido (sessão 2026-08-06): a primeira versão buscava o rótulo
+ * "VALOR LÍQUIDO:", um chute nunca confirmado contra um documento real (ver
+ * PROGRESS.md, sessão 2026-07-13 - só a Nota de Liquidação havia sido
+ * testada de fato). Uma Ordem Bancária real do e-fisco/PE anexada pelo
+ * usuário mostrou que o rótulo correto é "VALOR DA ORDEM BANCÁRIA:" - é
+ * esse valor (não "líquido") que o documento traz.
+ */
+var REGEX_VALOR_ORDEM_BANCARIA_DOCUMENTO = /VALOR\s+DA\s+ORDEM\s+BANC[ÁA]RIA\s*:?\s*([\d.,]+)/i;
 
 /**
  * Lê a aba Recibos inteira, com cache de 30s (sessão 2026-07-30, mesmo padrão
@@ -51,9 +59,10 @@ function invalidarCacheRecibos_() {
 /**
  * Lê (via OCR) uma Nota de Liquidação ou Ordem Bancária recém escolhida no
  * formulário - antes de salvar o Recibo - e extrai o valor correspondente
- * (Valor Liquidado / Valor Líquido), validando que a Nota de Empenho citada
- * no documento é a mesma do Recibo em edição. Chamada pelo frontend assim
- * que o usuário anexa o arquivo (ver ligarAnexoComOcr_ em js/recibos.js).
+ * (Valor Liquidado / Valor da Ordem Bancária), validando que a Nota de
+ * Empenho citada no documento é a mesma do Recibo em edição. Chamada pelo
+ * frontend assim que o usuário anexa o arquivo (ver ligarAnexoComOcr_ em
+ * js/recibos.js).
  */
 function lerAnexoRecibo(session, params) {
   params = params || {};
@@ -76,7 +85,7 @@ function lerAnexoRecibo(session, params) {
     return fail_('A Nota de Empenho do documento (' + neDocumento + ') não corresponde à Nota de Empenho do Recibo (' + notaEmpenhoEsperada + ').');
   }
 
-  var regexValor = tipo === 'ordem_bancaria' ? REGEX_VALOR_LIQUIDO_OB_DOCUMENTO : REGEX_VALOR_LIQUIDADO_DOCUMENTO;
+  var regexValor = tipo === 'ordem_bancaria' ? REGEX_VALOR_ORDEM_BANCARIA_DOCUMENTO : REGEX_VALOR_LIQUIDADO_DOCUMENTO;
   var matchValor = texto.match(regexValor);
   if (!matchValor) return fail_('Não foi possível identificar o valor no documento anexado.');
   var valor = normalizarValorMonetarioBr_(matchValor[1]);
