@@ -16,7 +16,8 @@ var SHEETS = {
   LOG_AUDITORIA: 'LogAuditoria',
   EDICOES_EM_ANDAMENTO: 'EdicoesEmAndamento',
   CONTADORES: 'Contadores',
-  RELATORIOS_MODELOS: 'RelatoriosModelos'
+  RELATORIOS_MODELOS: 'RelatoriosModelos',
+  RECIBOS_ORDENS_BANCARIAS: 'RecibosOrdensBancarias'
 };
 
 var HEADERS = {
@@ -88,9 +89,15 @@ var HEADERS = {
   NotasEmpenho: ['id', 'sof_id', 'tipo', 'numero_ne', 'numero_ne_reforco', 'fonte', 'objeto', 'valor', 'periodo', 'mes_referencia',
     'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao', 'excluido', 'excluido_por', 'excluido_em'],
   NotasEmpenhoCronograma: ['id', 'nota_empenho_id', 'mes', 'valor', 'criado_por', 'data_criacao'],
+  // nota_liquidacao_numero (sessão 2026-08-06, ⚠️ COLUNA NOVA - ver
+  // PROGRESS.md): número do próprio documento de Nota de Liquidação (ex.
+  // "2026LE000755"), extraído por OCR junto com o valor - mostrado ao lado
+  // do valor_liquidado na tabela "Documentos anexados" da parcela de 70% do
+  // Recibo dividido de Contrato de Gestão (TES). Ver REGEX_NUMERO_LE_DOCUMENTO
+  // em Recibos.gs.
   Recibos: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'divergente_da_unidade', 'tipo_unidade', 'objeto',
     'instrumento', 'parcela_contratual', 'fonte', 'nota_empenho', 'competencia', 'valor_liquidado', 'valor_pago',
-    'nota_liquidacao_drive_id', 'nota_liquidacao_url', 'ordem_bancaria', 'ordem_bancaria_arquivo_drive_id',
+    'nota_liquidacao_drive_id', 'nota_liquidacao_url', 'nota_liquidacao_numero', 'ordem_bancaria', 'ordem_bancaria_arquivo_drive_id',
     'ordem_bancaria_arquivo_url', 'numero_processo', 'observacao', 'status', 'parcela_dividida_grupo_id',
     'percentual_parcela_dividida', 'alerta_divergencia_valores', 'completo', 'origem', 'criado_por', 'data_criacao',
     'data_ultima_alteracao_status', 'visualizado_apos_alerta', 'excluido', 'excluido_por', 'excluido_em'],
@@ -102,7 +109,17 @@ var HEADERS = {
   // compartilhados entre todos. config_json guarda fonte/filtros/colunas/
   // agrupamento/formato serializados. A aba é criada sob demanda por
   // getSheetModelosRelatorio_ (Relatorios.gs) se ainda não existir.
-  RelatoriosModelos: ['id', 'nome', 'config_json', 'criado_por', 'data_criacao']
+  RelatoriosModelos: ['id', 'nome', 'config_json', 'criado_por', 'data_criacao'],
+  // Ordens Bancárias de UMA parcela de Recibo (sessão 2026-08-06, pedido do
+  // usuário: a parcela de 70% de um Recibo dividido de Contrato de Gestão
+  // (TES) pode ter mais de uma OB) - child-table de Recibos (recibo_id),
+  // mesmo padrão de SofFontesCronograma/NotasEmpenhoCronograma:
+  // valor_pago da parcela é recalculado como soma destas linhas sempre que
+  // vier preenchida (ver substituirOrdensBancariasParcela_, Recibos.gs).
+  // numero_ob é extraído por OCR do próprio PDF (REGEX_NUMERO_OB_DOCUMENTO).
+  // A aba é criada sob demanda por getSheetOrdensBancariasRecibo_ (Recibos.gs)
+  // se ainda não existir - não precisa criar à mão.
+  RecibosOrdensBancarias: ['id', 'recibo_id', 'numero_ob', 'valor', 'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao']
 };
 
 /**
@@ -118,7 +135,8 @@ var COLUNAS_NUMERICAS = {
   NotasEmpenho: ['valor', 'mes_referencia'],
   NotasEmpenhoCronograma: ['mes', 'valor'],
   Recibos: ['parcela_contratual', 'valor_liquidado', 'valor_pago', 'percentual_parcela_dividida'],
-  Contadores: ['proximo']
+  Contadores: ['proximo'],
+  RecibosOrdensBancarias: ['valor']
 };
 
 /**

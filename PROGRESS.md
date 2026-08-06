@@ -1405,6 +1405,142 @@ Pedido do usuário: depois de criar um Recibo (sem parcela dividida) e reabri-lo
 
 **Ainda não testado:** editar um Recibo avulso, marcar o checkbox e salvar com 2+ parcelas (confirmar que a linha original vira a 1ª parcela do grupo, não duplica); reabrir esse mesmo Recibo depois (deve nascer já com o checkbox travado e a tabela cheia); adicionar mais uma parcela a um grupo já existente e conferir que as demais linhas não perdem dado; anexar Nota de Liquidação/Ordem Bancária em cada parcela e conferir que cada uma salva o próprio arquivo.
 
+## Parcela dividida vira exclusiva de Contrato de Gestão (TES), split fixo 70%/30%, múltiplas OBs na parcela de 70% (sessão 2026-08-06, ⚠️ ALTERAÇÃO DE PLANILHA NECESSÁRIA)
+
+Pedido do usuário: a opção "mais de uma parcela" (sessão 2026-07-30, item acima)
+era genérica demais - percentual livre, N parcelas livres, 1 OB por parcela.
+Pedido: (1) só aparece pra Recibos de Objeto **"CONTRATO DE GESTÃO (TES)"**;
+(2) quando marcada, divide **sempre** em 70%/30% (não editável); (3) a parcela
+de 70% pode ter **mais de uma** Ordem Bancária (botão "+ Adicionar OB"); (4)
+uma tabelinha (inspirada em "Reforços Lançados" da NE) mostra **LE + cada
+OB** com número e valor de cada documento. Antes de implementar, revisei o
+pedido com o usuário (perguntas) e pedi 2 documentos reais (Ordem Bancária
+2026OB010537 e Nota de Liquidação 2026LE000755) pra confirmar os rótulos/
+formato de número antes de escrever regex - mesma lição do bug de
+"VALOR LÍQUIDO"/"VALOR DA ORDEM BANCÁRIA" corrigido nesta mesma sessão (ver
+item anterior "Bug real corrigido").
+
+Decisões tomadas com o usuário:
+1. Gatilho: Objeto **igual exatamente** ao valor escolhido "CONTRATO DE GESTÃO
+   (TES)" (não é um "contém" nem uma nova categoria - Objeto continua texto
+   livre gerenciado em Listas Personalizadas).
+2. Número de cada OB (e da LE): **OCR automático**, extraído do próprio PDF
+   (mesmo princípio de REGEX_NUMERO_NE_DOCUMENTO - formato do número, não o
+   rótulo que o precede).
+3. Valor Pago da parcela de 70%: **soma automática** (somente leitura) das
+   OBs anexadas.
+4. Recibos antigos com parcela dividida que não sejam TES: não é uma
+   preocupação real - simplificado sem tratar esse caso especialmente (a
+   tabela deles continua aparecendo normalmente ao reabrir, só não ganha o
+   split fixo/tabela de OBs).
+5. Feito de propósito fácil de mudar no futuro: percentuais e a regra do
+   objeto-gatilho isolados em constantes nomeadas (`PARCELA_DIVIDIDA_TES_
+   PERCENTUAIS`, `OBJETO_CONTRATO_GESTAO_TES`, `js/recibos.js`), não
+   espalhados pelo código.
+
+### Modelo de dados (⚠️ requer 1 coluna nova na planilha - aba nova é automática, ver "Passo manual" abaixo)
+- **`Recibos` ganha a coluna `nota_liquidacao_numero`** (texto): número do
+  próprio documento de Nota de Liquidação (ex. "2026LE000755"), extraído por
+  OCR junto com o valor - gravado pra **qualquer** Recibo com NL lida (não só
+  os TES), mas hoje só é mostrado na tabela "Documentos anexados" da parcela
+  de 70%.
+- **Nova aba `RecibosOrdensBancarias`** (`id, recibo_id, numero_ob, valor,
+  arquivo_drive_id, arquivo_url, criado_por, data_criacao`) - child-table de
+  `Recibos` (mesmo padrão de `SofFontesCronograma`/`NotasEmpenhoCronograma`),
+  1 linha por Ordem Bancária anexada na parcela de 70%. **Criada sozinha no
+  1º uso** (`getSheetOrdensBancariasRecibo_`, mesmo mecanismo de
+  `RelatoriosModelos`/`getSheetModelosRelatorio_`) - não precisa criar à mão.
+
+### Backend (`Recibos.gs`)
+- `REGEX_NUMERO_LE_DOCUMENTO` (`\d{4}LE\d{6}`) e `REGEX_NUMERO_OB_DOCUMENTO`
+  (`\d{4}OB\d{6}`) - confirmados contra os 2 documentos reais anexados pelo
+  usuário antes de implementar.
+- `lerAnexoRecibo` passa a devolver também `numero_documento` - **best-effort**
+  (não bloqueia o anexo se não achar, ao contrário da NE/do valor - só deixa
+  de mostrar o número na tabela).
+- `getSheetOrdensBancariasRecibo_`: cria a aba sob demanda (ver acima).
+- `somaOrdensBancarias_`/`substituirOrdensBancariasParcela_`: "apagar e
+  recriar" as OBs de UMA parcela (mesmo padrão de `substituirFontesDoSof_`,
+  Sof.gs) - cada item pode trazer um arquivo novo (sobe pro Drive agora) ou
+  já ter vindo de uma OB salva antes e não mexida (só recria a linha do
+  banco, sem reenviar o arquivo).
+- `montarLinhaRecibo_` ganha `nota_liquidacao_numero`.
+- `criarGrupoParcelaDivididaRecibo`/`atualizarParcelasDivididasRecibo`: se a
+  parcela trouxer `ordens_bancarias`, `valor_pago` é recalculado como a soma
+  ANTES de montar a linha (servidor manda, nunca confia no que o frontend
+  mostrava), e `substituirOrdensBancariasParcela_` é chamada depois de saber
+  o id da linha (existente ou recém-criada).
+- `listarRecibosPorGrupo` passa a embutir `ordens_bancarias` em cada linha
+  devolvida - reidrata a tabela ao reabrir um Recibo dividido de TES pra
+  editar.
+- `atualizarRecibo` (Recibo avulso, não dividido) ganha `nota_liquidacao_numero`
+  na lista de campos de texto simples.
+
+### Frontend (`js/recibos.js`)
+- `OBJETO_CONTRATO_GESTAO_TES`, `PARCELA_DIVIDIDA_TES_PERCENTUAIS = [70, 30]`,
+  `PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB` (= maior do array) - constantes
+  isoladas, fácil de mudar depois. `ehObjetoContratoGestaoTes_`.
+- Checkbox "mais de uma parcela" (Novo e Editar Recibo) agora fica dentro de
+  um bloco (`#recBlocoTemParcelaDividida`/`#recEdBlocoTemParcelaDividida`)
+  escondido por padrão, só aparece quando o Objeto escolhido é TES -
+  `atualizarVisibilidadeParcelaDivididaTes_`. Se o Objeto deixar de ser TES
+  com o checkbox marcado, desmarca sozinho e volta pro modo parcela única
+  (evita estado inconsistente). Recibo que **já** pertence a um grupo sempre
+  mostra a tabela, independente do Objeto atual (grupo existente nunca
+  "some" - ver decisão 4 acima).
+- `semearParcelasTes_`: substitui o antigo "+ Adicionar parcela" (removido
+  do fluxo de criação - split agora é sempre as N parcelas fixas do array).
+  `btnAddParcelaDivididaEd` (edição) só continua visível pra grupos
+  **legados não-TES** (`ehObjetoContratoGestaoTes_(recibo.objeto)` decide).
+- `adicionarLinhaParcelaDividida_` ganhou `opts.percentualFixo`: percentual
+  vira somente leitura, nunca mostra botão de remover; se for o MAIOR
+  percentual do split (`PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB`), a linha
+  troca o campo único "Ordem Bancária (anexo)" por uma tabela "Documentos
+  anexados" (`renderTabelaOrdensBancariasParcela_`, reaproveita o estilo
+  `.tabela-reforcos` das NE) + botão "+ Adicionar OB" (input de arquivo
+  escondido, clicado programaticamente, resetado após cada leitura pra
+  aceitar o próximo anexo) + Valor Pago somente leitura, somado
+  automaticamente (`atualizarValorPagoComputado_`).
+- `ligarAnexoComOcr_` ganhou `aoAtualizar` (callback opcional, chamado
+  sempre que o anexo muda) e `travar()` passou a guardar
+  `inputEl._numeroDocumentoLido` - usado tanto pra montar o payload de
+  `nota_liquidacao_numero` quanto pra alimentar a linha "LE" da tabela.
+- Compatibilidade: convertendo um Recibo avulso que já tinha UMA Ordem
+  Bancária no formato antigo (campo único) pra TES dividido, essa OB entra
+  como item "herdado" na tabela (número em branco, valor da linha antiga),
+  em vez de simplesmente desaparecer da tela.
+- `salvarReciboNovo`/`salvarReciboEdicao`: linhas com `dataset.multiOb='1'`
+  mandam `ordens_bancarias` (via `montarPayloadOrdensBancarias_`) em vez do
+  anexo único de OB; todas as linhas (e o Recibo avulso) mandam
+  `nota_liquidacao_numero`.
+
+### CSS (`style.css`)
+- `.pd-ob-bloco`/`.pd-ob-tabela-wrap`: só espaçamento - a tabela em si
+  reaproveita `.tabela-reforcos`/`.tabela-reforcos-wrap` (já existentes, das
+  Notas de Empenho) sem alteração.
+
+### ⚠️ Passo manual pendente
+1. **Criar a coluna `nota_liquidacao_numero` na aba `Recibos`** (senão o dado
+   é descartado silenciosamente, mesmo mecanismo de sempre).
+2. Colar e reimplantar (Nova versão): `Utils.gs`, `Recibos.gs`. `Code.gs`
+   **não mudou** nesta sessão (os 3 endpoints tocados já existiam e já
+   repassam `parcelas`/`dadosBase` genericamente). A aba
+   `RecibosOrdensBancarias` **não precisa ser criada à mão** - nasce sozinha
+   no 1º uso.
+3. Frontend (`js/recibos.js`, `css/style.css`) atualiza sozinho no GitHub
+   Pages depois do `git push` (até ~10 min de propagação).
+
+**Ainda não testado:** criar um Recibo novo com Objeto "CONTRATO DE GESTÃO
+(TES)", marcar o checkbox, conferir que nasce com 70%/30% travados e sem
+botão de remover; anexar a LE e 2+ OBs na parcela de 70%, conferir a tabela
+(número/valor de cada uma) e que Valor Pago soma sozinho; salvar e reabrir
+pra editar, conferir que a tabela reidrata com os itens salvos; remover uma
+OB já salva e salvar de novo, conferir que ela some da planilha
+(`RecibosOrdensBancarias`) e a soma recalcula; trocar o Objeto de/para TES
+num Recibo avulso ainda não salvo, conferir que o checkbox aparece/some e
+desmarca sozinho; converter um Recibo avulso TES que já tinha uma OB antiga
+(campo único) e conferir que ela aparece como item herdado na tabela.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

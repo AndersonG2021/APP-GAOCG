@@ -26,6 +26,52 @@ const TelaRecibos = (function () {
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 
   /**
+   * Regra de negócio (sessão 2026-08-06, pedido do usuário): a divisão em
+   * parcelas só fica disponível pra Recibos de Objeto "Contrato de Gestão
+   * (TES)" (comparação exata com o valor escolhido no campo Objeto - lista
+   * gerenciada em Listas Personalizadas), e o split é sempre fixo (não
+   * editável pelo usuário). Isolado aqui em constantes pra ser fácil de
+   * mudar no futuro (outro objeto-gatilho, outro split) sem caçar número
+   * mágico pelo arquivo inteiro - ver semearParcelasTes_/
+   * adicionarLinhaParcelaDividida_. A parcela cujo percentual é o MAIOR do
+   * array é a que aceita múltiplas Ordens Bancárias (hoje a de 70%).
+   */
+  const OBJETO_CONTRATO_GESTAO_TES = 'CONTRATO DE GESTÃO (TES)';
+  const PARCELA_DIVIDIDA_TES_PERCENTUAIS = [70, 30];
+  const PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB = Math.max(...PARCELA_DIVIDIDA_TES_PERCENTUAIS);
+
+  function ehObjetoContratoGestaoTes_(objeto) {
+    return String(objeto || '').trim().toUpperCase() === OBJETO_CONTRATO_GESTAO_TES;
+  }
+
+  /**
+   * Mostra/esconde o bloco do checkbox "mais de uma parcela" conforme o
+   * Objeto escolhido é ou não Contrato de Gestão (TES). Se o Objeto deixar
+   * de ser TES enquanto o checkbox estava marcado, desmarca e volta pro modo
+   * parcela única sozinho, pra não deixar o formulário num estado
+   * inconsistente (checkbox marcado sem poder editar as parcelas).
+   */
+  function atualizarVisibilidadeParcelaDivididaTes_(blocoCheckboxId, checkboxId, blocoUnicoId, blocoDivididoId, linhasContainerId, objeto) {
+    const ehTes = ehObjetoContratoGestaoTes_(objeto);
+    document.getElementById(blocoCheckboxId).classList.toggle('oculto', !ehTes);
+    const checkbox = document.getElementById(checkboxId);
+    if (!ehTes && checkbox.checked) {
+      checkbox.checked = false;
+      document.getElementById(blocoUnicoId).classList.remove('oculto');
+      document.getElementById(blocoDivididoId).classList.add('oculto');
+      document.getElementById(linhasContainerId).innerHTML = '';
+    }
+  }
+
+  /** Semeia as N parcelas fixas de um Recibo dividido de Contrato de Gestão (TES) - hoje 70%/30% (PARCELA_DIVIDIDA_TES_PERCENTUAIS). `dadosPorPercentual` (opcional) - ex. `{70: {...}}` - pré-popula a parcela daquele percentual (usado ao converter um Recibo avulso já existente). */
+  function semearParcelasTes_(containerId, obterNotaEmpenho, dadosPorPercentual) {
+    PARCELA_DIVIDIDA_TES_PERCENTUAIS.forEach(percentual => {
+      const dadosExistentes = dadosPorPercentual && dadosPorPercentual[percentual];
+      adicionarLinhaParcelaDividida_(containerId, obterNotaEmpenho, dadosExistentes, { percentualFixo: percentual });
+    });
+  }
+
+  /**
    * filtroInicial (opcional, vindo do Dashboard via App.navegarPara): pré-
    * seleciona Competência/Status antes da primeira carga, e/ou abre um Recibo
    * específico direto (abrirId) depois dela - ver definirValoresFiltroMultiplo
@@ -402,15 +448,24 @@ const TelaRecibos = (function () {
    * flag pra sinalizar ao backend que deve desanexar
    * (`removerNotaLiquidacaoArquivo`/`removerOrdemBancariaArquivo`). Nos
    * formulários de Recibo novo essa flag simplesmente não é lida por ninguém.
+   *
+   * `inputEl._numeroDocumentoLido` (sessão 2026-08-06) guarda o número do
+   * próprio documento (LE/OB, extraído por OCR - ver `numero_documento` em
+   * lerAnexoRecibo), lido em salvarReciboNovo/salvarReciboEdicao pra gravar
+   * `nota_liquidacao_numero` e usado pela tabela "Documentos anexados" da
+   * parcela de 70% (ver renderTabelaOrdensBancariasParcela_). `aoAtualizar`
+   * (opcional) é chamado toda vez que o anexo é lido ou removido, pra quem
+   * precisa reagir (ex.: essa mesma tabela, quando a LE muda).
    */
-  function ligarAnexoComOcr_({ inputEl, tipo, obterNotaEmpenho, valorInputEl }) {
+  function ligarAnexoComOcr_({ inputEl, tipo, obterNotaEmpenho, valorInputEl, aoAtualizar }) {
     const statusEl = document.createElement('p');
     statusEl.className = 'ajuda anexo-ocr-status oculto';
     inputEl.insertAdjacentElement('afterend', statusEl);
 
-    function travar(valor, existente) {
+    function travar(valor, existente, numeroDocumento) {
       valorInputEl.value = valor;
       valorInputEl.readOnly = true;
+      inputEl._numeroDocumentoLido = numeroDocumento || '';
       statusEl.classList.remove('oculto');
       statusEl.innerHTML = '🔒 Valor lido do documento. <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', function (e) {
@@ -419,9 +474,12 @@ const TelaRecibos = (function () {
         valorInputEl.value = '';
         inputEl.value = '';
         inputEl._anexoValidado = null;
+        inputEl._numeroDocumentoLido = '';
         inputEl.dataset.removerExistente = existente ? '1' : '';
         statusEl.classList.add('oculto');
+        if (aoAtualizar) aoAtualizar();
       });
+      if (aoAtualizar) aoAtualizar();
     }
 
     inputEl.addEventListener('change', async function () {
@@ -441,7 +499,7 @@ const TelaRecibos = (function () {
         });
         inputEl._anexoValidado = { base64, nome: arquivo.name, tipo: arquivo.type };
         inputEl.dataset.removerExistente = '';
-        travar(resultado.valor, false);
+        travar(resultado.valor, false, resultado.numero_documento);
       } catch (err) {
         inputEl.value = '';
         inputEl._anexoValidado = null;
@@ -485,7 +543,9 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Status</label><select id="recStatus">${statusOpcoes}</select></div>
         </div>
         <div class="campo"><label>Observação</label><textarea id="recObservacao" rows="2"></textarea></div>
-        <div class="campo"><label><input type="checkbox" id="recTemParcelaDividida" /> Este pagamento é feito por mais de uma parcela?</label></div>
+        <div class="campo oculto" id="recBlocoTemParcelaDividida"><label><input type="checkbox" id="recTemParcelaDividida" /> Este pagamento é feito por mais de uma parcela?</label>
+          <p class="ajuda">Disponível pra Objeto "${UI.escaparHtml(OBJETO_CONTRATO_GESTAO_TES)}" - divide automaticamente em ${UI.escaparHtml(PARCELA_DIVIDIDA_TES_PERCENTUAIS.join('%/'))}%.</p>
+        </div>
 
         <div id="blocoParcelaUnica" class="grade-2">
           <div class="campo"><label>Valor Liquidado</label><input id="recValorLiquidado" type="number" step="0.01" /></div>
@@ -495,7 +555,6 @@ const TelaRecibos = (function () {
         </div>
         <div id="blocoComParcelaDividida" class="oculto">
           <div id="linhasParcelaDividida" class="linhas-parcela-dividida"></div>
-          <button type="button" class="botao" id="btnAddParcelaDividida">+ Adicionar parcela</button>
         </div>
         <div class="campo"><label><input type="checkbox" id="recCompleto" /> Cadastro completo (deixe desmarcado para rascunho incremental)</label></div>
         <p id="recErro" class="erro-campo oculto"></p>
@@ -516,6 +575,7 @@ const TelaRecibos = (function () {
       document.getElementById('recFonte').value = '';
       document.getElementById('recNotaEmpenho').value = '';
       document.getElementById('recObjeto').value = '';
+      atualizarVisibilidadeParcelaDivididaTes_('recBlocoTemParcelaDividida', 'recTemParcelaDividida', 'blocoParcelaUnica', 'blocoComParcelaDividida', 'linhasParcelaDividida', '');
       historicoRecibosUnidade = [];
       nesDaUnidadeAtual = [];
       objetosSofDaUnidadeNovo = [];
@@ -556,6 +616,7 @@ const TelaRecibos = (function () {
       }
       document.getElementById('recStatus').innerHTML = await opcoesStatus(document.getElementById('recStatus').value, document.getElementById('recFonte').value);
       UI.tornarPesquisavel('recStatus');
+      atualizarVisibilidadeParcelaDivididaTes_('recBlocoTemParcelaDividida', 'recTemParcelaDividida', 'blocoParcelaUnica', 'blocoComParcelaDividida', 'linhasParcelaDividida', this.value);
     });
 
     document.getElementById('recFonte').addEventListener('change', async function () {
@@ -568,11 +629,9 @@ const TelaRecibos = (function () {
       document.getElementById('blocoParcelaUnica').classList.toggle('oculto', this.checked);
       document.getElementById('blocoComParcelaDividida').classList.toggle('oculto', !this.checked);
       if (this.checked && !document.getElementById('linhasParcelaDividida').children.length) {
-        adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_);
-        adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_);
+        semearParcelasTes_('linhasParcelaDividida', obterNotaEmpenhoNovo_);
       }
     });
-    document.getElementById('btnAddParcelaDividida').addEventListener('click', () => adicionarLinhaParcelaDividida_('linhasParcelaDividida', obterNotaEmpenhoNovo_));
     document.getElementById('btnCancelarRec').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarRec').addEventListener('click', salvarReciboNovo);
 
@@ -596,36 +655,59 @@ const TelaRecibos = (function () {
    *
    * `dadosExistentes` (opcional) - quando presente, pré-preenche a linha:
    * `{ id, percentual_parcela_dividida, valor_liquidado, valor_pago,
-   * nota_liquidacao_url, ordem_bancaria_arquivo_url }`. Uma linha com `id`
+   * nota_liquidacao_url, nota_liquidacao_numero, ordem_bancaria_arquivo_url,
+   * ordem_bancaria_arquivo_drive_id, ordens_bancarias }`. Uma linha com `id`
    * (já salva na planilha) **não pode ser removida por aqui** - o backend
    * (atualizarParcelasDivididasRecibo) só cria/atualiza o que estiver
    * presente no envio; remover do formulário sem apagar de fato deixaria a
    * linha "esquecida" na planilha, órfã do que a tela mostra - por isso o
    * botão de remover só aparece em linhas novas (ainda não salvas).
+   *
+   * `opts.percentualFixo` (sessão 2026-08-06, Recibo dividido de Contrato de
+   * Gestão (TES) - ver semearParcelasTes_): quando informado, o campo
+   * Percentual nasce travado (somente leitura) com esse valor, a linha nunca
+   * mostra botão de remover (split fixo, não dá pra ficar com menos que
+   * PARCELA_DIVIDIDA_TES_PERCENTUAIS.length parcelas), e se for o MAIOR
+   * percentual do split (PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB), a linha
+   * troca o campo único "Ordem Bancária (anexo)" por uma tabela "Documentos
+   * anexados" (LE + N OBs) com botão "+ Adicionar OB" - ver
+   * renderTabelaOrdensBancariasParcela_. Valor Pago nessa linha vira
+   * somente leitura, somado automaticamente a partir da tabela.
    */
-  function adicionarLinhaParcelaDividida_(containerId, obterNotaEmpenho, dadosExistentes) {
+  function adicionarLinhaParcelaDividida_(containerId, obterNotaEmpenho, dadosExistentes, opts) {
     contadorLinhasParcelaDividida++;
     const id = contadorLinhasParcelaDividida;
     const jaSalva = !!(dadosExistentes && dadosExistentes.id);
+    const percentualFixo = opts && opts.percentualFixo;
+    const multiOB = percentualFixo === PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB;
     const div = document.createElement('div');
     div.className = 'linha-parcela-dividida';
     div.dataset.linhaParcelaDividida = id;
     if (jaSalva) div.dataset.idExistente = dadosExistentes.id;
+    if (multiOB) div.dataset.multiOb = '1';
+    const valorPercentual = percentualFixo || (dadosExistentes && dadosExistentes.percentual_parcela_dividida) || '';
     div.innerHTML = `
       <div class="linha-parcela-dividida-corpo">
         <div class="grade-3">
-          <div class="campo"><label>Percentual (%)</label><input type="number" step="0.01" class="pd-percentual" value="${dadosExistentes && dadosExistentes.percentual_parcela_dividida ? dadosExistentes.percentual_parcela_dividida : ''}" /></div>
+          <div class="campo"><label>Percentual (%)</label><input type="number" step="0.01" class="pd-percentual" value="${valorPercentual}" ${percentualFixo ? 'readonly' : ''} /></div>
           <div class="campo"><label>Valor Liquidado</label><input type="number" step="0.01" class="pd-liquidado" value="${dadosExistentes && dadosExistentes.valor_liquidado ? dadosExistentes.valor_liquidado : ''}" /></div>
-          <div class="campo"><label>Valor Pago</label><input type="number" step="0.01" class="pd-pago" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" /></div>
+          <div class="campo"><label>Valor Pago${multiOB ? ' (soma automática)' : ''}</label><input type="number" step="0.01" class="pd-pago" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" ${multiOB ? 'readonly' : ''} /></div>
         </div>
         <div class="grade-2">
           <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" class="pd-notaLiquidacaoArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
-          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" class="pd-ordemBancariaArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+          ${multiOB ? '' : `<div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" class="pd-ordemBancariaArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>`}
         </div>
+        ${multiOB ? `
+        <div class="campo pd-ob-bloco">
+          <label>Documentos anexados (LE + Ordens Bancárias)</label>
+          <div class="pd-ob-tabela-wrap"></div>
+          <input type="file" class="pd-ob-novo-anexo oculto" accept=".pdf,image/*" />
+          <button type="button" class="botao pd-add-ob">+ Adicionar OB</button>
+        </div>` : ''}
       </div>
-      ${jaSalva ? '' : '<button type="button" class="linha-parcela-dividida-remover" title="Remover parcela">&times;</button>'}`;
+      ${jaSalva || percentualFixo ? '' : '<button type="button" class="linha-parcela-dividida-remover" title="Remover parcela">&times;</button>'}`;
     document.getElementById(containerId).appendChild(div);
-    if (!jaSalva) {
+    if (!jaSalva && !percentualFixo) {
       div.querySelector('.linha-parcela-dividida-remover').addEventListener('click', () => {
         div.remove();
         atualizarBotoesRemoverParcelaDividida_(containerId);
@@ -635,22 +717,136 @@ const TelaRecibos = (function () {
 
     const anexoNl = ligarAnexoComOcr_({
       inputEl: div.querySelector('.pd-notaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
-      obterNotaEmpenho, valorInputEl: div.querySelector('.pd-liquidado')
+      obterNotaEmpenho, valorInputEl: div.querySelector('.pd-liquidado'),
+      aoAtualizar: multiOB ? () => renderTabelaOrdensBancariasParcela_(div) : undefined
     });
-    if (dadosExistentes && dadosExistentes.nota_liquidacao_url) anexoNl.travar(dadosExistentes.valor_liquidado, true);
-    const anexoOb = ligarAnexoComOcr_({
-      inputEl: div.querySelector('.pd-ordemBancariaArquivo'), tipo: 'ordem_bancaria',
-      obterNotaEmpenho, valorInputEl: div.querySelector('.pd-pago')
+    if (dadosExistentes && dadosExistentes.nota_liquidacao_url) anexoNl.travar(dadosExistentes.valor_liquidado, true, dadosExistentes.nota_liquidacao_numero);
+
+    if (multiOB) {
+      div._notaLiquidacaoUrl = (dadosExistentes && dadosExistentes.nota_liquidacao_url) || '';
+      div._ordensBancarias = ((dadosExistentes && dadosExistentes.ordens_bancarias) || []).map(it => ({
+        numero_ob: it.numero_ob || '', valor: Number(it.valor) || 0,
+        arquivo_drive_id: it.arquivo_drive_id || '', arquivo_url: it.arquivo_url || ''
+      }));
+      // Compatibilidade (sessão 2026-08-06): se esta linha vem de um Recibo
+      // avulso que já tinha UMA Ordem Bancária no formato antigo (campo
+      // único, antes desta funcionalidade existir) e ainda não foi migrada
+      // pra um item da tabela, mostra ela como item herdado, em vez de
+      // "sumir" da tela.
+      if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url && !div._ordensBancarias.length) {
+        div._ordensBancarias.push({
+          numero_ob: '', valor: Number(dadosExistentes.valor_pago) || 0,
+          arquivo_drive_id: dadosExistentes.ordem_bancaria_arquivo_drive_id || '', arquivo_url: dadosExistentes.ordem_bancaria_arquivo_url
+        });
+      }
+      div.querySelector('.pd-liquidado').addEventListener('input', () => renderTabelaOrdensBancariasParcela_(div));
+
+      const inputNovoOb = div.querySelector('.pd-ob-novo-anexo');
+      div.querySelector('.pd-add-ob').addEventListener('click', () => inputNovoOb.click());
+      inputNovoOb.addEventListener('change', async function () {
+        const arquivo = inputNovoOb.files[0];
+        if (!arquivo) return;
+        const notaEmpenho = (obterNotaEmpenho() || '').trim();
+        if (!notaEmpenho) { UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro'); inputNovoOb.value = ''; return; }
+        try {
+          if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
+          const base64 = await UI.lerArquivoBase64(arquivo);
+          const resultado = await Api.chamar('lerAnexoRecibo', {
+            tipo: 'ordem_bancaria', arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
+          });
+          div._ordensBancarias.push({
+            numero_ob: resultado.numero_documento || '', valor: resultado.valor,
+            _base64: base64, _nome: arquivo.name, _tipo: arquivo.type
+          });
+          renderTabelaOrdensBancariasParcela_(div);
+        } catch (err) {
+          UI.toast(err.message, 'erro');
+        } finally {
+          inputNovoOb.value = '';
+        }
+      });
+      renderTabelaOrdensBancariasParcela_(div);
+    } else {
+      const anexoOb = ligarAnexoComOcr_({
+        inputEl: div.querySelector('.pd-ordemBancariaArquivo'), tipo: 'ordem_bancaria',
+        obterNotaEmpenho, valorInputEl: div.querySelector('.pd-pago')
+      });
+      if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url) anexoOb.travar(dadosExistentes.valor_pago, true);
+    }
+  }
+
+  /**
+   * Tabela "Documentos anexados" (LE + Ordens Bancárias) da parcela de maior
+   * percentual (PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB) dentro de um
+   * Recibo dividido de Contrato de Gestão (TES) - sessão 2026-08-06, estilo
+   * reaproveitado de "Reforços lançados" (Notas de Empenho). A linha da LE é
+   * sempre 1 (número/valor lidos ao vivo do input/anexo da própria linha);
+   * as de OB vêm de `div._ordensBancarias` (mutado por quem chama). Também
+   * recalcula Valor Pago (soma automática) toda vez que roda.
+   */
+  function renderTabelaOrdensBancariasParcela_(div) {
+    const itens = div._ordensBancarias || [];
+    const numeroLe = div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || '';
+    const valorLe = Number(div.querySelector('.pd-liquidado').value) || 0;
+    const urlLe = div._notaLiquidacaoUrl || '';
+    const alvo = div.querySelector('.pd-ob-tabela-wrap');
+    alvo.innerHTML = `
+      <div class="tabela-reforcos-wrap">
+        <table class="tabela tabela-reforcos">
+          <thead><tr><th>Documento</th><th>Número</th><th>Valor</th><th>Arquivo</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td>LE</td>
+              <td>${numeroLe ? UI.escaparHtml(numeroLe) : '<span class="ajuda">-</span>'}</td>
+              <td>${UI.formatarMoeda(valorLe)}</td>
+              <td>${urlLe ? `<a href="${UI.escaparHtml(urlLe)}" target="_blank" rel="noopener">Ver</a>` : '<span class="ajuda">-</span>'}</td>
+              <td></td>
+            </tr>
+            ${itens.map((it, i) => `
+              <tr>
+                <td>OB</td>
+                <td>${it.numero_ob ? UI.escaparHtml(it.numero_ob) : '<span class="ajuda">-</span>'}</td>
+                <td>${UI.formatarMoeda(it.valor)}</td>
+                <td>${it.arquivo_url ? `<a href="${UI.escaparHtml(it.arquivo_url)}" target="_blank" rel="noopener">Ver</a>` : '<span class="ajuda">-</span>'}</td>
+                <td><button type="button" class="botao-icone excluir" data-indice-ob="${i}" title="Remover esta OB">${ICONE_LIXEIRA}</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${itens.length ? '' : '<p class="ajuda">Nenhuma Ordem Bancária anexada ainda.</p>'}`;
+    alvo.querySelectorAll('[data-indice-ob]').forEach(botao => {
+      botao.addEventListener('click', () => {
+        itens.splice(Number(botao.dataset.indiceOb), 1);
+        renderTabelaOrdensBancariasParcela_(div);
+      });
     });
-    if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url) anexoOb.travar(dadosExistentes.valor_pago, true);
+    atualizarValorPagoComputado_(div);
+  }
+
+  /** Valor Pago da parcela multi-OB = soma automática da tabela (decisão do usuário, sessão 2026-08-06) - somente leitura, recalculado a cada mudança na tabela. */
+  function atualizarValorPagoComputado_(div) {
+    const soma = (div._ordensBancarias || []).reduce((s, it) => s + (Number(it.valor) || 0), 0);
+    div.querySelector('.pd-pago').value = soma ? soma.toFixed(2) : '';
+  }
+
+  /** Payload de ordens_bancarias pra criarGrupoParcelaDivididaRecibo/atualizarParcelasDivididasRecibo a partir do estado local da linha (ver div._ordensBancarias). */
+  function montarPayloadOrdensBancarias_(div) {
+    return (div._ordensBancarias || []).map(it => ({
+      numero_ob: it.numero_ob || '',
+      valor: it.valor,
+      arquivo_drive_id: it.arquivo_drive_id || '',
+      arquivo_url: it.arquivo_url || '',
+      arquivoBase64: it._base64, arquivoNome: it._nome, arquivoTipo: it._tipo
+    }));
   }
 
   /**
    * criarGrupoParcelaDivididaRecibo/atualizarParcelasDivididasRecibo exigem
    * no mínimo 2 parcelas - esconde o botão de remover quando restam só 2.
-   * Só considera linhas que TÊM botão de remover (linhas novas) - linhas já
-   * salvas (ver adicionarLinhaParcelaDividida_) nunca têm botão, então não
-   * contam pra essa trava.
+   * Só considera linhas que TÊM botão de remover (linhas novas, sem
+   * percentual fixo) - linhas já salvas ou de split fixo (TES, ver
+   * adicionarLinhaParcelaDividida_) nunca têm botão, então não contam pra
+   * essa trava.
    */
   function atualizarBotoesRemoverParcelaDividida_(containerId) {
     const linhas = document.querySelectorAll('#' + containerId + ' [data-linha-parcela-dividida]');
@@ -692,18 +888,24 @@ const TelaRecibos = (function () {
           const parcela = {
             percentual_parcela_dividida: div.querySelector('.pd-percentual').value,
             valor_liquidado: div.querySelector('.pd-liquidado').value,
-            valor_pago: div.querySelector('.pd-pago').value
+            valor_pago: div.querySelector('.pd-pago').value,
+            nota_liquidacao_numero: div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || ''
           };
           const nl = await lerAnexoDoInput_(div.querySelector('.pd-notaLiquidacaoArquivo'));
           if (nl) Object.assign(parcela, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-          const ob = await lerAnexoDoInput_(div.querySelector('.pd-ordemBancariaArquivo'));
-          if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+          if (div.dataset.multiOb === '1') {
+            parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
+          } else {
+            const ob = await lerAnexoDoInput_(div.querySelector('.pd-ordemBancariaArquivo'));
+            if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+          }
           return parcela;
         }));
         await Api.chamar('criarGrupoParcelaDivididaRecibo', { dadosBase, parcelas });
       } else {
         dadosBase.valor_liquidado = document.getElementById('recValorLiquidado').value;
         dadosBase.valor_pago = document.getElementById('recValorPago').value;
+        dadosBase.nota_liquidacao_numero = document.getElementById('recNotaLiquidacaoArquivo')._numeroDocumentoLido || '';
         const nl = await lerAnexoDoInput_(document.getElementById('recNotaLiquidacaoArquivo'));
         if (nl) Object.assign(dadosBase, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
         const ob = await lerAnexoDoInput_(document.getElementById('recOrdemBancariaArquivo'));
@@ -757,7 +959,9 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Nº Processo</label><input id="recEdNumeroProcesso" value="${UI.escaparHtml(recibo.numero_processo)}" /></div>
           <div class="campo"><label>Status</label><select id="recEdStatus">${statusOpcoes}</select></div>
         </div>
-        <div class="campo"><label><input type="checkbox" id="recEdTemParcelaDividida" ${grupoId ? 'checked disabled' : ''} /> Este pagamento é feito por mais de uma parcela?</label></div>
+        <div class="campo ${(grupoId || ehObjetoContratoGestaoTes_(recibo.objeto)) ? '' : 'oculto'}" id="recEdBlocoTemParcelaDividida"><label><input type="checkbox" id="recEdTemParcelaDividida" ${grupoId ? 'checked disabled' : ''} /> Este pagamento é feito por mais de uma parcela?</label>
+          ${grupoId ? '' : `<p class="ajuda">Disponível pra Objeto "${UI.escaparHtml(OBJETO_CONTRATO_GESTAO_TES)}" - divide automaticamente em ${UI.escaparHtml(PARCELA_DIVIDIDA_TES_PERCENTUAIS.join('%/'))}%.</p>`}
+        </div>
 
         <div id="blocoParcelaUnicaEd" class="grade-2 ${grupoId ? 'oculto' : ''}">
           <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
@@ -767,7 +971,7 @@ const TelaRecibos = (function () {
         </div>
         <div id="blocoComParcelaDivididaEd" class="${grupoId ? '' : 'oculto'}">
           <div id="linhasParcelaDivididaEd" class="linhas-parcela-dividida"></div>
-          <button type="button" class="botao" id="btnAddParcelaDivididaEd">+ Adicionar parcela</button>
+          <button type="button" class="botao ${ehObjetoContratoGestaoTes_(recibo.objeto) ? 'oculto' : ''}" id="btnAddParcelaDivididaEd">+ Adicionar parcela</button>
         </div>
 
         <div class="campo"><label>Observação</label><textarea id="recEdObservacao" rows="2">${UI.escaparHtml(recibo.observacao)}</textarea></div>
@@ -786,13 +990,20 @@ const TelaRecibos = (function () {
       document.getElementById('recEdStatus').innerHTML = await opcoesStatus(document.getElementById('recEdStatus').value, this.value);
       UI.tornarPesquisavel('recEdStatus');
     });
+    // Objeto pode mudar de/para "Contrato de Gestão (TES)" durante a edição -
+    // só reage se ainda não faz parte de um grupo (ver
+    // atualizarVisibilidadeParcelaDivididaTes_; grupo já existente sempre
+    // mostra a tabela, não dá pra "desfazer" mudando o Objeto).
+    document.getElementById('recEdObjeto').addEventListener('change', function () {
+      if (!grupoId) atualizarVisibilidadeParcelaDivididaTes_('recEdBlocoTemParcelaDividida', 'recEdTemParcelaDividida', 'blocoParcelaUnicaEd', 'blocoComParcelaDivididaEd', 'linhasParcelaDivididaEd', this.value);
+    });
 
     const obterNotaEmpenhoEd_ = () => document.getElementById('recEdNotaEmpenho').value;
     const anexoNl = ligarAnexoComOcr_({
       inputEl: document.getElementById('recEdNotaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
       obterNotaEmpenho: obterNotaEmpenhoEd_, valorInputEl: document.getElementById('recEdValorLiquidado')
     });
-    if (recibo.nota_liquidacao_url) anexoNl.travar(recibo.valor_liquidado, true);
+    if (recibo.nota_liquidacao_url) anexoNl.travar(recibo.valor_liquidado, true, recibo.nota_liquidacao_numero);
     const anexoOb = ligarAnexoComOcr_({
       inputEl: document.getElementById('recEdOrdemBancariaArquivo'), tipo: 'ordem_bancaria',
       obterNotaEmpenho: obterNotaEmpenhoEd_, valorInputEl: document.getElementById('recEdValorPago')
@@ -803,24 +1014,34 @@ const TelaRecibos = (function () {
     // este Recibo já faz parte de um grupo, a tabela já nasce populada com
     // TODAS as parcelas do grupo (checkbox travado marcado - já é um grupo,
     // não dá pra "desfazer" por aqui, só adicionar mais parcelas); senão,
-    // nasce vazia e some até o analista marcar o checkbox.
+    // nasce vazia e some até o analista marcar o checkbox. Se o grupo é de
+    // Contrato de Gestão (TES) - sessão 2026-08-06 -, cada parcela nasce com
+    // o percentual travado (opts.percentualFixo) e a de maior percentual
+    // (PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB) com a tabela de OBs.
     if (grupoId) {
-      siblingsGrupo.forEach(s => adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, s));
+      const grupoEhTes = ehObjetoContratoGestaoTes_(recibo.objeto);
+      siblingsGrupo.forEach(s => adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, s,
+        grupoEhTes ? { percentualFixo: Number(s.percentual_parcela_dividida) } : undefined));
     }
     document.getElementById('recEdTemParcelaDividida').addEventListener('change', function () {
       document.getElementById('blocoParcelaUnicaEd').classList.toggle('oculto', this.checked);
       document.getElementById('blocoComParcelaDivididaEd').classList.toggle('oculto', !this.checked);
       if (this.checked && !document.getElementById('linhasParcelaDivididaEd').children.length) {
-        // Primeira vez convertendo pra parcela dividida - a própria linha do
-        // Recibo em edição vira a 1ª parcela (com o que ela já tinha), + 1
-        // linha nova em branco pra completar o mínimo de 2 (ver
-        // atualizarParcelasDivididasRecibo, backend/Recibos.gs).
-        adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, {
-          id: recibo.id, percentual_parcela_dividida: recibo.percentual_parcela_dividida,
-          valor_liquidado: recibo.valor_liquidado, valor_pago: recibo.valor_pago,
-          nota_liquidacao_url: recibo.nota_liquidacao_url, ordem_bancaria_arquivo_url: recibo.ordem_bancaria_arquivo_url
+        // Primeira vez convertendo pra parcela dividida - vira Recibo
+        // dividido de Contrato de Gestão (TES) (única forma de chegar aqui,
+        // ver atualizarVisibilidadeParcelaDivididaTes_): a própria linha do
+        // Recibo em edição vira a parcela de maior percentual (com o que ela
+        // já tinha, inclusive uma eventual OB única legada migrada pra
+        // tabela - ver adicionarLinhaParcelaDividida_), e a(s) outra(s)
+        // nascem em branco.
+        semearParcelasTes_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_, {
+          [PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB]: {
+            id: recibo.id, percentual_parcela_dividida: PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB,
+            valor_liquidado: recibo.valor_liquidado, valor_pago: recibo.valor_pago,
+            nota_liquidacao_url: recibo.nota_liquidacao_url, nota_liquidacao_numero: recibo.nota_liquidacao_numero,
+            ordem_bancaria_arquivo_url: recibo.ordem_bancaria_arquivo_url, ordem_bancaria_arquivo_drive_id: recibo.ordem_bancaria_arquivo_drive_id
+          }
         });
-        adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_);
       }
     });
     document.getElementById('btnAddParcelaDivididaEd').addEventListener('click', () => adicionarLinhaParcelaDividida_('linhasParcelaDivididaEd', obterNotaEmpenhoEd_));
@@ -861,17 +1082,22 @@ const TelaRecibos = (function () {
           const parcela = {
             percentual_parcela_dividida: div.querySelector('.pd-percentual').value,
             valor_liquidado: div.querySelector('.pd-liquidado').value,
-            valor_pago: div.querySelector('.pd-pago').value
+            valor_pago: div.querySelector('.pd-pago').value,
+            nota_liquidacao_numero: div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || ''
           };
           if (div.dataset.idExistente) parcela.id = div.dataset.idExistente;
           const inputNl = div.querySelector('.pd-notaLiquidacaoArquivo');
-          const inputOb = div.querySelector('.pd-ordemBancariaArquivo');
           if (inputNl.dataset.removerExistente === '1') parcela.removerNotaLiquidacaoArquivo = true;
-          if (inputOb.dataset.removerExistente === '1') parcela.removerOrdemBancariaArquivo = true;
           const nl = await lerAnexoDoInput_(inputNl);
           if (nl) Object.assign(parcela, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-          const ob = await lerAnexoDoInput_(inputOb);
-          if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+          if (div.dataset.multiOb === '1') {
+            parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
+          } else {
+            const inputOb = div.querySelector('.pd-ordemBancariaArquivo');
+            if (inputOb.dataset.removerExistente === '1') parcela.removerOrdemBancariaArquivo = true;
+            const ob = await lerAnexoDoInput_(inputOb);
+            if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
+          }
           return parcela;
         }));
         await Api.chamar('atualizarParcelasDivididasRecibo', { id: recibo.id, dadosBase: dados, parcelas });
@@ -880,6 +1106,7 @@ const TelaRecibos = (function () {
         const inputOb = document.getElementById('recEdOrdemBancariaArquivo');
         dados.valor_liquidado = document.getElementById('recEdValorLiquidado').value;
         dados.valor_pago = document.getElementById('recEdValorPago').value;
+        dados.nota_liquidacao_numero = inputNl._numeroDocumentoLido || '';
         if (inputNl.dataset.removerExistente === '1') dados.removerNotaLiquidacaoArquivo = true;
         if (inputOb.dataset.removerExistente === '1') dados.removerOrdemBancariaArquivo = true;
 

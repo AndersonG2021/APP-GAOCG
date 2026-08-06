@@ -197,6 +197,9 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
   background: var(--vermelho-claro); color: var(--vermelho); font-size: 16px; line-height: 1; cursor: pointer; flex-shrink: 0;
 }
 .linha-parcela-dividida-remover:hover { filter: brightness(0.97); }
+/* Tabela "Documentos anexados" (LE + Ordens Bancárias) da parcela de maior percentual de um Recibo dividido de Contrato de Gestão (TES) - sessão 2026-08-06, reaproveita .tabela-reforcos (Notas de Empenho). */
+.pd-ob-bloco { margin-top: 10px; }
+.pd-ob-bloco .pd-ob-tabela-wrap { margin-bottom: 8px; }
 
 .painel {
   background: var(--branco);

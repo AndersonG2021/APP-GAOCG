@@ -27,6 +27,19 @@ var REGEX_VALOR_LIQUIDADO_DOCUMENTO = /VALOR\s+LIQUIDADO\s*:?\s*([\d.,]+)/i;
 var REGEX_VALOR_ORDEM_BANCARIA_DOCUMENTO = /VALOR\s+DA\s+ORDEM\s+BANC[ÁA]RIA\s*:?\s*([\d.,]+)/i;
 
 /**
+ * Número do próprio documento (não da NE citada dentro dele) - sessão
+ * 2026-08-06, pedido do usuário: a parcela de 70% de um Recibo dividido de
+ * Contrato de Gestão (TES) pode ter mais de uma Ordem Bancária, mostradas
+ * numa tabela "Documentos anexados" (LE + cada OB) com número e valor de
+ * cada uma. Mesmo raciocínio de REGEX_NUMERO_NE_DOCUMENTO (formato do
+ * número, não o rótulo que o precede) - confirmado contra documentos reais:
+ * Nota de Liquidação 2026LE000755 ("NÚMERO:"/"LIQUIDAÇÃO:") e Ordem
+ * Bancária 2026OB010537 ("NÚMERO:").
+ */
+var REGEX_NUMERO_LE_DOCUMENTO = /\b(\d{4}LE\d{6})\b/i;
+var REGEX_NUMERO_OB_DOCUMENTO = /\b(\d{4}OB\d{6})\b/i;
+
+/**
  * Lê a aba Recibos inteira, com cache de 30s (sessão 2026-07-30, mesmo padrão
  * de todasNotasEmpenhoComCache_ em NotasEmpenho.gs / todasFontesComCache_ em
  * Sof.gs) - achado real ao investigar lentidão de 10-15s ao selecionar a
@@ -91,7 +104,15 @@ function lerAnexoRecibo(session, params) {
   var valor = normalizarValorMonetarioBr_(matchValor[1]);
   if (valor === null) return fail_('Valor identificado no documento é inválido.');
 
-  return ok_({ valor: valor, numero_ne: neDocumento });
+  // Número do próprio documento (2026LE.../2026OB...) - best-effort: ao
+  // contrário da NE/do valor acima, não bloqueia o anexo se não achar (só
+  // deixa de mostrar o número na tabela "Documentos anexados" da parcela de
+  // 70% - ver ligarAnexoComOcr_/adicionarLinhaParcelaDividida_ em js/recibos.js).
+  var regexNumeroDocumento = tipo === 'ordem_bancaria' ? REGEX_NUMERO_OB_DOCUMENTO : REGEX_NUMERO_LE_DOCUMENTO;
+  var matchNumeroDocumento = texto.match(regexNumeroDocumento);
+  var numeroDocumento = matchNumeroDocumento ? matchNumeroDocumento[1].toUpperCase() : '';
+
+  return ok_({ valor: valor, numero_ne: neDocumento, numero_documento: numeroDocumento });
 }
 
 function diasSemAlteracaoRecibo_(dataIso) {
@@ -145,6 +166,66 @@ function anexarArquivoRecibo_(folderId, base64, nome, tipo) {
   return { driveId: arquivo.getId(), url: arquivo.getUrl() };
 }
 
+/** Cria a aba RecibosOrdensBancarias sob demanda, se ainda não existir - mesmo padrão de getSheetModelosRelatorio_ (Relatorios.gs), evita passo manual de criar aba. */
+function getSheetOrdensBancariasRecibo_() {
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEETS.RECIBOS_ORDENS_BANCARIAS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEETS.RECIBOS_ORDENS_BANCARIAS);
+    sheet.getRange(1, 1, 1, HEADERS.RecibosOrdensBancarias.length).setValues([HEADERS.RecibosOrdensBancarias]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Soma dos itens de ordens_bancarias de uma parcela - usada tanto pra
+ * recalcular valor_pago (soma automática, decisão do usuário) quanto por
+ * quem só precisa do total sem mexer na planilha.
+ */
+function somaOrdensBancarias_(itens) {
+  return (itens || []).reduce(function (soma, item) { return soma + toNumber_(item.valor); }, 0);
+}
+
+/**
+ * Substitui (apaga e recria) as Ordens Bancárias de UMA parcela de Recibo -
+ * mesmo padrão "apagar-e-recriar" de substituirFontesDoSof_ (Sof.gs). Cada
+ * item pode trazer um arquivo novo (arquivoBase64/arquivoNome/arquivoTipo -
+ * sobe pro Drive agora) ou já ter vindo de uma OB salva anteriormente e não
+ * mexida nesta edição (arquivo_drive_id/arquivo_url já prontos - só recria a
+ * linha do banco, sem reenviar o arquivo). numero_ob vem do OCR
+ * (REGEX_NUMERO_OB_DOCUMENTO em lerAnexoRecibo), best-effort - pode vir vazio.
+ */
+function substituirOrdensBancariasParcela_(reciboId, itens, criadoPor) {
+  var sheet = getSheetOrdensBancariasRecibo_();
+  var todas = sheetToObjects_(sheet);
+  var linhasExistentes = todas.filter(function (r) { return String(r.recibo_id) === String(reciboId); });
+  deleteRowsEmLote_(sheet, linhasExistentes.map(function (r) { return r._row; }));
+
+  if (!itens || !itens.length) return;
+  var ids = proximosIds_('RecibosOrdensBancarias', itens.length);
+  var novasLinhas = itens.map(function (item, indice) {
+    var arquivoDriveId = item.arquivo_drive_id || '';
+    var arquivoUrl = item.arquivo_url || '';
+    if (item.arquivoBase64 && item.arquivoNome) {
+      var ob = anexarArquivoRecibo_(PASTA_ORDEM_BANCARIA_ID, item.arquivoBase64, item.arquivoNome, item.arquivoTipo);
+      arquivoDriveId = ob.driveId;
+      arquivoUrl = ob.url;
+    }
+    return {
+      id: ids[indice],
+      recibo_id: reciboId,
+      numero_ob: sanitizeString_(item.numero_ob, 50),
+      valor: toNumber_(item.valor),
+      arquivo_drive_id: arquivoDriveId,
+      arquivo_url: arquivoUrl,
+      criado_por: criadoPor,
+      data_criacao: nowIso_()
+    };
+  });
+  appendObjectRows_(sheet, novasLinhas);
+}
+
 function montarLinhaRecibo_(session, dados, unidade) {
   return {
     unidade_id: dados.unidade_id,
@@ -159,6 +240,12 @@ function montarLinhaRecibo_(session, dados, unidade) {
     competencia: sanitizeString_(dados.competencia, 20),
     valor_liquidado: toNumber_(dados.valor_liquidado),
     valor_pago: toNumber_(dados.valor_pago),
+    // Número do próprio documento de Nota de Liquidação (ex. "2026LE000755"),
+    // extraído por OCR (ver lerAnexoRecibo) - mostrado na tabela "Documentos
+    // anexados" da parcela de 70% de um Recibo dividido de Contrato de
+    // Gestão (TES), mas gravado pra qualquer Recibo com NL lida, sem
+    // depender do Objeto (sessão 2026-08-06).
+    nota_liquidacao_numero: sanitizeString_(dados.nota_liquidacao_numero, 50),
     ordem_bancaria: sanitizeString_(dados.ordem_bancaria, 50),
     numero_processo: sanitizeString_(dados.numero_processo, 50),
     observacao: sanitizeString_(dados.observacao, 2000),
@@ -227,6 +314,11 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
 
   parcelas.forEach(function (parcela) {
     var combinado = Object.assign({}, dadosBase, parcela, { parcela_dividida_grupo_id: parcelaDivididaGrupoId });
+    // Múltiplas Ordens Bancárias numa parcela só (sessão 2026-08-06, parcela
+    // de 70% de Contrato de Gestão (TES)): valor_pago vira a soma automática
+    // dos itens - calculado ANTES de montarLinhaRecibo_ pra já nascer certo
+    // na própria linha (evita um 2º updateObjectRow_ logo em seguida).
+    if (parcela.ordens_bancarias) combinado.valor_pago = somaOrdensBancarias_(parcela.ordens_bancarias);
     var linha = montarLinhaRecibo_(session, combinado, unidade);
     var id = proximoId_('Recibos');
     var novo = Object.assign({ id: id }, linha, {
@@ -252,6 +344,10 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
     }
 
     appendObjectRow_(sheet, novo);
+    if (parcela.ordens_bancarias) {
+      substituirOrdensBancariasParcela_(id, parcela.ordens_bancarias, session.id);
+      novo.ordens_bancarias = parcela.ordens_bancarias;
+    }
     registrarLog_(session, 'Recibo', id, novo.criado_por, 'CRIACAO', '', 'Parcela criada (grupo ' + parcelaDivididaGrupoId + ')');
     criados.push(novo);
   });
@@ -262,13 +358,25 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   return ok_(criados);
 }
 
-/** Todas as linhas (não excluídas) de um mesmo grupo de parcela dividida - usado pela edição de Recibo pra mostrar/editar as parcelas já lançadas (ver atualizarParcelasDivididasRecibo, logo abaixo). */
+/**
+ * Todas as linhas (não excluídas) de um mesmo grupo de parcela dividida -
+ * usado pela edição de Recibo pra mostrar/editar as parcelas já lançadas
+ * (ver atualizarParcelasDivididasRecibo, logo abaixo). Cada linha ganha
+ * `ordens_bancarias` (sessão 2026-08-06) com as Ordens Bancárias já salvas
+ * daquela parcela - reidrata a tabela "Documentos anexados" ao reabrir um
+ * Recibo dividido de Contrato de Gestão (TES) pra editar.
+ */
 function listarRecibosPorGrupo(session, grupoId) {
   if (!grupoId) return ok_([]);
   var linhas = todasRecibosComCache_().filter(function (r) {
     return !toBool_(r.excluido) && String(r.parcela_dividida_grupo_id || '') === String(grupoId);
   });
   linhas.sort(function (a, b) { return String(a.id) < String(b.id) ? -1 : 1; });
+
+  var todasOrdensBancarias = sheetToObjects_(getSheetOrdensBancariasRecibo_());
+  linhas.forEach(function (linha) {
+    linha.ordens_bancarias = todasOrdensBancarias.filter(function (o) { return String(o.recibo_id) === String(linha.id); });
+  });
   return ok_(linhas);
 }
 
@@ -319,6 +427,7 @@ function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
       if (!pertenceAoGrupo && !ehLinhaBase) return;
 
       var combinado = Object.assign({ unidade_id: existente.unidade_id }, linha, dadosBase, parcela, { parcela_dividida_grupo_id: grupoId });
+      if (parcela.ordens_bancarias) combinado.valor_pago = somaOrdensBancarias_(parcela.ordens_bancarias);
       var camposCalculados = montarLinhaRecibo_(session, combinado, unidade);
       var atualizado = Object.assign({}, linha, camposCalculados, {
         divergente_da_unidade: !!unidade && (String(camposCalculados.oss_snapshot) !== String(unidade.oss || '') || String(camposCalculados.cnpj_snapshot) !== String(unidade.cnpj || ''))
@@ -343,10 +452,15 @@ function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
       var rowIndex = linha._row;
       delete atualizado._row;
       updateObjectRow_(sheet, rowIndex, atualizado);
-      registrarDiferencas_(session, 'Recibo', linha.id, linha.criado_por, linha, atualizado, ['_row']);
+      if (parcela.ordens_bancarias) {
+        substituirOrdensBancariasParcela_(linha.id, parcela.ordens_bancarias, session.id);
+        atualizado.ordens_bancarias = parcela.ordens_bancarias;
+      }
+      registrarDiferencas_(session, 'Recibo', linha.id, linha.criado_por, linha, atualizado, ['_row', 'ordens_bancarias']);
       resultado.push(atualizado);
     } else {
       var combinadoNovo = Object.assign({ unidade_id: existente.unidade_id }, existente, dadosBase, parcela, { parcela_dividida_grupo_id: grupoId });
+      if (parcela.ordens_bancarias) combinadoNovo.valor_pago = somaOrdensBancarias_(parcela.ordens_bancarias);
       var camposNovo = montarLinhaRecibo_(session, combinadoNovo, unidade);
       var novoId = proximoId_('Recibos');
       var novo = Object.assign({ id: novoId }, camposNovo, {
@@ -372,6 +486,10 @@ function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
       }
 
       appendObjectRow_(sheet, novo);
+      if (parcela.ordens_bancarias) {
+        substituirOrdensBancariasParcela_(novoId, parcela.ordens_bancarias, session.id);
+        novo.ordens_bancarias = parcela.ordens_bancarias;
+      }
       registrarLog_(session, 'Recibo', novoId, novo.criado_por, 'CRIACAO', '', 'Parcela adicionada (grupo ' + grupoId + ')');
       resultado.push(novo);
     }
@@ -394,7 +512,7 @@ function atualizarRecibo(session, id, dados) {
   var atualizado = Object.assign({}, existente);
 
   var camposTexto = ['tipo_unidade', 'objeto', 'instrumento', 'fonte', 'nota_empenho', 'competencia',
-    'ordem_bancaria', 'numero_processo', 'observacao', 'status', 'oss_snapshot', 'cnpj_snapshot'];
+    'ordem_bancaria', 'numero_processo', 'observacao', 'status', 'oss_snapshot', 'cnpj_snapshot', 'nota_liquidacao_numero'];
   camposTexto.forEach(function (campo) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = sanitizeString_(dados[campo], 2000);
   });
