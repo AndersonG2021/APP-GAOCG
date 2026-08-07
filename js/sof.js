@@ -1206,6 +1206,81 @@ const TelaSof = (function () {
     objetoEl.disabled = true;
   }
 
+  /**
+   * Agrupa as linhas tipo='reforco' de UMA Nota de Empenho (mesmo
+   * numero_ne) por numero_ne_reforco - um documento de reforço que cobre
+   * vários meses vira 1 item só (mesma lógica de agruparReforcosPorNumero_
+   * em backend/NotasEmpenho.gs, duplicada aqui por serem módulos/DOMs
+   * separados - ver conferirNeReferencia_/mostrarDiagnosticoOcr_ acima pro
+   * mesmo padrão já usado neste arquivo). Linhas sem numero_ne_reforco
+   * (reforço lançado manualmente, sem o OCR reconhecer o documento) não são
+   * agrupadas entre si - cada uma vira seu próprio item, chaveada pelo id.
+   */
+  function agruparReforcosPorNumeroSof_(linhasReforco) {
+    const porChave = {};
+    const ordem = [];
+    linhasReforco.forEach(l => {
+      const chave = l.numero_ne_reforco ? ('n:' + l.numero_ne_reforco) : ('id:' + l.id);
+      if (!porChave[chave]) {
+        porChave[chave] = { numero_ne_reforco: l.numero_ne_reforco || '', ids: [], meses: [], valor_total: 0, arquivo_url: '' };
+        ordem.push(chave);
+      }
+      const grupo = porChave[chave];
+      grupo.ids.push(l.id);
+      grupo.valor_total += Number(l.valor) || 0;
+      if (!grupo.arquivo_url && l.arquivo_url) grupo.arquivo_url = l.arquivo_url;
+      if (l.mes_referencia) grupo.meses.push(Number(l.mes_referencia));
+    });
+    return ordem.map(chave => {
+      const grupo = porChave[chave];
+      grupo.meses.sort((a, b) => a - b);
+      return grupo;
+    });
+  }
+
+  /**
+   * Monta as linhas da tabela "Notas de Empenho" embutida na edição de SOF
+   * (sessão 2026-08-07, pedido do usuário: um documento de reforço que cobre
+   * vários meses estava aparecendo "como se fosse mais de um documento" -
+   * mesmo bug já corrigido no card da tela de Notas de Empenho em
+   * 2026-07-30, ver PROGRESS.md "Tabela Reforços Lançados agrupada por
+   * documento" - só não tinha sido replicado aqui ainda). Originais (e
+   * reforços manuais sem numero_ne_reforco) continuam 1 linha por linha da
+   * planilha; reforços de um mesmo documento (mesmo numero_ne_reforco)
+   * viram 1 linha só, com os meses cobertos e o valor total, 1 único link
+   * "Ver arquivo" e 1 único botão de excluir (exclui todos os meses juntos).
+   */
+  function linhasNotasEmpenhoHtml_(notas) {
+    if (!notas.length) return '<tr><td colspan="8" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>';
+    const naoReforco = notas.filter(n => n.tipo !== 'reforco');
+    const porNumeroNe = {};
+    notas.filter(n => n.tipo === 'reforco').forEach(n => {
+      (porNumeroNe[n.numero_ne] = porNumeroNe[n.numero_ne] || []).push(n);
+    });
+
+    const linhasOriginais = naoReforco.map(n => `
+      <tr data-id="${n.id}">
+        <td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td>
+        <td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td>
+        <td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td>
+        <td><button type="button" class="botao-icone excluir" data-acao="excluir-ne" data-id="${n.id}" title="Excluir">${ICONE_LIXEIRA}</button></td>
+      </tr>`);
+
+    const linhasReforco = Object.keys(porNumeroNe).flatMap(numeroNe => {
+      const primeira = porNumeroNe[numeroNe][0];
+      return agruparReforcosPorNumeroSof_(porNumeroNe[numeroNe]).map(g => `
+        <tr data-ids="${g.ids.join(',')}">
+          <td>reforco</td><td>${UI.escaparHtml(numeroNe || '-')}</td><td>${UI.escaparHtml(primeira.fonte || '-')}</td>
+          <td>${UI.escaparHtml(primeira.objeto || '-')}</td><td>${UI.formatarMoeda(g.valor_total)}</td>
+          <td>${g.meses.length ? g.meses.map(m => NOMES_MESES_ABREV_FONTE_[m - 1]).join('/') : '-'}</td>
+          <td>${g.arquivo_url ? `<a href="${UI.escaparHtml(g.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td>
+          <td><button type="button" class="botao-icone excluir" data-acao="excluir-ne-lote" data-ids="${g.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
+        </tr>`);
+    });
+
+    return linhasOriginais.concat(linhasReforco).join('') || '<tr><td colspan="8" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>';
+  }
+
   async function renderNotasEmpenho(sof, notasPromise) {
     const notas = await (notasPromise || Api.chamar('listarNotasEmpenhoPorSof', { sofId: sof.id }));
     const total = notas.reduce((s, n) => s + Number(n.valor || 0), 0);
@@ -1218,7 +1293,7 @@ const TelaSof = (function () {
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
       <table class="tabela">
         <thead><tr><th>Tipo</th><th>Número</th><th>Fonte</th><th>Objeto</th><th>Valor Atendido</th><th>Período</th><th>Arquivo</th><th></th></tr></thead>
-        <tbody>${notas.map(n => `<tr data-id="${n.id}"><td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td><td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td><td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td><td><button type="button" class="botao-icone excluir" data-acao="excluir-ne" data-id="${n.id}" title="Excluir">${ICONE_LIXEIRA}</button></td></tr>`).join('') || '<tr><td colspan="8" class="estado-vazio">Nenhuma NE vinculada ainda.</td></tr>'}</tbody>
+        <tbody>${linhasNotasEmpenhoHtml_(notas)}</tbody>
       </table>
       <p class="ajuda">Preencha abaixo pra anexar uma nova Nota de Empenho a este SOF - ela só é salva quando você clicar em "Salvar" (rodapé desta tela). Deixe em branco se não quiser adicionar nenhuma agora. Em Reforço, anexe o documento primeiro - os meses reforçados e os valores são identificados automaticamente.</p>
       <div class="grade-3">
@@ -1285,6 +1360,28 @@ const TelaSof = (function () {
           CacheAbas.invalidar('sof');
           CacheAbas.invalidar('notasEmpenho');
           UI.toast('Nota de Empenho excluída.', 'sucesso');
+          await renderNotasEmpenho(sof, undefined);
+        } catch (err) {
+          UI.toast(err.message, 'erro');
+        }
+      });
+    });
+    // Reforço agrupado por documento (ver linhasNotasEmpenhoHtml_) - exclui
+    // todos os meses daquele documento de uma vez, mesmo endpoint em lote já
+    // usado pelo card da tela de Notas de Empenho (excluirReforcoClique_ em
+    // js/notas-empenho.js).
+    alvo.querySelectorAll('[data-acao="excluir-ne-lote"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ids = btn.dataset.ids.split(',');
+        const mensagem = ids.length > 1
+          ? `Excluir este reforço (todos os ${ids.length} meses deste documento)? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.`
+          : 'Excluir este reforço? A exclusão pode ser revertida apenas por um administrador diretamente na planilha.';
+        if (!confirm(mensagem)) return;
+        try {
+          await Api.chamar('excluirNotasEmpenhoEmLote', { ids });
+          CacheAbas.invalidar('sof');
+          CacheAbas.invalidar('notasEmpenho');
+          UI.toast('Reforço excluído.', 'sucesso');
           await renderNotasEmpenho(sof, undefined);
         } catch (err) {
           UI.toast(err.message, 'erro');

@@ -1604,6 +1604,51 @@ dividida (70%/30% TES) e conferir o card - cabeçalho certo, as 2 linhas
 certas, status editável em cada uma; um grupo cujas 2 parcelas caiam em
 páginas diferentes (casos de borda, provavelmente raro de reproduzir).
 
+## Reforço multi-mês agrupado também no mini-formulário de NE da edição de SOF (sessão 2026-08-07, só frontend)
+
+Pedido do usuário, a partir de um print da edição de SOF: um documento de
+reforço que cobre vários meses aparecia "como se fosse mais de um documento
+para cada mês" - mesmo bug já corrigido na tela de Notas de Empenho em
+2026-07-30 ("Tabela Reforços Lançados agrupada por documento", ver acima),
+mas que **nunca tinha sido replicado** aqui - registrado explicitamente como
+decisão consciente naquela sessão ("o pedido do usuário era especificamente
+sobre o card da tela de Notas de Empenho"). Agora replicado.
+
+**Sem alteração de backend** - `excluirNotasEmpenhoEmLote` já existia (usado
+pelo card de NE desde 2026-07-30); a lógica de agrupamento
+(`agruparReforcosPorNumero_`, `backend/NotasEmpenho.gs`) foi **duplicada em
+JS** (`agruparReforcosPorNumeroSof_`, `js/sof.js`) em vez de expor pelo
+backend, seguindo o padrão já estabelecido neste mesmo arquivo pra
+`conferirNeReferencia_`/`mostrarDiagnosticoOcr_` ("duplicada aqui por serem
+módulos/DOMs separados") - evita mudar o formato de retorno de
+`listarNotasEmpenhoPorSof` (usado também por `camposNumeroNeHtml`/
+`sincronizarFonteObjetoReforco_` como lista plana) e não precisa de passo
+manual de backend pra esse fix.
+
+- `js/sof.js`: `agruparReforcosPorNumeroSof_` (mesmo algoritmo do backend,
+  chaveado por `numero_ne_reforco`) + `linhasNotasEmpenhoHtml_` (nova) -
+  linhas não-reforço continuam 1 por 1; reforços são agrupados por
+  `numero_ne` e, dentro de cada um, por documento - 1 linha por documento,
+  com os meses cobertos (ex. "Out/Nov/Dez") e o valor **total**, 1 único
+  link "Ver arquivo" e 1 único botão de excluir (`data-acao="excluir-ne-
+  lote"`, `data-ids` com todos os ids do grupo) que chama
+  `excluirNotasEmpenhoEmLote` - mesmo endpoint/confirmação do card de NE.
+- Reforços sem `numero_ne_reforco` (lançados manualmente, sem o OCR
+  reconhecer o documento) não são agrupados entre si - cada um continua
+  aparecendo isolado, mesma regra de sempre.
+
+**Passo manual:** nenhum - só frontend (`js/sof.js`), atualiza sozinho no
+GitHub Pages depois do `git push`.
+
+**Ainda não testado:** reabrir um SOF com um reforço multi-mês já existente
+(como o do print) e conferir que vira 1 linha só, com os meses certos e o
+valor total certo; excluir esse reforço agrupado e conferir que os 3 meses
+somem juntos da planilha; anexar um reforço novo multi-mês direto por aqui
+(não pela tela de NE) e conferir que também agrupa; SOF com 2 Notas de
+Empenho originais (TESOURO + SUS) cada uma com seus próprios reforços,
+conferir que cada grupo mostra a Fonte/Objeto certos (não mistura entre as
+duas NEs).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
