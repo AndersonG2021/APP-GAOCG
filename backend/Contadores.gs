@@ -16,7 +16,14 @@ var PREFIXOS_ID = {
   SofFontesCronograma: 'SFC',
   UnidadesTA: 'UTA',
   NotasEmpenhoCronograma: 'NEC',
-  RelatoriosModelos: 'RPT'
+  RelatoriosModelos: 'RPT',
+  // Bug real corrigido (sessão 2026-08-07): a aba RecibosOrdensBancarias foi
+  // registrada em SHEETS/HEADERS (Utils.gs) mas esqueci de dar um prefixo
+  // aqui - toda tentativa de gravar uma Ordem Bancária na parcela de 70% de
+  // um Recibo dividido de Contrato de Gestão (TES) quebrava com "Prefixo de
+  // ID não definido para a aba RecibosOrdensBancarias" (ver
+  // substituirOrdensBancariasParcela_, Recibos.gs).
+  RecibosOrdensBancarias: 'ROB'
 };
 
 /**

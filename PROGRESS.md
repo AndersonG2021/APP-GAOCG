@@ -1649,6 +1649,44 @@ Empenho originais (TESOURO + SUS) cada uma com seus próprios reforços,
 conferir que cada grupo mostra a Fonte/Objeto certos (não mistura entre as
 duas NEs).
 
+## Bug real corrigido: prefixo de ID faltando pra RecibosOrdensBancarias (sessão 2026-08-07)
+
+Ao testar a criação de um Recibo dividido de Contrato de Gestão (TES) com
+uma Ordem Bancária anexada na parcela de 70%, o usuário recebeu "Erro
+interno no servidor: Prefixo de ID não definido para a aba
+'RecibosOrdensBancarias'." ao salvar. Investigação inicial (comigo) chutou
+que fosse `Utils.gs` desatualizado, mas o usuário confirmou que a aba e a
+coluna já existiam - a causa real era outra.
+
+**Causa raiz:** ao criar a aba `RecibosOrdensBancarias` (sessão 2026-08-06),
+ela foi registrada em `SHEETS`/`HEADERS` (`Utils.gs`), mas **esqueci de
+adicionar um prefixo pra ela em `PREFIXOS_ID`** (`Contadores.gs`) -
+`substituirOrdensBancariasParcela_` chama `proximosIds_('RecibosOrdensBanca
+rias', ...)` sempre que a parcela de 70% traz 1+ Ordens Bancárias, e essa
+função lança erro se o prefixo não existe (`proximosIds_`, Contadores.gs).
+Como o array vem vazio quando nenhuma OB é anexada, o erro só aparecia
+depois que o usuário efetivamente testou anexando uma OB - por isso não foi
+pego nos testes anteriores (sem anexo).
+
+**Efeito colateral:** como o erro acontece DEPOIS que a linha da parcela de
+70% já foi gravada (`appendObjectRow_`), mas ANTES do log/checkout final, a
+linha de 70% fica na planilha "órfã" (sem a de 30%, que nunca é processada -
+o loop já tinha quebrado). Isso reproduziu exatamente o sintoma relatado
+antes ("a parcela de 30% sumiu") - **duas causas empilhadas**: o teste
+anterior (sem OB anexada) provavelmente foi outro problema de deploy
+(Utils.gs desatualizado na época), e este (com OB anexada) é este bug real.
+
+**Correção:** `backend/Contadores.gs` - `RecibosOrdensBancarias: 'ROB'`
+adicionado a `PREFIXOS_ID`.
+
+**Passo manual pendente:** colar `Contadores.gs` atualizado no editor do
+Apps Script e reimplantar (Nova versão). Sem coluna/aba nova.
+
+**Limpeza necessária:** os grupos de teste já criados com a parcela de 70%
+órfã (sem a de 30%) continuam na planilha - precisam ser apagados
+manualmente (linha na aba Recibos) ou pela lixeira da tela antes de testar
+de novo, senão viram lixo permanente na listagem.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
