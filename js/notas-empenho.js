@@ -143,7 +143,7 @@ const TelaNotasEmpenho = (function () {
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     const resposta = await CacheAbas.comRevalidacao('notasEmpenho', params,
-      () => Api.chamar('listarNotasEmpenho', params),
+      (opcoes) => Api.chamar('listarNotasEmpenho', params, opcoes),
       aplicarResposta_
     );
     aplicarResposta_(resposta);

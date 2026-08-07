@@ -1687,6 +1687,105 @@ Apps Script e reimplantar (Nova versão). Sem coluna/aba nova.
 manualmente (linha na aba Recibos) ou pela lixeira da tela antes de testar
 de novo, senão viram lixo permanente na listagem.
 
+## Varredura de performance do projeto inteiro (sessão 2026-08-07)
+
+**Pedido:** "repasse por todo o projeto, buscando possíveis falhas ou locais
+que possam ser otimizados, com foco de deixar o app o mais rápido e fluido
+possível mas sem prejudicar as features". Depois: implementar tudo que fosse
+seguro.
+
+### Bug real encontrado (número errado na tela, não performance)
+
+`dashboardUnidades_` (`Dashboard.gs`) chamava `parcelaMensalTotal_` com a
+**assinatura antiga, de 2 parâmetros**. Quando `valor_contrato_gestao_sus`
+nasceu (sessão 2026-07-27), a função virou `(valorTesouro, valorSus, tas)` e
+este PROGRESS registrou a atualização "nos 3 pontos que chamam (criarUnidade,
+atualizarUnidade, listarUnidades)" — o Dashboard era o 4º ponto e passou
+batido. O array de T.A.s entrava na posição do SUS (`toNumber_` de array =
+NaN = 0) e `tas` chegava `undefined` (soma 0): o card "Total mensal
+comprometido" mostrava **só o Tesouro**, ignorando o C.G. SUS e todos os
+T.A.s. Corrigido.
+
+### Risco de quebra futura eliminado (o achado mais importante)
+
+O `CacheService` do Apps Script tem limite de **100KB por chave**, e os 8
+helpers `*ComCache_` serializavam a aba inteira numa chave só, sem nenhuma
+proteção. Acima do limite o `put` lança exceção, ela sobe até
+`handleRequest_` e o usuário vê "Erro interno no servidor" com a tela sem
+carregar. Estimativa: a aba Recibos (35 colunas) cruza esse limite por volta
+de **120-150 linhas**; a SOF (60+ colunas), bem antes. Era uma quebra marcada
+pra acontecer sozinha conforme a base cresce, sem nenhuma mudança de código.
+
+Novo `cachePut_` (`Utils.gs`): valor grande demais simplesmente não é
+cacheado (quem chamou continua recebendo o dado lido da planilha) e um
+`try/catch` cobre qualquer outra falha do serviço. Degrada pra "mais lento",
+nunca pra "quebrado". Todos os 8 helpers passaram a usar.
+
+### Performance — o que foi corrigido
+
+1. **`getSS_` reabria a planilha em toda chamada** (maior ganho do lote).
+   `getSheet_` fazia `PropertiesService.getProperty` + `SpreadsheetApp.openById`
+   a cada uso, e há ~100 pontos de `getSheet_`/`sheetToObjects_` no backend —
+   uma escrita típica abria a MESMA planilha 10-15 vezes na mesma requisição.
+   `openById` é chamada de API de verdade. Agora há memo por execução
+   (`_ssMemo_`/`_sheetsMemo_`/`_headersMemo_`, `Utils.gs`) — cada `doGet`/`doPost`
+   roda em contexto novo, então não há risco de servir dado velho entre
+   requisições. `getHeaders_` também entrou no memo: era 2 chamadas de API por
+   LINHA gravada.
+2. **Faltava cache da aba SOF** — a mais larga do projeto (60+ colunas) era a
+   única grande sem cache de leitura. Novo `todosSofComCache_`/`invalidarCacheSof_`
+   (`Sof.gs`), com invalidação nos **6** pontos de escrita (criarSof,
+   atualizarSof, marcarSofVisualizado, excluirSof, criarNotaEmpenho,
+   excluirNotaEmpenho). 8 pontos de leitura convertidos.
+3. **`obterDashboard` lia a aba Recibos 3x na mesma requisição** —
+   `valorLiquidadoAgrupadoPorNe_` e `recibosPorNeECompetencia_` liam cru, além da
+   leitura que `obterDashboard` já fazia. Passaram a usar `todasRecibosComCache_`.
+4. **`recalcularAlertaRecibo_(null)` lia a aba Recibos inteira e jogava fora** —
+   caía direto no `if (!linhas.length) return`. Acontecia em 100% das edições de
+   Recibo avulso, inclusive em toda troca de status pela listagem. Removido; o
+   alerta avulso agora é calculado ANTES da gravação, o que também eliminou o
+   **segundo `updateObjectRow_`** na mesma linha.
+5. **`bumpVersao_`**: era `getProperty` + `setProperty` por recurso (6 chamadas
+   numa escrita de Recibo). Agora 1 `getProperties` + 1 `setProperties`.
+6. **`substituirTasDaUnidade_`**: último ponto do backend que ainda apagava
+   linha a linha — passou a usar `deleteRowsEmLote_`.
+7. **Revalidação do cache travava a tela** (`js/cache-abas.js`): `carregarFn`
+   rodava sem `{ silencioso: true }`, então a conferência "em segundo plano"
+   acendia o spinner global bloqueante — anulando exatamente o que o cache
+   cache-first existe pra entregar. Agora a revalidação é silenciosa e a
+   primeira carga continua com spinner. Os 8 pontos de chamada repassam `opcoes`.
+8. **`index.html`**: `defer` nos 14 `<script>` — baixam em paralelo durante o
+   parse em vez de um bloqueante atrás do outro; ordem de execução preservada.
+
+### Deliberadamente NÃO implementado (risco > ganho)
+
+- **`findById_` otimizado** (ler só a coluna id e depois a linha): toca todo
+  caminho de escrita do app; ganho pequeno depois do item 1.
+- **Projeção de colunas** (`sheetToObjectsCampos_`): se um campo não for
+  projetado, vira `undefined` silenciosamente — bug invisível.
+- **Escrita em lote no grupo de parcela dividida**: é o código recém
+  estabilizado (prefixo `ROB`); não vale a churn agora.
+- **Update otimista do status inline**: mudaria semântica de UI (indicadores e
+  "Parado" ficariam defasados) — decisão do usuário, não técnica.
+- **Endpoint enxuto pro dropdown de reforço** (`js/notas-empenho.js:688` chama
+  `listarNotasEmpenho` com `pageSize: 100000`, executando `montarGruposNotasEmpenho_`
+  inteiro só pra preencher um `<select>`): mesma classe de problema já corrigida
+  em `listarNotasEmpenhoPorUnidade`. Vale fazer, mas exige conferir todos os
+  usos de `gruposTodos` antes.
+
+### Verificação feita
+
+Sem Node na máquina: validação de sintaxe dos 16 `.gs` via JScript/`cscript`
+(`new Function(fonte)`). 15 OK; `NotasEmpenho.gs` acusa erro apenas por causa
+do lookbehind `(?<!PREÇO\s)` em `REGEX_PRECO_TOTAL_NE_DOCUMENTO` — válido no
+V8 do Apps Script, não no JScript (ES3). Recompilado com o lookbehind
+neutralizado: OK. **Nada foi testado em execução real** — ver passo manual.
+
+**Passo manual pendente:** colar no editor do Apps Script e reimplantar (Nova
+versão) os **10** arquivos alterados: `Utils.gs`, `Sof.gs`, `Dashboard.gs`,
+`NotasEmpenho.gs`, `Recibos.gs`, `Unidades.gs`, `Versoes.gs`, `Auth.gs`,
+`ListasPersonalizadas.gs`, `Relatorios.gs`. Nenhuma coluna ou aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

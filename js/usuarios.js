@@ -24,7 +24,7 @@ const TelaUsuarios = (function () {
 
   async function carregar() {
     usuarios = await CacheAbas.comRevalidacao('usuarios', {},
-      () => Api.chamar('listarUsuarios', {}),
+      (opcoes) => Api.chamar('listarUsuarios', {}, opcoes),
       (novosUsuarios) => { usuarios = novosUsuarios; renderTabela(); }
     );
     renderTabela();

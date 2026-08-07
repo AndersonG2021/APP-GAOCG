@@ -76,7 +76,7 @@ const Dashboard = (function () {
     const competencia = document.getElementById('dashCompetencia').value || undefined;
     const params = { competencia };
     const dados = await CacheAbas.comRevalidacao('dashboard', params,
-      () => Api.chamar('obterDashboard', params),
+      (opcoes) => Api.chamar('obterDashboard', params, opcoes),
       renderConteudo
     );
     if (!document.getElementById('dashCompetencia').value) {

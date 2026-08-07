@@ -43,7 +43,7 @@ const TelaListas = (function () {
     marcarTabAtiva();
     const params = { tipo_lista: tipoAtual };
     opcoes = await CacheAbas.comRevalidacao('listas', params,
-      () => Api.chamar('listarOpcoes', params),
+      (op) => Api.chamar('listarOpcoes', params, op),
       (novasOpcoes) => { opcoes = novasOpcoes; renderTabela(); }
     );
     renderTabela();

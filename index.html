@@ -76,19 +76,29 @@
     </div>
   </div>
 
-  <script src="js/api.js"></script>
-  <script src="js/cache-abas.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/unidades.js"></script>
-  <script src="js/listas.js"></script>
-  <script src="js/usuarios.js"></script>
-  <script src="js/edicao-simultanea.js"></script>
-  <script src="js/sof.js"></script>
-  <script src="js/notas-empenho.js"></script>
-  <script src="js/recibos.js"></script>
-  <script src="js/log-auditoria.js"></script>
-  <script src="js/relatorios.js"></script>
-  <script src="js/dashboard.js"></script>
-  <script src="js/app.js"></script>
+  <!--
+    defer: os 14 arquivos são baixados em PARALELO durante o parse do HTML e
+    executados na ordem declarada, logo antes do DOMContentLoaded - em vez de
+    um download bloqueante atrás do outro. A ordem entre eles continua
+    garantida (é isso que `defer` promete), então as dependências de carga
+    (App.init em js/app.js depende de todos os módulos anteriores já estarem
+    definidos) seguem valendo. Nenhum módulo toca no DOM antes do parse
+    terminar, então o listener de DOMContentLoaded em js/app.js continua sendo
+    registrado a tempo.
+  -->
+  <script defer src="js/api.js"></script>
+  <script defer src="js/cache-abas.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/unidades.js"></script>
+  <script defer src="js/listas.js"></script>
+  <script defer src="js/usuarios.js"></script>
+  <script defer src="js/edicao-simultanea.js"></script>
+  <script defer src="js/sof.js"></script>
+  <script defer src="js/notas-empenho.js"></script>
+  <script defer src="js/recibos.js"></script>
+  <script defer src="js/log-auditoria.js"></script>
+  <script defer src="js/relatorios.js"></script>
+  <script defer src="js/dashboard.js"></script>
+  <script defer src="js/app.js"></script>
 </body>
 </html>

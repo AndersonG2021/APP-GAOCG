@@ -38,7 +38,7 @@ const TelaLogAuditoria = (function () {
       params.fora_do_dono = document.getElementById('logForaDono').checked;
     }
     const resposta = await CacheAbas.comRevalidacao('logAuditoria', params,
-      () => Api.chamar('listarLogAuditoria', params),
+      (opcoes) => Api.chamar('listarLogAuditoria', params, opcoes),
       aplicarResposta_
     );
     aplicarResposta_(resposta);

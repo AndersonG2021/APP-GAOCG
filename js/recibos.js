@@ -237,7 +237,7 @@ const TelaRecibos = (function () {
     // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
     // (evita reler a aba Recibos inteira duas vezes numa única troca de aba).
     const resposta = await CacheAbas.comRevalidacao('recibos', params,
-      () => Api.chamar('listarRecibos', params),
+      (opcoes) => Api.chamar('listarRecibos', params, opcoes),
       aplicarResposta_
     );
     aplicarResposta_(resposta);

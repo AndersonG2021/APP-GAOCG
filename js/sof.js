@@ -189,7 +189,7 @@ const TelaSof = (function () {
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     const resposta = await CacheAbas.comRevalidacao('sof', params,
-      () => Api.chamar('listarSof', params),
+      (opcoes) => Api.chamar('listarSof', params, opcoes),
       aplicarResposta_
     );
     aplicarResposta_(resposta);
