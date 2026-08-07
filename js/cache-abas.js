@@ -30,8 +30,20 @@ const CacheAbas = (function () {
   }
 
   /**
-   * carregarFn: () => Promise<dados>  (a mesma chamada Api.chamar que já existia em carregar())
-   * aoRevalidar: (dados) => void       (reaplica dados + re-renderiza; só chamado se algo mudou)
+   * carregarFn: (opcoes) => Promise<dados>  (a mesma chamada Api.chamar que já existia em
+   *   carregar(), agora repassando `opcoes` adiante - ver abaixo)
+   * aoRevalidar: (dados) => void            (reaplica dados + re-renderiza; só chamado se algo mudou)
+   *
+   * A revalidação em segundo plano roda com { silencioso: true }, a primeira
+   * carga não. Corrigido na varredura de 2026-08-07: as duas usavam a mesma
+   * chamada sem opções, então a conferência "em segundo plano" acendia o
+   * spinner global bloqueante (UI.mostrarCarregando, js/api.js) e travava a
+   * tela inteira - exatamente o que este cache existe pra evitar. O usuário
+   * via o snapshot instantâneo e, meio segundo depois, a tela congelava do
+   * mesmo jeito.
+   *
+   * Quem passar um carregarFn que ignora o argumento continua funcionando
+   * como antes (só mantém o spinner) - a mudança degrada, nunca quebra.
    */
   async function comRevalidacao(recurso, params, carregarFn, aoRevalidar) {
     const k = chave(recurso, params);
@@ -40,7 +52,7 @@ const CacheAbas = (function () {
     if (snap) {
       obterVersoes().then(async (versoes) => {
         if (versoes[recurso] !== snap.versao) {
-          const dados = await carregarFn();
+          const dados = await carregarFn({ silencioso: true });
           snapshots.set(k, { versao: versoes[recurso], dados });
           aoRevalidar(dados);
         }

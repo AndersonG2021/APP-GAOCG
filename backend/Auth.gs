@@ -98,7 +98,7 @@ function buscarUsuarioComCache_(usuarioId) {
   if (!usuario) return null;
   delete usuario._row;
   delete usuario.senha_hash;
-  cache.put(chave, JSON.stringify(usuario), 30);
+  cachePut_(cache, chave, usuario, 30);
   return usuario;
 }
 

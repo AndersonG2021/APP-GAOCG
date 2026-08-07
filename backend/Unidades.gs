@@ -16,7 +16,7 @@ function todasTasComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.UNIDADES_TA));
   rows.forEach(function (t) { delete t._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -96,9 +96,11 @@ function anotarVencimentoTas_(tas) {
 function substituirTasDaUnidade_(unidadeId, tasArray, session) {
   var sheet = getSheet_(SHEETS.UNIDADES_TA);
   var existentes = sheetToObjects_(sheet).filter(function (t) { return String(t.unidade_id) === String(unidadeId); });
-  existentes
-    .sort(function (a, b) { return b._row - a._row; })
-    .forEach(function (t) { deleteRow_(sheet, t._row); });
+  // deleteRowsEmLote_ (Utils.gs) agrupa índices contíguos num único
+  // deleteRows - os T.A.s de uma mesma unidade são gravados em sequência,
+  // então isso vira 1 chamada em vez de uma por T.A. Era o último ponto do
+  // backend que ainda apagava linha a linha (varredura de 2026-08-07).
+  deleteRowsEmLote_(sheet, existentes.map(function (t) { return t._row; }));
 
   var itens = tasArray || [];
   if (itens.length) {
@@ -139,7 +141,7 @@ function todasUnidadesComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.UNIDADES));
   rows.forEach(function (u) { delete u._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 

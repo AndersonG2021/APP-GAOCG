@@ -61,7 +61,7 @@ function todasRecibosComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.RECIBOS));
   rows.forEach(function (r) { delete r._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -175,7 +175,10 @@ function getSheetOrdensBancariasRecibo_() {
     sheet.getRange(1, 1, 1, HEADERS.RecibosOrdensBancarias.length).setValues([HEADERS.RecibosOrdensBancarias]);
     sheet.setFrozenRows(1);
   }
-  return sheet;
+  // Entra no memo de execução (Utils.gs) - esta função é chamada várias vezes
+  // numa mesma gravação de Recibo dividido e cada chamada refazia o
+  // getSheetByName por conta própria, fora do memo de getSheet_.
+  return memoizarAba_(SHEETS.RECIBOS_ORDENS_BANCARIAS, sheet);
 }
 
 /**
@@ -555,28 +558,37 @@ function atualizarRecibo(session, id, dados) {
       (String(atualizado.oss_snapshot || '') !== String(unidade.oss || '') || String(atualizado.cnpj_snapshot || '') !== String(unidade.cnpj || ''));
   }
 
+  // Para linha avulsa (sem parcela dividida), o alerta de liquidado x pago é
+  // resolvido AQUI, antes da gravação, já que recalcularAlertaRecibo_ só age
+  // sobre grupos com parcela_dividida_grupo_id preenchido.
+  //
+  // Antes (corrigido na varredura de 2026-08-07) isso era feito DEPOIS do
+  // updateObjectRow_, com um segundo updateObjectRow_ na mesma linha sempre
+  // que o alerta mudava - duas escritas completas da linha numa edição só.
+  if (!atualizado.parcela_dividida_grupo_id) {
+    atualizado.alerta_divergencia_valores =
+      Math.abs(toNumber_(atualizado.valor_liquidado) - toNumber_(atualizado.valor_pago)) > 0.01;
+  }
+
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
 
-  // data_ultima_alteracao_status/visualizado_apos_alerta são derivados (mudam sozinhos
-  // junto de status, não são uma edição real do usuário) - mesmo princípio do SOF.
+  // data_ultima_alteracao_status/visualizado_apos_alerta/alerta_divergencia_valores
+  // são derivados (mudam sozinhos junto de status/valores, não são uma edição
+  // real do usuário) - mesmo princípio do SOF. alerta_divergencia_valores entra
+  // nesta lista porque, agora que é calculado antes da gravação, passaria a
+  // aparecer no log de auditoria - antes ele era gravado depois do log e por
+  // isso nunca era registrado.
   registrarDiferencas_(session, 'Recibo', id, existente.criado_por, antigo, atualizado,
-    ['_row', 'data_ultima_alteracao_status', 'visualizado_apos_alerta']);
+    ['_row', 'data_ultima_alteracao_status', 'visualizado_apos_alerta', 'alerta_divergencia_valores']);
 
+  // Só grupo de parcela dividida precisa do recálculo cruzado entre linhas.
+  // O `else recalcularAlertaRecibo_(null)` que existia aqui lia a aba Recibos
+  // INTEIRA e caía direto no `if (!linhas.length) return` - leitura completa
+  // descartada em 100% das edições de Recibo avulso, inclusive em toda troca
+  // de status pela listagem (varredura de 2026-08-07).
   if (atualizado.parcela_dividida_grupo_id) recalcularAlertaRecibo_(atualizado.parcela_dividida_grupo_id);
-  else recalcularAlertaRecibo_(null);
-
-  // Para linha avulsa (sem parcela dividida), o alerta de liquidado x pago é
-  // recalculado direto aqui, já que recalcularAlertaRecibo_ só age sobre
-  // grupos com parcela_dividida_grupo_id preenchido.
-  if (!atualizado.parcela_dividida_grupo_id) {
-    var alerta = Math.abs(toNumber_(atualizado.valor_liquidado) - toNumber_(atualizado.valor_pago)) > 0.01;
-    if (toBool_(atualizado.alerta_divergencia_valores) !== alerta) {
-      atualizado.alerta_divergencia_valores = alerta;
-      updateObjectRow_(sheet, rowIndex, atualizado);
-    }
-  }
 
   invalidarCacheRecibos_();
   bumpVersao_(['recibos', 'dashboard']);
@@ -626,7 +638,7 @@ function marcarReciboVisualizado(session, id) {
 /** Resolve o DEA de cada Nota de Empenho via o SOF de origem (sof_id -> dea), indexado por numero_ne. */
 function mapaDeaPorNumeroNe_() {
   var sofsPorId = {};
-  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) { sofsPorId[s.id] = s.dea; });
+  todosSofComCache_().forEach(function (s) { sofsPorId[s.id] = s.dea; });
   var mapa = {};
   todasNotasEmpenhoComCache_().forEach(function (n) { mapa[n.numero_ne] = sofsPorId[n.sof_id] || ''; });
   return mapa;

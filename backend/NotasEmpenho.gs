@@ -25,7 +25,7 @@ function todasNotasEmpenhoComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO)).filter(function (n) { return !toBool_(n.excluido); });
   rows.forEach(function (n) { delete n._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -42,7 +42,7 @@ function todoCronogramaComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.NOTAS_EMPENHO_CRONOGRAMA));
   rows.forEach(function (c) { delete c._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -259,7 +259,7 @@ function listarNotasEmpenhoPorSof(session, sofId) {
  */
 function listarNotasEmpenhoPorUnidade(session, unidadeId) {
   var sofIds = {};
-  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) {
+  todosSofComCache_().forEach(function (s) {
     if (!toBool_(s.excluido) && String(s.unidade_id) === String(unidadeId)) sofIds[s.id] = true;
   });
 
@@ -293,7 +293,7 @@ function listarNotasEmpenhoPorUnidade(session, unidadeId) {
  */
 function listarObjetosSofPorUnidade(session, unidadeId) {
   var sofIds = {};
-  sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) {
+  todosSofComCache_().forEach(function (s) {
     if (!toBool_(s.excluido) && String(s.unidade_id) === String(unidadeId)) sofIds[s.id] = true;
   });
 
@@ -479,6 +479,7 @@ function criarNotaEmpenho(session, dados) {
       var rowIndex = sof._row;
       delete atualizado._row;
       updateObjectRow_(sofSheet, rowIndex, atualizado);
+      invalidarCacheSof_();
       logsSof.forEach(function (l) {
         registrarLog_(session, 'SOF', sof.id, sof.criado_por, l[0], l[1], l[2]);
       });
@@ -622,6 +623,7 @@ function excluirNotaEmpenho(session, id) {
         var sofRowIndex = sof._row;
         delete sofAtualizado._row;
         updateObjectRow_(sofSheet, sofRowIndex, sofAtualizado);
+        invalidarCacheSof_();
         registrarLog_(session, 'SOF', sof.id, sof.criado_por, 'possui_ne', 'true', 'false');
       }
     }
@@ -710,7 +712,7 @@ function agruparValorAtendidoPorSofFonteObjeto_() {
  */
 function valorLiquidadoAgrupadoPorNe_() {
   var mapa = {};
-  sheetToObjects_(getSheet_(SHEETS.RECIBOS)).forEach(function (r) {
+  todasRecibosComCache_().forEach(function (r) {
     if (!r.nota_empenho) return;
     mapa[r.nota_empenho] = (mapa[r.nota_empenho] || 0) + toNumber_(r.valor_liquidado);
   });
@@ -726,7 +728,7 @@ function valorLiquidadoAgrupadoPorNe_() {
  */
 function recibosPorNeECompetencia_() {
   var mapa = {};
-  sheetToObjects_(getSheet_(SHEETS.RECIBOS)).forEach(function (r) {
+  todasRecibosComCache_().forEach(function (r) {
     if (!r.nota_empenho || toBool_(r.excluido)) return;
     var chave = r.nota_empenho + '|' + r.competencia;
     (mapa[chave] = mapa[chave] || []).push(r);
@@ -818,7 +820,7 @@ function agruparReforcosPorNumero_(linhasReforco) {
  * Empenho.
  */
 function montarGruposNotasEmpenho_(session, sofsCarregados) {
-  var sofs = sofsCarregados || sheetToObjects_(getSheet_(SHEETS.SOF));
+  var sofs = sofsCarregados || todosSofComCache_();
   var sofsPorId = {};
   sofs.forEach(function (s) { if (!toBool_(s.excluido)) sofsPorId[s.id] = s; });
 

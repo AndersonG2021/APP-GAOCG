@@ -109,7 +109,7 @@ const TelaUnidades = (function () {
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     const resposta = await CacheAbas.comRevalidacao('unidades', params,
-      () => Api.chamar('listarUnidades', params),
+      (opcoes) => Api.chamar('listarUnidades', params, opcoes),
       aplicarResposta_
     );
     aplicarResposta_(resposta);

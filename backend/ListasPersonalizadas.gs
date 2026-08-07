@@ -21,7 +21,7 @@ function todasOpcoesComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.LISTAS));
   rows.forEach(function (l) { delete l._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 

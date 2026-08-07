@@ -90,6 +90,55 @@ function calcularDestaqueParadoSof_(sof, listasCarregadas) {
 }
 
 /**
+ * Lê a aba SOF inteira, com cache de 30s - mesmo padrão de
+ * todasRecibosComCache_ (Recibos.gs) / todasNotasEmpenhoComCache_
+ * (NotasEmpenho.gs) / todasUnidadesComCache_ (Unidades.gs).
+ *
+ * Lacuna encontrada na varredura de 2026-08-07: TODAS as outras abas grandes
+ * já tinham cache de leitura - a SOF, que é a MAIS LARGA do projeto (60+
+ * colunas), era a única sem. Ela era relida crua em listarSof, obterDashboard,
+ * obterGraficoDashboard, listarNotasEmpenhoPorUnidade,
+ * listarObjetosSofPorUnidade, montarGruposNotasEmpenho_, mapaDeaPorNumeroNe_ e
+ * montarLinhasSof_. Caso concreto: ao escolher a unidade no "Novo processo de
+ * Recibo", o frontend dispara 3 chamadas em paralelo (js/recibos.js) e DUAS
+ * delas liam a aba SOF inteira, cada uma por conta própria.
+ *
+ * Como as linhas voltam de JSON.parse (objetos novos a cada chamada), quem
+ * consome pode mutar à vontade - listarSof anexa fontes/total_solicitado,
+ * dashboardSofPendenteNe_ anexa dias_aguardando - sem contaminar o cache, que
+ * guarda só a string.
+ *
+ * IMPORTANTE: só serve para LEITURA. O cache não guarda `_row`, então todo
+ * ponto que precisa saber em qual linha gravar (criarSof, atualizarSof,
+ * marcarSofVisualizado, excluirSof, obterSof, criarNotaEmpenho,
+ * criarReforcosEmLote, excluirNotaEmpenho) continua usando
+ * findById_/sheetToObjects_ direto na aba - mesma regra já documentada em
+ * todasRecibosComCache_.
+ */
+function todosSofComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'sof_todos';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheet_(SHEETS.SOF));
+  rows.forEach(function (s) { delete s._row; });
+  cachePut_(cache, chave, rows, 30);
+  return rows;
+}
+
+/**
+ * Precisa ser chamada em TODA escrita na aba SOF, senão a tela serve dado
+ * velho por até 30s. Os 6 pontos que escrevem são: criarSof, atualizarSof,
+ * marcarSofVisualizado e excluirSof (aqui em Sof.gs) + criarNotaEmpenho e
+ * excluirNotaEmpenho (NotasEmpenho.gs, que mexem em possui_ne/andamento do
+ * SOF). Se um novo ponto de escrita em SOF for criado, ele precisa chamar isto.
+ */
+function invalidarCacheSof_() {
+  CacheService.getScriptCache().remove('sof_todos');
+}
+
+/**
  * Lê a aba SofFontes inteira, com cache de 30s (mesmo padrão de
  * todasOpcoesComCache_ em ListasPersonalizadas.gs). listarSof lia essa aba
  * do zero em toda chamada, mesmo sem nenhuma fonte ter mudado - somado às
@@ -104,7 +153,7 @@ function todasFontesComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES));
   rows.forEach(function (f) { delete f._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -126,7 +175,7 @@ function todasFontesCronogramaComCache_() {
 
   var rows = sheetToObjects_(getSheet_(SHEETS.SOF_FONTES_CRONOGRAMA));
   rows.forEach(function (c) { delete c._row; });
-  cache.put(chave, JSON.stringify(rows), 30);
+  cachePut_(cache, chave, rows, 30);
   return rows;
 }
 
@@ -331,6 +380,7 @@ function criarSof(session, dados) {
   novo.divergente_da_unidade = recalcularDivergenciaSof_(novo);
 
   appendObjectRow_(getSheet_(SHEETS.SOF), novo);
+  invalidarCacheSof_();
   substituirFontesDoSof_(id, dados.fontes, session);
   registrarLog_(session, 'SOF', id, novo.criado_por, 'CRIACAO', '', 'Processo criado');
   bumpVersao_(['sof', 'dashboard']);
@@ -377,6 +427,7 @@ function atualizarSof(session, id, dados) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheSof_();
 
   if (dados.hasOwnProperty('fontes')) substituirFontesDoSof_(id, dados.fontes, session);
 
@@ -402,6 +453,7 @@ function marcarSofVisualizado(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheSof_();
   bumpVersao_(['sof', 'dashboard']);
   return ok_({ id: id });
 }
@@ -425,6 +477,7 @@ function excluirSof(session, id) {
   var rowIndex = existente._row;
   delete atualizado._row;
   updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheSof_();
 
   registrarLog_(session, 'SOF', id, existente.criado_por, 'EXCLUSAO', '', 'Processo excluído (lógico)');
   bumpVersao_(['sof', 'dashboard']);
@@ -457,10 +510,7 @@ function obterSof(session, id) {
 /** Busca livre multi-campo (texto e numérico) + filtros combináveis (AND) + paginação. */
 function listarSof(session, params) {
   params = params || {};
-  var rows = sheetToObjects_(getSheet_(SHEETS.SOF));
-  rows.forEach(function (r) { delete r._row; });
-
-  rows = rows.filter(function (r) { return !toBool_(r.excluido); });
+  var rows = todosSofComCache_().filter(function (r) { return !toBool_(r.excluido); });
 
   var fontesPorSof = agruparFontesPorSof_();
   // total_atendido por linha de fonte (sessão 2026-07-29, correção de bug):

@@ -159,21 +159,83 @@ var COLUNAS_BOOLEANAS = {
 
 // ===================== PLANILHA =====================
 
+/**
+ * Memoização por EXECUÇÃO, não entre requisições: cada doGet/doPost roda num
+ * contexto novo do Apps Script, então estas três variáveis nascem zeradas a
+ * cada chamada da API - não há risco de servir planilha/aba/cabeçalho velho
+ * de uma requisição anterior.
+ *
+ * Achado real (sessão 2026-08-07, varredura de performance): getSS_ fazia
+ * PropertiesService.getProperty + SpreadsheetApp.openById em TODA chamada de
+ * getSheet_, e existem ~100 pontos de getSheet_/sheetToObjects_ no backend -
+ * uma escrita típica (atualizarSof, criarGrupoParcelaDivididaRecibo) abria a
+ * MESMA planilha 10-15 vezes na mesma requisição. openById é chamada de API de
+ * verdade (dezenas de ms cada), não acesso barato de memória. O
+ * RELATORIO_LENTIDAO_SOF.md já citava "reabrir a planilha inteira" no item 1,
+ * mas isso nunca tinha virado uma das prioridades corrigidas.
+ */
+var _ssMemo_ = null;
+var _sheetsMemo_ = {};
+var _headersMemo_ = {};
+
 function getSS_() {
+  if (_ssMemo_) return _ssMemo_;
   var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  _ssMemo_ = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  return _ssMemo_;
 }
 
 function getSheet_(nome) {
+  if (_sheetsMemo_[nome]) return _sheetsMemo_[nome];
   var sheet = getSS_().getSheetByName(nome);
   if (!sheet) throw new Error('Aba "' + nome + '" não encontrada na planilha. Rode configurarPlanilha() primeiro.');
+  _sheetsMemo_[nome] = sheet;
   return sheet;
 }
 
+/**
+ * Registra no memo uma aba criada sob demanda dentro desta execução
+ * (getSheetOrdensBancariasRecibo_ em Recibos.gs, getSheetModelosRelatorio_ em
+ * Relatorios.gs) - essas duas chamam ss.getSheetByName/insertSheet direto, sem
+ * passar por getSheet_. Zera o cabeçalho memoizado junto, porque uma aba
+ * recém-criada acabou de ganhar a linha 1.
+ */
+function memoizarAba_(nome, sheet) {
+  _sheetsMemo_[nome] = sheet;
+  delete _headersMemo_[nome];
+  return sheet;
+}
+
+/**
+ * Nome da aba sem gastar uma chamada de sheet.getName(): quase toda aba usada
+ * já passou por getSheet_ e está no memo, então basta uma comparação de
+ * identidade sobre ~15 entradas. getName() fica só como fallback para abas
+ * criadas sob demanda antes de memoizarAba_.
+ */
+function nomeAbaMemoizada_(sheet) {
+  var nomes = Object.keys(_sheetsMemo_);
+  for (var i = 0; i < nomes.length; i++) {
+    if (_sheetsMemo_[nomes[i]] === sheet) return nomes[i];
+  }
+  return sheet.getName();
+}
+
+/**
+ * Cabeçalho real da aba, memoizado por execução - appendObjectRow_/
+ * updateObjectRow_ chamavam isto (getLastColumn + getRange().getValues(), duas
+ * chamadas de API) uma vez POR LINHA gravada. Um grupo de parcela dividida com
+ * 2 parcelas + os logs de auditoria correspondentes fazia ~8 leituras do mesmo
+ * cabeçalho. Cabeçalho vazio (aba recém-criada) não entra no memo, pra ser
+ * relido assim que a linha 1 existir.
+ */
 function getHeaders_(sheet) {
+  var nome = nomeAbaMemoizada_(sheet);
+  if (_headersMemo_[nome]) return _headersMemo_[nome];
   var last = sheet.getLastColumn();
   if (last === 0) return [];
-  return sheet.getRange(1, 1, 1, last).getValues()[0];
+  var headers = sheet.getRange(1, 1, 1, last).getValues()[0];
+  _headersMemo_[nome] = headers;
+  return headers;
 }
 
 /**
@@ -364,6 +426,43 @@ function serializeCell_(value) {
 
 function nowIso_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+}
+
+// ===================== CACHE DE LEITURA (CacheService) =====================
+
+/**
+ * O CacheService do Apps Script tem limite de 100KB POR CHAVE. Todos os
+ * helpers *ComCache_ (todasRecibosComCache_, todasNotasEmpenhoComCache_,
+ * todasFontesComCache_, todasUnidadesComCache_, todasOpcoesComCache_,
+ * todasTasComCache_, todosSofComCache_) serializam a aba inteira numa chave
+ * só - e faziam isso sem nenhuma proteção. Quando o valor passa do limite, o
+ * put lança exceção, ela sobe até handleRequest_ (Code.gs) e o usuário vê
+ * "Erro interno no servidor" com a tela inteira sem carregar.
+ *
+ * Achado da varredura de 2026-08-07: a aba Recibos tem 35 colunas e cruza esse
+ * limite por volta de 120-150 linhas; a SOF, com 60+ colunas, bem antes. Ou
+ * seja, era uma quebra marcada pra acontecer sozinha conforme a base cresce,
+ * sem nenhuma mudança de código.
+ *
+ * Aqui, valor grande demais simplesmente NÃO é cacheado - quem chamou continua
+ * recebendo o dado lido da planilha normalmente. Degrada pra "mais lento",
+ * nunca pra "quebrado". O try/catch cobre também qualquer outra falha do
+ * serviço de cache (quota, indisponibilidade): cache é otimização, nunca
+ * requisito de corretude.
+ *
+ * Margem de 90000 e não 100000 porque `length` conta CARACTERES, e cada acento
+ * ("competência", "liquidação") ocupa 2 bytes em UTF-8.
+ */
+var LIMITE_CACHE_CARACTERES_ = 90000;
+
+function cachePut_(cache, chave, valor, segundos) {
+  try {
+    var json = JSON.stringify(valor);
+    if (json.length > LIMITE_CACHE_CARACTERES_) return;
+    cache.put(chave, json, segundos);
+  } catch (e) {
+    // Silencioso de propósito - ver comentário acima.
+  }
 }
 
 // ===================== RESPOSTA HTTP / CORS =====================

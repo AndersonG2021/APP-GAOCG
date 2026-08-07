@@ -30,7 +30,7 @@ function montarLinhasRecibos_(session, filtros) {
   var unidadesPorId = {};
   todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
 
-  return sheetToObjects_(getSheet_(SHEETS.RECIBOS))
+  return todasRecibosComCache_()
     .filter(function (r) { return !toBool_(r.excluido); })
     .filter(function (r) {
       if (!relFiltroCompetenciaOk_(r.competencia, iniOrd, fimOrd)) return false;
@@ -78,7 +78,7 @@ function montarLinhasSof_(session, filtros) {
   var oss = paraArrayFiltro_(filtros.oss), uni = paraArrayFiltro_(filtros.unidade_id);
   var unidadesPorId = {};
   todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
-  return sheetToObjects_(getSheet_(SHEETS.SOF))
+  return todosSofComCache_()
     .filter(function (s) { return !toBool_(s.excluido); })
     .filter(function (s) {
       if (oss.length && oss.indexOf(s.oss_snapshot) === -1) return false;
@@ -362,7 +362,9 @@ function getSheetModelosRelatorio_() {
     sheet.getRange(1, 1, 1, HEADERS.RelatoriosModelos.length).setValues([HEADERS.RelatoriosModelos]);
     sheet.setFrozenRows(1);
   }
-  return sheet;
+  // Entra no memo de execução (Utils.gs) - mesmo motivo de
+  // getSheetOrdensBancariasRecibo_ (Recibos.gs).
+  return memoizarAba_(SHEETS.RELATORIOS_MODELOS, sheet);
 }
 
 function listarModelosRelatorio(session) {

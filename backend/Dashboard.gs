@@ -14,7 +14,7 @@
  * anterior - reaproveita o mesmo array já carregado, sem reler a aba.
  */
 function dashboardRecibos_(session, competencia, recibosCarregados) {
-  var rows = recibosCarregados || sheetToObjects_(getSheet_(SHEETS.RECIBOS));
+  var rows = recibosCarregados || todasRecibosComCache_();
   var doMes = competencia ? rows.filter(function (r) { return r.competencia === competencia; }) : rows;
 
   var porStatus = {};
@@ -96,7 +96,7 @@ function dashboardSofAtendido_(session, sofs) {
  * aba SOF com o filtro semNe (listarSof) pra ver a lista completa.
  */
 function dashboardSofPendenteNe_(session, sofsCarregados) {
-  var rows = (sofsCarregados || sheetToObjects_(getSheet_(SHEETS.SOF)))
+  var rows = (sofsCarregados || todosSofComCache_())
     .filter(function (s) { return !toBool_(s.possui_ne); });
 
   rows.forEach(function (s) {
@@ -128,11 +128,11 @@ function dashboardParados_(session, sofsCarregados, recibosCarregados) {
   // de SOF+Recibo, em vez de uma por linha (ver RELATORIO_LENTIDAO_SOF.md).
   var listasCarregadas = todasOpcoesComCache_();
 
-  var sofs = (sofsCarregados || sheetToObjects_(getSheet_(SHEETS.SOF))).map(function (s) {
+  var sofs = (sofsCarregados || todosSofComCache_()).map(function (s) {
     return Object.assign({ tipo_processo: 'SOF' }, s, calcularDestaqueParadoSof_(s, listasCarregadas));
   }).filter(function (s) { return s.destacar_parado; });
 
-  var recibos = (recibosCarregados || sheetToObjects_(getSheet_(SHEETS.RECIBOS))).map(function (r) {
+  var recibos = (recibosCarregados || todasRecibosComCache_()).map(function (r) {
     return Object.assign({ tipo_processo: 'Recibo' }, r, calcularDestaqueParadoRecibo_(r, listasCarregadas));
   }).filter(function (r) { return r.destacar_parado; });
 
@@ -193,12 +193,21 @@ function dashboardNotasEmpenho_(session, sofsCarregados) {
 /**
  * Unidades: total mensal comprometido (sessão 2026-07-27) - soma de
  * parcelaMensalTotal_ (Unidades.gs) de todas as unidades ativas.
+ *
+ * BUG REAL corrigido (varredura de 2026-08-07): a chamada aqui tinha ficado
+ * com a assinatura ANTIGA, de 2 parâmetros. Quando `valor_contrato_gestao_sus`
+ * foi criado (sessão 2026-07-27), parcelaMensalTotal_ virou
+ * (valorTesouro, valorSus, tas) e o PROGRESS.md registrou a atualização "nos 3
+ * pontos que chamam (criarUnidade, atualizarUnidade, listarUnidades)" - este
+ * aqui era o 4º e passou batido. O array de T.A.s estava entrando na posição
+ * do SUS (toNumber_ de um array = NaN = 0) e `tas` chegava undefined (soma 0),
+ * então o card mostrava SÓ o Tesouro: ignorava o C.G. SUS e todos os T.A.s.
  */
 function dashboardUnidades_(session) {
   var unidades = todasUnidadesComCache_().filter(function (u) { return toBool_(u.ativo); });
   var tasPorUnidade = agruparTasPorUnidade_();
   var total = unidades.reduce(function (soma, u) {
-    return soma + parcelaMensalTotal_(u.valor_contrato_gestao, tasPorUnidade[u.id] || []);
+    return soma + parcelaMensalTotal_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tasPorUnidade[u.id] || []);
   }, 0);
   return { total_unidades_ativas: unidades.length, total_mensal_comprometido: total };
 }
@@ -290,7 +299,7 @@ function obterGraficoDashboard(session, params) {
       return ok_({ metrica: metrica, agruparPor: agruparPor, itens: [], total: 0, ehMoeda: true });
     }
     var sofsPorId = {};
-    sheetToObjects_(getSheet_(SHEETS.SOF)).forEach(function (s) { if (!toBool_(s.excluido)) sofsPorId[s.id] = s; });
+    todosSofComCache_().forEach(function (s) { if (!toBool_(s.excluido)) sofsPorId[s.id] = s; });
     var cronogramaPorNeId = agruparCronogramaPorNotaEmpenho_();
 
     todasNotasEmpenhoComCache_().forEach(function (n) {
@@ -319,7 +328,7 @@ function obterGraficoDashboard(session, params) {
       }
     });
   } else {
-    sheetToObjects_(getSheet_(SHEETS.RECIBOS)).forEach(function (r) {
+    todasRecibosComCache_().forEach(function (r) {
       if (toBool_(r.excluido)) return;
       if (!noPeriodo_(r.competencia)) return;
       var valor = metrica === 'contagem' ? 1
@@ -356,10 +365,8 @@ function obterDashboard(session, params) {
   // delete) saem logo aqui, de uma vez, pra nenhum indicador contar dado
   // apagado (bug real corrigido nesta sessão - nenhum dos indicadores
   // filtrava excluido antes disso).
-  var sofs = sheetToObjects_(getSheet_(SHEETS.SOF)).filter(function (s) { return !toBool_(s.excluido); });
-  sofs.forEach(function (s) { delete s._row; });
-  var recibos = sheetToObjects_(getSheet_(SHEETS.RECIBOS)).filter(function (r) { return !toBool_(r.excluido); });
-  recibos.forEach(function (r) { delete r._row; });
+  var sofs = todosSofComCache_().filter(function (s) { return !toBool_(s.excluido); });
+  var recibos = todasRecibosComCache_().filter(function (r) { return !toBool_(r.excluido); });
 
   return ok_({
     recibos: dashboardRecibos_(session, competencia, recibos),

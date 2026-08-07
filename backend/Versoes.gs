@@ -13,14 +13,27 @@
 
 var RECURSOS_VERSIONADOS = ['sof', 'recibos', 'notasEmpenho', 'unidades', 'logAuditoria', 'listas', 'usuarios', 'dashboard'];
 
+/**
+ * Uma leitura + uma escrita no PropertiesService, não importa quantos recursos
+ * sejam incrementados de uma vez (varredura de 2026-08-07): antes era
+ * getProperty + setProperty POR recurso, e uma escrita de Recibo dispara
+ * bumpVersao_(['recibos','dashboard']) mais o bumpVersao_('logAuditoria') de
+ * registrarDiferencas_ - 6 chamadas ao serviço onde bastam 2.
+ *
+ * setProperties sem o segundo argumento faz merge (não apaga as demais
+ * propriedades do script, incluindo SPREADSHEET_ID e TOKEN_SECRET).
+ */
 function bumpVersao_(recursos) {
   var lista = Array.isArray(recursos) ? recursos : [recursos];
+  if (!lista.length) return;
   var props = PropertiesService.getScriptProperties();
+  var atuais = props.getProperties();
+  var novas = {};
   lista.forEach(function (r) {
     var chave = 'versao_' + r;
-    var atual = Number(props.getProperty(chave) || '0');
-    props.setProperty(chave, String(atual + 1));
+    novas[chave] = String(Number(atuais[chave] || '0') + 1);
   });
+  props.setProperties(novas);
 }
 
 function getVersoes(session, params) {
