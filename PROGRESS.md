@@ -1541,6 +1541,69 @@ num Recibo avulso ainda não salvo, conferir que o checkbox aparece/some e
 desmarca sozinho; converter um Recibo avulso TES que já tinha uma OB antiga
 (campo único) e conferir que ela aparece como item herdado na tabela.
 
+## Status editável direto na listagem + parcelas divididas em destaque (sessão 2026-08-07, só frontend)
+
+Pedido do usuário, a partir de um print da listagem de Recibos: (1) poder
+mudar o Status direto na tela de Recibos, sem abrir "Editar Recibo"; (2)
+quando o pagamento tem parcela dividida (ex. 70%/30% de Contrato de Gestão),
+as parcelas aparecerem "em destaque, algo como uma tabelinha com as duas
+linhas... para não se confundir os outros pagamento". Revisado com o usuário
+antes de implementar (pergunta com preview de 2 leiautes) - escolhido "card
+com cabeçalho compartilhado".
+
+**Sem alteração de backend** - as duas coisas reaproveitam endpoints já
+existentes (`atualizarRecibo` pro status; `listarRecibos` já trazia
+`parcela_dividida_grupo_id`/`percentual_parcela_dividida` em cada linha, só
+não eram exibidos).
+
+### Status editável inline
+- `js/app.js`: nova `UI.corStatusReciboEstilo(status)` - mesma tabela de
+  cores de `seloStatusReciboHtml`, mas devolve só o CSS (`background:...;
+  color:...`) pra aplicar num `<select>` em vez de um `<span>`.
+- `js/recibos.js`: `celulaStatusHtml_(r)` monta um `<select class="select-
+  status-recibo">` colorido igual ao selo de sempre, com as opções já
+  filtradas pela Fonte da linha (`filtrarOpcoesStatusPorFonte_`, mesma regra
+  do formulário de edição) via `opcoesStatusHtml_` (reaproveitados, sem
+  duplicar lista). `aoMudarStatusInline_`: salva na hora ao trocar (sem
+  confirmação - é reversível escolhendo outro status de novo), mandando só
+  `{status: novoValor}` pro `atualizarRecibo` existente (não toca em mais
+  nada do Recibo); trava o `<select>` enquanto salva (`statusSalvandoIds`
+  evita 2 gravações simultâneas na mesma linha); erro reverte o valor
+  visualmente; sucesso invalida o cache e recarrega a lista inteira (mesmo
+  padrão de excluir/editar - o indicador "Pendentes" e o destaque "Parado"
+  podem mudar junto). Clicar/mudar o select nunca abre o modal de edição
+  (`e.stopPropagation()`).
+
+### Parcelas divididas em destaque
+- `agruparItensParaTabela_`: agrupa os itens da PÁGINA ATUAL por
+  `parcela_dividida_grupo_id`, preservando a ordem - vale pra qualquer
+  grupo (não só TES). Limitação aceita: só agrupa se as parcelas caírem na
+  mesma página (raríssimo isso não acontecer, dado que nascem juntas).
+- `renderTabela()` reescrita: linhas avulsas consecutivas continuam numa
+  tabela só (cabeçalho normal, sem repetir); um grupo interrompe e vira um
+  `cartaoGrupoReciboHtml_` - card com borda azul à esquerda, cabeçalho
+  mostrando Unidade/Objeto/Processo/Competência (compartilhados) 1x só, e
+  uma tabelinha embaixo só com o que muda por parcela: Percentual, Valor
+  Liquidado, Valor Pago, Ordem Bancária, Status (cada linha com seu próprio
+  `<select>` de status - parcelas do mesmo pagamento podem estar em etapas
+  diferentes do fluxo). Clicar numa linha do card abre a edição daquele
+  Recibo específico, igual a antes (o modal de edição já sabe mostrar o
+  grupo inteiro).
+- `css/style.css`: `.select-status-recibo` (select com cara de selo) e
+  `.cartao-grupo-recibo`/`.cartao-grupo-recibo-cabecalho` (o card).
+
+### Passo manual
+Nenhum - é só frontend (`js/app.js`, `js/recibos.js`, `css/style.css`),
+atualiza sozinho no GitHub Pages depois do `git push`.
+
+**Ainda não testado:** mudar o status de uma linha avulsa direto na lista e
+conferir que salva sem abrir modal; conferir que as opções aparecem certas
+pra Fonte SUS x TESOURO; forçar um erro (ex. sem internet) e conferir que o
+select volta pro valor antigo; abrir a listagem com um grupo de parcela
+dividida (70%/30% TES) e conferir o card - cabeçalho certo, as 2 linhas
+certas, status editável em cada uma; um grupo cujas 2 parcelas caiam em
+páginas diferentes (casos de borda, provavelmente raro de reproduzir).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

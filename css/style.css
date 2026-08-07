@@ -228,6 +228,29 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .selo.vermelho { background: var(--vermelho-claro); color: var(--vermelho); }
 .selo.cinza { background: var(--cinza-200); color: var(--cinza-700); }
 
+/* Status editável direto na listagem de Recibos (sessão 2026-08-07) - mesma
+   forma de "selo" de sempre, só que é um <select> de verdade por baixo. */
+.select-status-recibo {
+  display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(0,0,0,.08); cursor: pointer; background-color: var(--cinza-200); color: var(--cinza-700);
+  max-width: 100%; font-family: inherit;
+}
+.select-status-recibo:disabled { opacity: .6; cursor: wait; }
+.select-status-recibo:focus-visible { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+/* Card de grupo de parcela dividida na listagem de Recibos (sessão
+   2026-08-07, pedido do usuário: parcelas do mesmo pagamento em destaque,
+   "para não se confundir os outros pagamento") - Unidade/Objeto/Processo/
+   Competência aparecem 1x só no cabeçalho; a tabelinha embaixo reaproveita
+   .tabela normal, só com as colunas que mudam por parcela. */
+#listaRecibos > table.tabela, #listaRecibos > .cartao-grupo-recibo { margin-bottom: 14px; }
+#listaRecibos > table.tabela:last-child, #listaRecibos > .cartao-grupo-recibo:last-child { margin-bottom: 0; }
+.cartao-grupo-recibo { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); border-left: 4px solid var(--azul); overflow: hidden; }
+.cartao-grupo-recibo-cabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 14px; background: var(--azul-claro); }
+.cartao-grupo-recibo-titulo { font-weight: 700; color: var(--azul-escuro); font-size: 13.5px; }
+.cartao-grupo-recibo-meta { font-size: 12px; color: var(--cinza-700); }
+.cartao-grupo-recibo table.tabela th { position: static; }
+
 .paginacao { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--cinza-500); }
 .paginacao .botoes { display: flex; gap: 6px; }
 

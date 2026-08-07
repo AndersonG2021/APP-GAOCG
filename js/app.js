@@ -133,6 +133,18 @@ const UI = (function () {
     return `<span class="selo selo-status"${estilo}>${escaparHtml(status || '-')}</span>`;
   }
 
+  /**
+   * Mesmas cores de seloStatusReciboHtml, mas só o CSS (sem o <span>) -
+   * usado no <select> de status editável direto na listagem de Recibos
+   * (sessão 2026-08-07), pra ele continuar parecendo um selo colorido em vez
+   * de um <select> genérico.
+   */
+  function corStatusReciboEstilo(status) {
+    const chave = String(status || '').trim().toUpperCase();
+    const cor = CORES_STATUS_RECIBO_[chave];
+    return cor ? `background:${cor.bg};color:${cor.fg}` : '';
+  }
+
   function formatarMoeda(valor) {
     const n = Number(valor) || 0;
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -553,7 +565,7 @@ const UI = (function () {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
-    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml
+    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };
 })();
 
