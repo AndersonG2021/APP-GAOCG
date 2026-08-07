@@ -22,6 +22,15 @@ const TelaRecibos = (function () {
   let objetosSofDaUnidadeNovo = [];
   let abrindoLinha = false;
   let ultimoFiltroJson = null;
+  // Opções de STATUS_RECIBO (não deduplicadas) carregadas em render() -
+  // reaproveitadas pelo <select> de status editável direto na tabela (sessão
+  // 2026-08-07), pra não precisar buscar de novo a cada linha renderizada.
+  let statusOpcoesTodasAtual = [];
+  // Salva na hora, sem confirmação (é uma edição rápida, reversível a
+  // qualquer momento escolhendo outro status de novo) - trava só o <select>
+  // que está sendo salvo (por id), pra não disparar 2 chamadas simultâneas
+  // na mesma linha se o usuário mudar de novo rapidinho.
+  const statusSalvandoIds = new Set();
 
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 
@@ -86,6 +95,7 @@ const TelaRecibos = (function () {
     ]);
     const vistosStatus_ = new Set();
     const statusFiltroOpcoes = statusFiltroOpcoesBrutas.filter(o => (vistosStatus_.has(o.valor) ? false : (vistosStatus_.add(o.valor), true)));
+    statusOpcoesTodasAtual = statusFiltroOpcoesBrutas;
     unidades = unidadesCarregadas.items;
     const tiposUnidade = Array.from(new Set(unidades.map(u => u.tipo).filter(Boolean))).sort();
     document.getElementById('conteudo').innerHTML = `
@@ -247,32 +257,174 @@ const TelaRecibos = (function () {
       <div class="cartao-indicador"><div class="valor">${UI.formatarMoeda(indicadores.total_pago_ano)}</div><div class="rotulo">Total pago no ano</div></div>`;
   }
 
+  /**
+   * <select> de status editável direto na listagem (sessão 2026-08-07,
+   * pedido do usuário: "alterar o Status pela própria tela dos recibos sem
+   * ter de entrar para editar"). Reaproveita opcoesStatusHtml_/
+   * filtrarOpcoesStatusPorFonte_ (mesma regra de filtro por Fonte já usada
+   * no formulário de edição) e corStatusReciboEstilo (mesmas cores do selo
+   * de sempre, só que aplicadas ao próprio <select> em vez de um <span>).
+   * data-status-anterior guarda o valor pra poder reverter visualmente se a
+   * gravação falhar (ver aoMudarStatusInline_).
+   */
+  function celulaStatusHtml_(r) {
+    const opcoesFiltradas = filtrarOpcoesStatusPorFonte_(statusOpcoesTodasAtual, r.fonte);
+    return `<select class="select-status-recibo" data-id="${r.id}" data-status-anterior="${UI.escaparHtml(r.status || '')}" style="${UI.corStatusReciboEstilo(r.status)}">${opcoesStatusHtml_(opcoesFiltradas, r.status)}</select>`;
+  }
+
+  /**
+   * Grava o novo status na hora (sem confirmação - é reversível escolhendo
+   * outro status de novo) via o mesmo atualizarRecibo do formulário de
+   * edição, mandando só `status` (os demais campos do Recibo não são
+   * tocados). statusSalvandoIds evita 2 gravações simultâneas na mesma
+   * linha; em caso de erro, volta o <select> pro valor anterior. Em caso de
+   * sucesso, recarrega a lista inteira (mesmo padrão de excluir/editar) -
+   * o status pode mudar o indicador "Pendentes" e o destaque "Parado".
+   */
+  async function aoMudarStatusInline_(select) {
+    const id = select.dataset.id;
+    if (statusSalvandoIds.has(id)) return;
+    const statusAnterior = select.dataset.statusAnterior || '';
+    const novoStatus = select.value;
+    statusSalvandoIds.add(id);
+    select.disabled = true;
+    try {
+      await Api.chamar('atualizarRecibo', { id, data: { status: novoStatus } });
+      CacheAbas.invalidar('recibos');
+      UI.toast('Status atualizado.', 'sucesso');
+      await carregar();
+    } catch (err) {
+      UI.toast(err.message, 'erro');
+      select.value = statusAnterior;
+      select.disabled = false;
+    } finally {
+      statusSalvandoIds.delete(id);
+    }
+  }
+
+  function linhaReciboHtml_(r) {
+    const unidade = unidades.find(u => u.id === r.unidade_id);
+    return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
+      <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
+      <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
+      <td>${UI.escaparHtml(r.objeto || '-')}</td>
+      <td>${UI.escaparHtml(r.numero_processo)}</td>
+      <td>${UI.escaparHtml(r.competencia)}</td>
+      <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
+      <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
+      <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
+      <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+    </tr>`;
+  }
+
+  function tabelaRecibosHtml_(linhas) {
+    return `
+      <table class="tabela">
+        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
+        <tbody>${linhas.map(linhaReciboHtml_).join('')}</tbody>
+      </table>`;
+  }
+
+  /**
+   * Card destacado pra um grupo de parcela dividida (sessão 2026-08-07,
+   * pedido do usuário: "quero que essas parcelas apareçam em destaque...
+   * para não se confundir os outros pagamento") - vale pra qualquer grupo
+   * (parcela_dividida_grupo_id preenchido), não só os de Contrato de Gestão
+   * (TES). Unidade/Objeto/Nº Processo/Competência (compartilhados pelas
+   * parcelas do mesmo pagamento) aparecem 1x só no cabeçalho do card; a
+   * tabelinha embaixo mostra só o que muda entre as parcelas: percentual,
+   * valores, OB e status (cada linha com seu próprio <select> de status,
+   * já que cada parcela pode estar numa etapa diferente do fluxo).
+   */
+  function cartaoGrupoReciboHtml_(linhasDoGrupo) {
+    const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
+    const primeira = ordenadas[0];
+    const unidade = unidades.find(u => u.id === primeira.unidade_id);
+    const algumParado = ordenadas.some(r => r.destacar_parado);
+    return `
+      <div class="cartao-grupo-recibo">
+        <div class="cartao-grupo-recibo-cabecalho">
+          <span class="cartao-grupo-recibo-titulo">🔗 ${UI.escaparHtml(unidade ? unidade.nome : primeira.unidade_id)} · ${UI.escaparHtml(primeira.objeto || '-')}</span>
+          <span class="cartao-grupo-recibo-meta">
+            ${primeira.numero_processo ? `Nº Processo ${UI.escaparHtml(primeira.numero_processo)}` : ''}
+            ${primeira.competencia ? ` · Competência ${UI.escaparHtml(primeira.competencia)}` : ''}
+          </span>
+          ${algumParado ? '<span class="selo amarelo">Parado</span>' : ''}
+        </div>
+        <div class="tabela-reforcos-wrap">
+          <table class="tabela">
+            <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
+            <tbody>${ordenadas.map(r => `
+              <tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
+                <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
+                <td>${r.percentual_parcela_dividida !== '' && r.percentual_parcela_dividida !== undefined ? UI.escaparHtml(String(r.percentual_parcela_dividida)) + '%' : '-'}</td>
+                <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
+                <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
+                <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
+                <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Agrupa itens da página atual por parcela_dividida_grupo_id, preservando
+   * a ordem de 1ª ocorrência (a lista já vem ordenada por data_criacao
+   * desc). Só agrupa linhas que estão na MESMA página - se as parcelas de
+   * um grupo caírem em páginas diferentes (raro, só no limite exato de 20
+   * registros), a que sobrar aparece como linha avulsa normal.
+   */
+  function agruparItensParaTabela_(lista) {
+    const vistos = new Set();
+    const blocos = [];
+    lista.forEach(r => {
+      if (vistos.has(r.id)) return;
+      if (r.parcela_dividida_grupo_id) {
+        const doGrupo = lista.filter(x => x.parcela_dividida_grupo_id === r.parcela_dividida_grupo_id);
+        doGrupo.forEach(x => vistos.add(x.id));
+        blocos.push({ tipo: 'grupo', grupoId: r.parcela_dividida_grupo_id, linhas: doGrupo });
+      } else {
+        vistos.add(r.id);
+        blocos.push({ tipo: 'unica', linha: r });
+      }
+    });
+    return blocos;
+  }
+
   function renderTabela() {
     const alvo = document.getElementById('listaRecibos');
     if (!itens.length) { alvo.innerHTML = '<p class="estado-vazio">Nenhum recibo encontrado.</p>'; return; }
-    alvo.innerHTML = `
-      <table class="tabela">
-        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
-        <tbody>${itens.map(r => {
-          const unidade = unidades.find(u => u.id === r.unidade_id);
-          return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
-            <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
-            <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
-            <td>${UI.escaparHtml(r.objeto || '-')}</td>
-            <td>${UI.escaparHtml(r.numero_processo)}</td>
-            <td>${UI.escaparHtml(r.competencia)}</td>
-            <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
-            <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
-            <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
-            <td>${UI.seloStatusReciboHtml(r.status)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
+
+    // Linhas avulsas consecutivas ficam juntas numa tabela só (evita repetir
+    // cabeçalho pra cada uma); um grupo de parcela dividida interrompe a
+    // tabela corrente e vira seu próprio card (ver cartaoGrupoReciboHtml_).
+    const blocos = agruparItensParaTabela_(itens);
+    const partes = [];
+    let bufferUnicas = [];
+    const flush = () => { if (bufferUnicas.length) { partes.push(tabelaRecibosHtml_(bufferUnicas)); bufferUnicas = []; } };
+    blocos.forEach(b => {
+      if (b.tipo === 'unica') { bufferUnicas.push(b.linha); return; }
+      flush();
+      partes.push(cartaoGrupoReciboHtml_(b.linhas));
+    });
+    flush();
+    alvo.innerHTML = partes.join('');
+
     alvo.querySelectorAll('tr[data-id]').forEach(tr => {
       tr.addEventListener('click', () => abrirReciboExistente(tr.dataset.id));
       tr.querySelector('[data-acao="excluir"]').addEventListener('click', e => {
         e.stopPropagation();
         confirmarExclusaoRecibo(tr.dataset.id);
+      });
+    });
+    // Select de status: clicar pra abrir/escolher não pode "vazar" o clique
+    // pra linha (que abriria o modal de edição inteiro).
+    alvo.querySelectorAll('.select-status-recibo').forEach(select => {
+      select.addEventListener('click', e => e.stopPropagation());
+      select.addEventListener('change', e => {
+        e.stopPropagation();
+        aoMudarStatusInline_(select);
       });
     });
   }
