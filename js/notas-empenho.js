@@ -431,7 +431,7 @@ const TelaNotasEmpenho = (function () {
           <div class="campo"><label>Mês de referência do reforço *</label>
             <select id="reforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
           </div>
-          <div class="campo"><label>Valor do reforço *</label><input id="reforcoValor" type="number" step="0.01" required /></div>
+          <div class="campo"><label>Valor do reforço *</label><input id="reforcoValor" type="text" inputmode="decimal" class="campo-moeda" required /></div>
         </div>
         <p id="reforcoErro" class="erro-campo oculto"></p>
       </form>`;
@@ -537,9 +537,12 @@ const TelaNotasEmpenho = (function () {
           });
         } else {
           const mesReferencia = document.getElementById('reforcoMes').value;
-          const valor = document.getElementById('reforcoValor').value;
+          // parseValorBr, não .value cru: "1.234,56" passava por Number() como
+          // NaN, NaN <= 0 é false, então a validação abaixo AUTORIZAVA e o
+          // backend gravava 0 (ver js/app.js).
+          const valor = UI.parseValorBr(document.getElementById('reforcoValor').value);
           if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
-          if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
+          if (!valor || valor <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido.'); return; }
           await Api.chamar('criarNotaEmpenho', {
             data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoLido)
           });
@@ -637,7 +640,7 @@ const TelaNotasEmpenho = (function () {
             <div class="campo"><label>Mês de referência do reforço *</label>
               <select id="novaNeReforcoMes" required><option value="">Selecione...</option>${NOMES_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select>
             </div>
-            <div class="campo"><label>Valor do reforço *</label><input id="novaNeReforcoValor" type="number" step="0.01" /></div>
+            <div class="campo"><label>Valor do reforço *</label><input id="novaNeReforcoValor" type="text" inputmode="decimal" class="campo-moeda" /></div>
           </div>
         </div>
 
@@ -847,9 +850,9 @@ const TelaNotasEmpenho = (function () {
             });
           } else {
             const mesReferencia = document.getElementById('novaNeReforcoMes').value;
-            const valor = document.getElementById('novaNeReforcoValor').value;
+            const valor = UI.parseValorBr(document.getElementById('novaNeReforcoValor').value);
             if (!mesReferencia) { UI.mostrarErro(erroEl, 'Selecione o mês de referência do reforço.'); return; }
-            if (!valor || Number(valor) <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido para o reforço.'); return; }
+            if (!valor || valor <= 0) { UI.mostrarErro(erroEl, 'Informe um valor válido para o reforço.'); return; }
             await Api.chamar('criarNotaEmpenho', {
               data: Object.assign({ sof_id: grupo.sof_id, tipo: 'reforco', numero_ne: grupo.numero_ne, numero_ne_reforco: numeroNeReforcoDetectado, fonte: grupo.fonte, valor, mes_referencia: mesReferencia }, arquivoReforcoLido)
             });

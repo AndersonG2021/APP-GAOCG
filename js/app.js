@@ -150,6 +150,100 @@ const UI = (function () {
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
+  /**
+   * Converte um valor DIGITADO em número, aceitando o formato brasileiro.
+   *
+   * Bug real que originou isto (sessão 2026-08-08): os campos de valor eram
+   * `type="number"`, que por especificação HTML só aceita ponto como decimal -
+   * mas a tela EXIBE tudo em pt-BR via formatarMoeda ("R$ 1.234,56"). O app
+   * mostrava um formato que não aceitava de volta. Quem digitava "1.000"
+   * (mil reais) salvava 1, quem digitava "10,50" tinha o campo esvaziado pelo
+   * navegador e salvava 0 - nos dois casos com checkValidity() === true, então
+   * nenhuma validação pegava e não havia aviso nenhum.
+   *
+   * Regra de desambiguação (a parte que importa): se há vírgula, ela é o
+   * decimal e os pontos são separador de milhar ("1.234,56" -> 1234.56). Sem
+   * vírgula, um ponto seguido de exatamente 3 dígitos (repetível) é milhar
+   * ("1.000" -> 1000, "1.234.567" -> 1234567); qualquer outro ponto é decimal
+   * ("1.5" -> 1.5, "1234.56" -> 1234.56, que é o formato que o campo antigo
+   * exigia - continua funcionando).
+   *
+   * Devolve null (não 0) para entrada inválida, pra quem chama poder recusar
+   * em vez de gravar zero silenciosamente.
+   */
+  function parseValorBr(texto) {
+    if (texto === null || texto === undefined) return null;
+    let s = String(texto).trim().replace(/\s/g, '').replace(/R\$/gi, '');
+    if (s === '') return null;
+
+    if (s.indexOf(',') !== -1) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+      s = s.replace(/\./g, '');
+    }
+
+    if (!/^-?\d*\.?\d+$/.test(s)) return null;   // barra "1.2.3", "1e5", "abc"
+    const n = Number(s);
+    return isNaN(n) || !isFinite(n) ? null : n;
+  }
+
+  /**
+   * Lê um campo monetário já normalizado. Devolve { ok, valor }: ok=false
+   * quando o usuário digitou algo que não é número (aí quem chama aborta e
+   * avisa, em vez de gravar 0). Campo vazio é ok com valor 0 - vazio sempre
+   * significou "não informado" neste app.
+   */
+  function lerValorCampo(elOuId) {
+    const el = typeof elOuId === 'string' ? document.getElementById(elOuId) : elOuId;
+    if (!el) return { ok: true, valor: 0 };
+    const bruto = String(el.value || '').trim();
+    if (bruto === '') { el.classList.remove('campo-invalido'); return { ok: true, valor: 0 }; }
+    const n = parseValorBr(bruto);
+    if (n === null) { el.classList.add('campo-invalido'); return { ok: false, valor: null, el }; }
+    el.classList.remove('campo-invalido');
+    return { ok: true, valor: n };
+  }
+
+  /**
+   * Portão único antes de qualquer Salvar: recusa se ALGUM `.campo-moeda` da
+   * tela tiver texto que não vira número. Vale pros 18 campos monetários do app
+   * de uma vez, sem depender de cada formulário lembrar de validar - era
+   * justamente essa ausência que deixava gravar R$ 0,00 sem avisar.
+   */
+  function validarCamposMoeda(container) {
+    const raiz = container || document;
+    const invalidos = Array.from(raiz.querySelectorAll('.campo-moeda')).filter(el => {
+      const bruto = String(el.value || '').trim();
+      const ruim = bruto !== '' && parseValorBr(bruto) === null;
+      el.classList.toggle('campo-invalido', ruim);
+      return ruim;
+    });
+    if (!invalidos.length) return true;
+    invalidos[0].focus();
+    toast('Valor inválido em "' + rotuloDoCampo_(invalidos[0]) + '". Use por exemplo 1.234,56 ou 1234.56.', 'erro');
+    return false;
+  }
+
+  /** Texto do <label> irmão, pra mensagem de erro dizer QUAL campo está errado. */
+  function rotuloDoCampo_(el) {
+    const campo = el.closest('.campo');
+    const label = campo ? campo.querySelector('label') : null;
+    return label ? label.textContent.replace('*', '').trim() : 'valor';
+  }
+
+  /**
+   * Marca em vermelho, ao sair do campo, todo `.campo-moeda` com conteúdo que
+   * não dá número - feedback imediato, sem esperar o Salvar. Delegado no
+   * document (os formulários são recriados via innerHTML a cada abertura, então
+   * listener por elemento se perderia).
+   */
+  document.addEventListener('blur', (ev) => {
+    const el = ev.target;
+    if (!el || !el.classList || !el.classList.contains('campo-moeda')) return;
+    const bruto = String(el.value || '').trim();
+    el.classList.toggle('campo-invalido', bruto !== '' && parseValorBr(bruto) === null);
+  }, true);
+
   function formatarData(iso) {
     if (!iso) return '-';
     const d = new Date(iso);
@@ -347,8 +441,18 @@ const UI = (function () {
    */
   const registroFiltrosMultiplos = {};
 
+  /**
+   * Descarta item nulo/indefinido antes do map: um único elemento assim fazia
+   * `o.valor` lançar, e como criarFiltroMultiplo roda dentro do carregar() de
+   * cada tela, a exceção virava unhandled rejection - a barra de filtros não
+   * montava e a LISTA da aba não renderizava, sem mensagem nenhuma na tela.
+   * Não é alcançável pelo backend atual (sheetToObjects_ sempre devolve todas as
+   * colunas, vazias no pior caso), mas o custo de blindar é uma linha.
+   */
   function normalizarOpcoesFiltro_(opcoes) {
-    return (opcoes || []).map(o => (typeof o === 'string' ? { valor: o, rotulo: o } : { valor: o.valor, rotulo: o.rotulo != null ? o.rotulo : o.valor }));
+    return (opcoes || [])
+      .filter(o => o !== null && o !== undefined)
+      .map(o => (typeof o === 'string' ? { valor: o, rotulo: o } : { valor: o.valor, rotulo: o.rotulo != null ? o.rotulo : o.valor }));
   }
 
   function criarFiltroMultiplo(id, opcoes, aoMudar) {
@@ -563,7 +667,7 @@ const UI = (function () {
 
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
-    formatarMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
+    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };

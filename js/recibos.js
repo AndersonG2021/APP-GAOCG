@@ -683,7 +683,7 @@ const TelaRecibos = (function () {
             <p class="ajuda">Escolhendo um objeto já usado antes para essa unidade, os campos abaixo são preenchidos com o último lançamento (ou, se ainda não houver Recibo, com a Fonte/Nota de Empenho/Parcela já cadastradas na SOF).</p>
           </div>
           <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
-          <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="number" step="0.01" /></div>
+          <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="text" inputmode="decimal" class="campo-moeda" /></div>
           <div class="campo"><label>Fonte</label><select id="recFonte"><option value="">-</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select></div>
           <div class="campo"><label>Nota de Empenho</label>
             <input id="recNotaEmpenho" list="listaNeUnidadeNovo" placeholder="Selecione a unidade pra ver as NEs cadastradas" />
@@ -700,9 +700,9 @@ const TelaRecibos = (function () {
         </div>
 
         <div id="blocoParcelaUnica" class="grade-2">
-          <div class="campo"><label>Valor Liquidado</label><input id="recValorLiquidado" type="number" step="0.01" /></div>
+          <div class="campo"><label>Valor Liquidado</label><input id="recValorLiquidado" type="text" inputmode="decimal" class="campo-moeda" /></div>
           <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recNotaLiquidacaoArquivo" accept=".pdf,image/*" /></div>
-          <div class="campo"><label>Valor Pago</label><input id="recValorPago" type="number" step="0.01" /></div>
+          <div class="campo"><label>Valor Pago</label><input id="recValorPago" type="text" inputmode="decimal" class="campo-moeda" /></div>
           <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recOrdemBancariaArquivo" accept=".pdf,image/*" /></div>
         </div>
         <div id="blocoComParcelaDividida" class="oculto">
@@ -841,9 +841,9 @@ const TelaRecibos = (function () {
     div.innerHTML = `
       <div class="linha-parcela-dividida-corpo">
         <div class="grade-3">
-          <div class="campo"><label>Percentual (%)</label><input type="number" step="0.01" class="pd-percentual" value="${valorPercentual}" ${percentualFixo ? 'readonly' : ''} /></div>
-          <div class="campo"><label>Valor Liquidado</label><input type="number" step="0.01" class="pd-liquidado" value="${dadosExistentes && dadosExistentes.valor_liquidado ? dadosExistentes.valor_liquidado : ''}" /></div>
-          <div class="campo"><label>Valor Pago${multiOB ? ' (soma automática)' : ''}</label><input type="number" step="0.01" class="pd-pago" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" ${multiOB ? 'readonly' : ''} /></div>
+          <div class="campo"><label>Percentual (%)</label><input type="text" inputmode="decimal" class="pd-percentual campo-moeda" value="${valorPercentual}" ${percentualFixo ? 'readonly' : ''} /></div>
+          <div class="campo"><label>Valor Liquidado</label><input type="text" inputmode="decimal" class="pd-liquidado campo-moeda" value="${dadosExistentes && dadosExistentes.valor_liquidado ? dadosExistentes.valor_liquidado : ''}" /></div>
+          <div class="campo"><label>Valor Pago${multiOB ? ' (soma automática)' : ''}</label><input type="text" inputmode="decimal" class="pd-pago campo-moeda" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" ${multiOB ? 'readonly' : ''} /></div>
         </div>
         <div class="grade-2">
           <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" class="pd-notaLiquidacaoArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
@@ -939,7 +939,7 @@ const TelaRecibos = (function () {
   function renderTabelaOrdensBancariasParcela_(div) {
     const itens = div._ordensBancarias || [];
     const numeroLe = div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || '';
-    const valorLe = Number(div.querySelector('.pd-liquidado').value) || 0;
+    const valorLe = UI.parseValorBr(div.querySelector('.pd-liquidado').value) || 0;
     const urlLe = div._notaLiquidacaoUrl || '';
     const alvo = div.querySelector('.pd-ob-tabela-wrap');
     alvo.innerHTML = `
@@ -1011,6 +1011,9 @@ const TelaRecibos = (function () {
   async function salvarReciboNovo() {
     const erroEl = document.getElementById('recErro');
     erroEl.classList.add('oculto');
+    // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
+    // recusa texto que nao vira numero em vez de gravar R$ 0,00 sem avisar.
+    if (!UI.validarCamposMoeda()) return;
     const unidadeId = document.getElementById('recUnidade').value;
     if (!unidadeId) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
 
@@ -1021,7 +1024,7 @@ const TelaRecibos = (function () {
       tipo_unidade: document.getElementById('recTipoUnidade').value.trim(),
       objeto: document.getElementById('recObjeto').value.trim(),
       instrumento: document.getElementById('recInstrumento').value.trim(),
-      parcela_contratual: document.getElementById('recParcelaContratual').value,
+      parcela_contratual: UI.parseValorBr(document.getElementById('recParcelaContratual').value),
       fonte: document.getElementById('recFonte').value,
       nota_empenho: document.getElementById('recNotaEmpenho').value.trim(),
       competencia: document.getElementById('recCompetencia').value.trim(),
@@ -1038,9 +1041,9 @@ const TelaRecibos = (function () {
         if (linhas.length < 2) { UI.mostrarErro(erroEl, 'Informe ao menos duas parcelas.'); return; }
         const parcelas = await Promise.all(linhas.map(async div => {
           const parcela = {
-            percentual_parcela_dividida: div.querySelector('.pd-percentual').value,
-            valor_liquidado: div.querySelector('.pd-liquidado').value,
-            valor_pago: div.querySelector('.pd-pago').value,
+            percentual_parcela_dividida: UI.parseValorBr(div.querySelector('.pd-percentual').value),
+            valor_liquidado: UI.parseValorBr(div.querySelector('.pd-liquidado').value),
+            valor_pago: UI.parseValorBr(div.querySelector('.pd-pago').value),
             nota_liquidacao_numero: div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || ''
           };
           const nl = await lerAnexoDoInput_(div.querySelector('.pd-notaLiquidacaoArquivo'));
@@ -1055,8 +1058,8 @@ const TelaRecibos = (function () {
         }));
         await Api.chamar('criarGrupoParcelaDivididaRecibo', { dadosBase, parcelas });
       } else {
-        dadosBase.valor_liquidado = document.getElementById('recValorLiquidado').value;
-        dadosBase.valor_pago = document.getElementById('recValorPago').value;
+        dadosBase.valor_liquidado = UI.parseValorBr(document.getElementById('recValorLiquidado').value);
+        dadosBase.valor_pago = UI.parseValorBr(document.getElementById('recValorPago').value);
         dadosBase.nota_liquidacao_numero = document.getElementById('recNotaLiquidacaoArquivo')._numeroDocumentoLido || '';
         const nl = await lerAnexoDoInput_(document.getElementById('recNotaLiquidacaoArquivo'));
         if (nl) Object.assign(dadosBase, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
@@ -1100,7 +1103,7 @@ const TelaRecibos = (function () {
             </select>
           </div>
           <div class="campo"><label>Instrumento</label><input id="recEdInstrumento" value="${UI.escaparHtml(recibo.instrumento)}" /></div>
-          <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="number" step="0.01" value="${recibo.parcela_contratual}" /></div>
+          <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.parcela_contratual}" /></div>
           <div class="campo"><label>Fonte</label><select id="recEdFonte">${['', 'TESOURO', 'SUS', 'Outra'].map(f => `<option ${recibo.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
           <div class="campo"><label>Nota de Empenho</label>
             <input id="recEdNotaEmpenho" list="listaNeUnidadeEd" value="${UI.escaparHtml(recibo.nota_empenho)}" />
@@ -1116,9 +1119,9 @@ const TelaRecibos = (function () {
         </div>
 
         <div id="blocoParcelaUnicaEd" class="grade-2 ${grupoId ? 'oculto' : ''}">
-          <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="number" step="0.01" value="${recibo.valor_liquidado}" /></div>
+          <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.valor_liquidado}" /></div>
           <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
-          <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="number" step="0.01" value="${recibo.valor_pago}" /></div>
+          <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.valor_pago}" /></div>
           <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recEdOrdemBancariaArquivo" accept=".pdf,image/*" />${recibo.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
         </div>
         <div id="blocoComParcelaDivididaEd" class="${grupoId ? '' : 'oculto'}">
@@ -1205,13 +1208,16 @@ const TelaRecibos = (function () {
   async function salvarReciboEdicao(recibo) {
     const erroEl = document.getElementById('recEdErro');
     erroEl.classList.add('oculto');
+    // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
+    // recusa texto que nao vira numero em vez de gravar R$ 0,00 sem avisar.
+    if (!UI.validarCamposMoeda()) return;
     const dados = {
       oss_snapshot: document.getElementById('recEdOss').value.trim(),
       cnpj_snapshot: document.getElementById('recEdCnpj').value.trim(),
       tipo_unidade: document.getElementById('recEdTipoUnidade').value.trim(),
       objeto: document.getElementById('recEdObjeto').value.trim(),
       instrumento: document.getElementById('recEdInstrumento').value.trim(),
-      parcela_contratual: document.getElementById('recEdParcelaContratual').value,
+      parcela_contratual: UI.parseValorBr(document.getElementById('recEdParcelaContratual').value),
       fonte: document.getElementById('recEdFonte').value,
       nota_empenho: document.getElementById('recEdNotaEmpenho').value.trim(),
       competencia: document.getElementById('recEdCompetencia').value.trim(),
@@ -1232,9 +1238,9 @@ const TelaRecibos = (function () {
         if (linhas.length < 2) { UI.mostrarErro(erroEl, 'Informe ao menos duas parcelas.'); return; }
         const parcelas = await Promise.all(linhas.map(async div => {
           const parcela = {
-            percentual_parcela_dividida: div.querySelector('.pd-percentual').value,
-            valor_liquidado: div.querySelector('.pd-liquidado').value,
-            valor_pago: div.querySelector('.pd-pago').value,
+            percentual_parcela_dividida: UI.parseValorBr(div.querySelector('.pd-percentual').value),
+            valor_liquidado: UI.parseValorBr(div.querySelector('.pd-liquidado').value),
+            valor_pago: UI.parseValorBr(div.querySelector('.pd-pago').value),
             nota_liquidacao_numero: div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || ''
           };
           if (div.dataset.idExistente) parcela.id = div.dataset.idExistente;
@@ -1256,8 +1262,8 @@ const TelaRecibos = (function () {
       } else {
         const inputNl = document.getElementById('recEdNotaLiquidacaoArquivo');
         const inputOb = document.getElementById('recEdOrdemBancariaArquivo');
-        dados.valor_liquidado = document.getElementById('recEdValorLiquidado').value;
-        dados.valor_pago = document.getElementById('recEdValorPago').value;
+        dados.valor_liquidado = UI.parseValorBr(document.getElementById('recEdValorLiquidado').value);
+        dados.valor_pago = UI.parseValorBr(document.getElementById('recEdValorPago').value);
         dados.nota_liquidacao_numero = inputNl._numeroDocumentoLido || '';
         if (inputNl.dataset.removerExistente === '1') dados.removerNotaLiquidacaoArquivo = true;
         if (inputOb.dataset.removerExistente === '1') dados.removerOrdemBancariaArquivo = true;
