@@ -810,8 +810,8 @@ const TelaSof = (function () {
         fonte: linha.querySelector('.linha-fonte-select').value,
         objeto: linha.querySelector('.linha-fonte-objeto').value.trim(),
         codigo_poas: linha.querySelector('.linha-fonte-codigo-poas').value.trim(),
-        parcela_mensal: linha.querySelector('.linha-fonte-parcela').value,
-        cronograma: Array.from(linha.querySelectorAll('.linha-fonte-mes')).map(i => ({ mes: Number(i.dataset.mes), valor: i.value })),
+        parcela_mensal: UI.parseValorBr(linha.querySelector('.linha-fonte-parcela').value),
+        cronograma: Array.from(linha.querySelectorAll('.linha-fonte-mes')).map(i => ({ mes: Number(i.dataset.mes), valor: UI.parseValorBr(i.value) })),
         total_atendido: totalAtendidoAttr === undefined || totalAtendidoAttr === '' ? undefined : Number(totalAtendidoAttr)
       };
     });
@@ -860,7 +860,7 @@ const TelaSof = (function () {
       const mes = i + 1;
       const valorMes = porMes[mes];
       const classeStatus = (temAtendido && valorMes) ? ` mes-${statusPorMes[mes]}` : '';
-      return `<div class="campo linha-fonte-mes-campo${classeStatus}"><label>${nome}</label><input class="linha-fonte-mes" type="number" step="0.01" data-mes="${mes}" value="${valorMes || ''}" /></div>`;
+      return `<div class="campo linha-fonte-mes-campo${classeStatus}"><label>${nome}</label><input class="linha-fonte-mes campo-moeda" type="text" inputmode="decimal" data-mes="${mes}" value="${valorMes || ''}" /></div>`;
     }).join('');
 
     return `
@@ -875,7 +875,7 @@ const TelaSof = (function () {
           </div>
           <div class="campo"><label>Objeto</label><input class="linha-fonte-objeto" list="listaObjetosSof" value="${UI.escaparHtml(item.objeto || '')}" placeholder="Ex.: CONTRATO DE GESTÃO (TES)" /></div>
           <div class="campo"><label>Código POAS</label><input class="linha-fonte-codigo-poas" value="${UI.escaparHtml(item.codigo_poas || '')}" /></div>
-          <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela" type="number" step="0.01" value="${item.parcela_mensal || ''}" /></div>
+          <div class="campo"><label>Parcela Mensal</label><input class="linha-fonte-parcela campo-moeda" type="text" inputmode="decimal" value="${item.parcela_mensal || ''}" /></div>
           <div class="campo"><label>Total Solicitado</label><strong class="linha-fonte-total-exibicao">R$ 0,00</strong></div>
           ${temAtendido ? `<div class="campo"><label>Total Atendido</label><strong class="linha-fonte-total-atendido-exibicao">${UI.formatarMoeda(item.total_atendido)}</strong></div>` : ''}
         </div>
@@ -885,7 +885,7 @@ const TelaSof = (function () {
   }
 
   function atualizarTotalLinhaFonte_(linhaEl) {
-    const soma = Array.from(linhaEl.querySelectorAll('.linha-fonte-mes')).reduce((s, i) => s + (Number(i.value) || 0), 0);
+    const soma = Array.from(linhaEl.querySelectorAll('.linha-fonte-mes')).reduce((s, i) => s + (UI.parseValorBr(i.value) || 0), 0);
     const alvo = linhaEl.querySelector('.linha-fonte-total-exibicao');
     if (alvo) alvo.textContent = UI.formatarMoeda(soma);
     return soma;
@@ -1043,11 +1043,15 @@ const TelaSof = (function () {
     const numero = numeroEl.value.trim();
     const fonte = document.getElementById('neFonte').value;
     const objeto = document.getElementById('neObjeto').value;
-    const valor = document.getElementById('neValor').value;
+    // valorBruto x valor: a presença do campo é aferida pelo texto digitado
+    // (um "0" conta como preenchido), mas o que vai pro backend é o número já
+    // normalizado do formato BR - ver UI.parseValorBr em js/app.js.
+    const valorBruto = document.getElementById('neValor').value;
+    const valor = UI.parseValorBr(valorBruto);
     const arquivoInput = document.getElementById('neArquivo');
     const arquivo = arquivoInput.files[0];
 
-    const algumPreenchido = numero || fonte || valor || arquivo;
+    const algumPreenchido = numero || fonte || valorBruto || arquivo;
     if (!algumPreenchido) return null;
 
     if (!numero) throw new Error('Informe o número da Nota de Empenho (ou limpe os outros campos da NE pra não adicionar nenhuma).');
@@ -1081,6 +1085,9 @@ const TelaSof = (function () {
     opcoes = opcoes || {};
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
+    // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
+    // recusa texto que nao vira numero em vez de gravar R$ 0,00 sem avisar.
+    if (!UI.validarCamposMoeda()) return;
     const dados = coletarDadosFormulario();
     if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
     const mensagemObrigatorio = validarCamposObrigatorios();
@@ -1303,7 +1310,7 @@ const TelaSof = (function () {
       </div>
       <div class="grade-3" id="neCamposManuais">
         <div class="campo"><label>Objeto</label><select id="neObjeto"><option value="">Selecione a fonte primeiro</option></select></div>
-        <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="number" step="0.01" /></div>
+        <div class="campo"><label>Valor Atendido (empenho)</label><input id="neValor" type="text" inputmode="decimal" class="campo-moeda" /></div>
       </div>
       <div id="neMesesDetectados" class="oculto"></div>
       <p id="neAvisoReferencia" class="aviso-divergencia oculto"></p>
@@ -1661,7 +1668,7 @@ const TelaSof = (function () {
     return Array.from(document.querySelectorAll('#seiManutencaoContainer .linha-fonte')).map(linha => ({
       codigo: linha.querySelector('.linha-manutencao-codigo').value.trim(),
       elemento: linha.querySelector('.linha-manutencao-elemento').value.trim(),
-      valor: linha.querySelector('.linha-manutencao-valor').value
+      valor: UI.parseValorBr(linha.querySelector('.linha-manutencao-valor').value)
     }));
   }
 
@@ -1670,7 +1677,7 @@ const TelaSof = (function () {
       <div class="linha-fonte" data-indice="${indice}">
         <div class="campo"><label>Código</label><input class="linha-manutencao-codigo" value="${UI.escaparHtml(item.codigo || '')}" /></div>
         <div class="campo"><label>Elemento</label><input class="linha-manutencao-elemento" value="${UI.escaparHtml(item.elemento || '')}" /></div>
-        <div class="campo"><label>Valor</label><input class="linha-manutencao-valor" type="number" step="0.01" value="${item.valor || ''}" /></div>
+        <div class="campo"><label>Valor</label><input class="linha-manutencao-valor campo-moeda" type="text" inputmode="decimal" value="${item.valor || ''}" /></div>
         <button type="button" class="botao-icone linha-fonte-remover linha-manutencao-remover" title="Remover linha">&times;</button>
       </div>`;
   }

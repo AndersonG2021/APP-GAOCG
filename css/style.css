@@ -136,6 +136,12 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .campo input.destaque-repeticao, .campo select.destaque-repeticao, .campo textarea.destaque-repeticao {
   border-color: var(--amarelo); background: var(--amarelo-claro);
 }
+/* Campo monetário com texto que não vira número (ver UI.parseValorBr, js/app.js).
+   Os campos de valor são type="text" + inputmode="decimal" pra aceitar o formato
+   brasileiro ("1.234,56"), que o type="number" rejeitava silenciosamente. */
+.campo input.campo-invalido {
+  border-color: var(--vermelho); background: var(--vermelho-claro);
+}
 .campo .ajuda { font-size: 11.5px; color: var(--cinza-500); margin-top: 3px; }
 .campo .erro-campo { font-size: 11.5px; color: var(--vermelho); margin-top: 3px; }
 @keyframes piscarErro { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }

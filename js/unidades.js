@@ -253,7 +253,7 @@ const TelaUnidades = (function () {
     return Array.from(document.querySelectorAll('#tasContainer .linha-ta')).map(linha => ({
       objeto_ta: linha.querySelector('.linha-ta-objeto').value,
       numero_ta: linha.querySelector('.linha-ta-numero').value,
-      valor_ta: linha.querySelector('.linha-ta-valor').value,
+      valor_ta: UI.parseValorBr(linha.querySelector('.linha-ta-valor').value),
       tipo_pagamento: linha.querySelector('.linha-ta-tipo-pagamento').value,
       data_vencimento: linha.querySelector('.linha-ta-data-vencimento').value
     }));
@@ -274,7 +274,7 @@ const TelaUnidades = (function () {
         <div class="linha-ta-campos">
           <div class="campo"><label>Objeto do T.A.</label><input class="linha-ta-objeto" value="${UI.escaparHtml(item.objeto_ta || '')}" placeholder="Ex.: T.E.A. ou Aquisição de Equipamentos" /></div>
           <div class="campo"><label>Nº do T.A.</label><input class="linha-ta-numero" value="${UI.escaparHtml(item.numero_ta || '')}" placeholder="Ex.: 1º" /></div>
-          <div class="campo"><label>Valor do T.A.</label><input class="linha-ta-valor" type="number" step="0.01" value="${item.valor_ta || ''}" /></div>
+          <div class="campo"><label>Valor do T.A.</label><input class="linha-ta-valor campo-moeda" type="text" inputmode="decimal" value="${item.valor_ta || ''}" /></div>
         </div>
         <div class="linha-ta-pagamento">
           <div class="campo"><label>Tipo de pagamento</label>
@@ -326,8 +326,8 @@ const TelaUnidades = (function () {
           <div class="campo"><label>OSS</label><input id="uOss" value="${UI.escaparHtml(unidade ? unidade.oss : '')}" /></div>
           <div class="campo"><label>CNPJ *</label><input id="uCnpj" value="${UI.escaparHtml(unidade ? unidade.cnpj : '')}" required placeholder="00.000.000/0000-00" /></div>
           <div class="campo"><label>Contrato de Gestão *</label><input id="uContrato" value="${UI.escaparHtml(unidade ? unidade.contrato_gestao : '')}" required /></div>
-          <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
-          <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="number" step="0.01" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
+          <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
+          <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
           <div class="campo"><label>Ação</label><input id="uAcao" value="${UI.escaparHtml(unidade ? unidade.acao : '')}" /></div>
           <div class="campo"><label>Subação</label><input id="uSubacao" value="${UI.escaparHtml(unidade ? unidade.subacao : '')}" /></div>
           <div class="campo"><label>G.D.</label><input id="uGd" value="${UI.escaparHtml(unidade ? unidade.gd : '')}" /></div>
@@ -356,14 +356,17 @@ const TelaUnidades = (function () {
     document.getElementById('btnSalvarUnidade').addEventListener('click', async () => {
       const erroEl = document.getElementById('uErro');
       erroEl.classList.add('oculto');
+      // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
+      // recusa texto que nao vira numero em vez de gravar R$ 0,00 sem avisar.
+      if (!UI.validarCamposMoeda()) return;
       const dados = {
         nome: document.getElementById('uNome').value.trim(),
         tipo: document.getElementById('uTipo').value,
         oss: document.getElementById('uOss').value.trim(),
         cnpj: document.getElementById('uCnpj').value.trim(),
         contrato_gestao: document.getElementById('uContrato').value.trim(),
-        valor_contrato_gestao: document.getElementById('uValorContratoGestaoTesouro').value,
-        valor_contrato_gestao_sus: document.getElementById('uValorContratoGestaoSus').value,
+        valor_contrato_gestao: UI.parseValorBr(document.getElementById('uValorContratoGestaoTesouro').value),
+        valor_contrato_gestao_sus: UI.parseValorBr(document.getElementById('uValorContratoGestaoSus').value),
         acao: document.getElementById('uAcao').value.trim(),
         subacao: document.getElementById('uSubacao').value.trim(),
         gd: document.getElementById('uGd').value.trim(),

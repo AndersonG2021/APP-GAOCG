@@ -555,9 +555,25 @@ function toBool_(value) {
   return s === 'VERDADEIRO' || s === 'TRUE';
 }
 
+/**
+ * `.replace(',', '.')` trocava só a PRIMEIRA vírgula, então "1.234,56" virava
+ * "1.234.56" -> NaN -> 0: um valor em formato brasileiro era zerado em silêncio
+ * (sessão 2026-08-08). O frontend já normaliza o que o usuário digita
+ * (UI.parseValorBr, js/app.js), mas a string BR ainda pode chegar aqui por
+ * outros caminhos - importação de histórico (migrarRecibosHistorico) ou célula
+ * editada à mão na planilha, que é texto porque as colunas não numéricas têm
+ * formato "@" (aplicarFormatoTexto_).
+ *
+ * Regra: havendo vírgula, ela é o decimal e os pontos são separador de milhar.
+ * Sem vírgula, nada muda - "1.000" lido da planilha continua 1, porque nesse
+ * caso o ponto veio de um número de verdade, não de formatação.
+ */
 function toNumber_(value) {
   if (value === '' || value === null || value === undefined) return 0;
-  var n = Number(String(value).replace(',', '.'));
+  if (typeof value === 'number') return isNaN(value) ? 0 : value;
+  var s = String(value).trim();
+  if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(/,/g, '.');
+  var n = Number(s);
   return isNaN(n) ? 0 : n;
 }
 
