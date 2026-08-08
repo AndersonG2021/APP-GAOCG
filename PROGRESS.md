@@ -1679,8 +1679,8 @@ anterior (sem OB anexada) provavelmente foi outro problema de deploy
 **Correção:** `backend/Contadores.gs` - `RecibosOrdensBancarias: 'ROB'`
 adicionado a `PREFIXOS_ID`.
 
-**Passo manual pendente:** colar `Contadores.gs` atualizado no editor do
-Apps Script e reimplantar (Nova versão). Sem coluna/aba nova.
+**Passo manual concluído (confirmado pelo usuário, sessão 2026-08-08):** `Contadores.gs`
+colado no editor do Apps Script e reimplantado (Nova versão).
 
 **Limpeza necessária:** os grupos de teste já criados com a parcela de 70%
 órfã (sem a de 30%) continuam na planilha - precisam ser apagados
@@ -1781,10 +1781,14 @@ do lookbehind `(?<!PREÇO\s)` em `REGEX_PRECO_TOTAL_NE_DOCUMENTO` — válido no
 V8 do Apps Script, não no JScript (ES3). Recompilado com o lookbehind
 neutralizado: OK. **Nada foi testado em execução real** — ver passo manual.
 
-**Passo manual pendente:** colar no editor do Apps Script e reimplantar (Nova
-versão) os **10** arquivos alterados: `Utils.gs`, `Sof.gs`, `Dashboard.gs`,
+**Passo manual concluído (confirmado pelo usuário, sessão 2026-08-08):** os
+**10** arquivos alterados (`Utils.gs`, `Sof.gs`, `Dashboard.gs`,
 `NotasEmpenho.gs`, `Recibos.gs`, `Unidades.gs`, `Versoes.gs`, `Auth.gs`,
-`ListasPersonalizadas.gs`, `Relatorios.gs`. Nenhuma coluna ou aba nova.
+`ListasPersonalizadas.gs`, `Relatorios.gs`) foram colados no editor do Apps
+Script e reimplantados (Nova versão). **Ainda não testado em uso real** — ver
+lista de pontos a conferir na seção acima (ex.: card "Total mensal
+comprometido" com C.G. SUS/T.A.s, telas não travando mais acima de
+~120-150 linhas nas abas largas).
 
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
