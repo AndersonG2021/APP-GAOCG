@@ -1790,6 +1790,81 @@ lista de pontos a conferir na seção acima (ex.: card "Total mensal
 comprometido" com C.G. SUS/T.A.s, telas não travando mais acima de
 ~120-150 linhas nas abas largas).
 
+## BUG REAL corrigido: campos de valor rejeitavam o formato brasileiro (sessão 2026-08-08)
+
+**Pedido:** "teste todos os botões e campos editáveis, colocando entradas
+estranhas tentando quebrar o app". Fuzzing dirigido, com harness no navegador.
+
+**Bug encontrado (o mais grave até agora em valores):** os **18** campos
+monetários do app eram `type="number"`, que por especificação HTML só aceita
+ponto como separador decimal - mas a tela EXIBE tudo em pt-BR via
+`formatarMoeda` ("R$ 1.234,56"). **O app mostrava um formato que não aceitava de
+volta.** Confirmado com digitação real (tecla por tecla, locale pt-BR):
+
+| Usuário digita | Antes salvava | Aparecia |
+|---|---|---|
+| `1.000` (mil reais) | `1` | R$ 1,00 (**1000x menor**) |
+| `12.500` | `12.5` | R$ 12,50 (**1000x menor**) |
+| `10,50` | `0` | R$ 0,00 |
+| `1.234,56` | `0` | R$ 0,00 |
+
+O agravante: nos dois modos o campo reportava `checkValidity() === true` e
+`badInput === false` - se declarava **válido e vazio**, então nenhuma validação
+HTML5 pegava. E só **1 dos 18** campos tinha `required` (`reforcoValor`), então
+parcela contratual, valor liquidado e valor pago gravavam em silêncio.
+
+**Causa raiz secundária, no backend:** `toNumber_` (`Utils.gs`) usava
+`.replace(',', '.')`, que troca só a PRIMEIRA vírgula - `toNumber_("1.234,56")`
+virava `Number("1.234.56")` = NaN = **0**. Mesma classe de "zero mudo" já
+registrada neste PROGRESS (`toNumber_` de array = NaN = 0, sessão de
+performance). Alcançável por importação de histórico e por célula editada à mão
+na planilha (colunas não numéricas são texto por causa de `aplicarFormatoTexto_`).
+
+**Correção:**
+- `UI.parseValorBr` (`js/app.js`): parser com desambiguação - havendo vírgula,
+  ela é o decimal e os pontos são milhar; sem vírgula, ponto seguido de
+  exatamente 3 dígitos é milhar (`1.000` -> 1000), qualquer outro ponto é
+  decimal (`1234.56` -> 1234.56, o formato antigo continua valendo). Devolve
+  `null` (não 0) em entrada inválida, pra quem chama poder recusar.
+- `UI.validarCamposMoeda` (`js/app.js`): portão único antes de todo Salvar -
+  recusa, marca o campo em vermelho e diz qual é, em vez de gravar R$ 0,00.
+  Ligado em `salvarSof`, `salvarReciboNovo`, `salvarReciboEdicao` e no
+  `btnSalvarUnidade`.
+- Os 18 campos viraram `type="text" inputmode="decimal" class="campo-moeda"`
+  (`inputmode` mantém o teclado numérico no celular).
+- `backend/Utils.gs`: `toNumber_` trata a vírgula como decimal e os pontos como
+  milhar; sem vírgula nada muda (um "1.000" lido da planilha continua 1, porque
+  aí o ponto veio de número de verdade, não de formatação).
+- `normalizarOpcoesFiltro_` (`js/app.js`): descarta item nulo antes do `.map`.
+  Um único elemento nulo fazia `o.valor` lançar dentro do `carregar()` da tela,
+  virava unhandled rejection e a barra de filtros **derrubava a lista da aba
+  inteira, sem mensagem**. NÃO é alcançável pelo backend atual
+  (`sheetToObjects_` sempre devolve todas as colunas), foi achado com mock -
+  blindado porque custa uma linha.
+
+**Verificação feita (sem tocar na planilha):** stub de `Api.chamar` com dados
+sintéticos hostis gerados a partir do `HEADERS` real de cada aba (`<script>`,
+`"><img onerror=...`, unicode RTL, strings de 3000 chars, `1e308`, nulos,
+colunas faltando) + sessão sintética via `Auth.salvarSessao`. Resultado: **8/8
+abas renderizaram, 0 erros, 0 script injetado, 0 `onerror` no DOM** - o payload
+aparece como texto literal (escaping sólido). O portão foi testado ponta a
+ponta: com lixo no campo, **zero chamadas ao backend**; com `1.234,56`,
+`criarUnidade` dispara normal. `parseValorBr`: 15/15 casos.
+
+**Descartado em vez de reportado** (verificado, não era bug): injeção de fórmula
+do Sheets (`=1+1`) é neutralizada pelo formato `'@'` de `aplicarFormatoTexto_`;
+`1e308` só entra por atribuição programática, o navegador bloqueia na digitação;
+`escaparHtml` está completo (`& < > " '`).
+
+**Passo manual concluído (confirmado pelo usuário, sessão 2026-08-08):**
+`Utils.gs` colado no editor do Apps Script e reimplantado.
+
+**Ainda não testado:** salvar de verdade um Recibo/SOF/Unidade digitando valor em
+formato BR e conferir na planilha o número gravado; o cronograma de 12 meses da
+SOF (também virou `.campo-moeda`) somando certo; a soma automática do valor pago
+na parcela de 70% com múltiplas Ordens Bancárias; e os fluxos que exigem backend
+real (OCR de anexo, documento SEI, relatórios, edição simultânea).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
