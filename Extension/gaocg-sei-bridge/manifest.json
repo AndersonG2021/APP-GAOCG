@@ -3,7 +3,7 @@
   "name": "GAOCG SEI Bridge",
   "short_name": "GAOCG-SEI",
   "description": "Envia dados criados no app GAOCG (SOF, Notas de Empenho, Recibos) diretamente para um processo aberto no SEI.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

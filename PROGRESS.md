@@ -2448,6 +2448,42 @@ limita: o pendente só nasce de um envio explícito do GAOCG, é consumido uma
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## 7º teste: pesquisa na aba atual + "listado" não é "aberto" (v0.12.0)
+
+**Relato:** sem nenhum processo aberto (tela "Controle de Processos"), a
+extensão dizia que não havia processo aberto e abria aba nova - mas a barra
+"Pesquisar..." do canto superior é a mesma em qualquer tela do SEI.
+
+### 1. Reaproveita a aba do SEI já aberta
+
+`agendarEnvioEAbrirPesquisa_` agora, antes de criar aba, procura uma aba do SEI
+existente, traz para frente e manda `PESQUISAR_PROCESSO` para o content script
+dela - que pesquisa ali mesmo. Aba nova virou fallback (nenhuma aba do SEI
+aberta, ou o content script não respondeu).
+
+Consequência boa: nesse caminho o `processoParaAbrir` nem chega a ser gravado.
+Ele só existe para o fluxo da aba nova, onde a pesquisa precisa esperar a
+próxima carga de página.
+
+**Seletor do campo de pesquisa:** a tela enviada mostrou o placeholder
+"Pesquisar...", então entrou `input[placeholder*="Pesquisar" i]` como primeiro
+candidato - o mais confiável da lista, agora baseado na tela real e não em
+chute. Os ids antigos continuam como alternativa.
+
+### 2. Bug sutil: "listado" não é "aberto"
+
+A tela "Controle de Processos" **lista** números de processo. `conferirProcesso_`
+varre o texto da página, então se o processo alvo estivesse nessa lista a aba
+seria dada como válida - mas ali não há árvore nem botão "Incluir Documento", e
+a criação quebraria logo depois.
+
+`acharAbaDoProcesso_` passou a **exigir** `ehPaginaDeProcesso` (URL com
+`procedimento_trabalhar`), não só a presença do número. Achar o número numa
+listagem agora cai corretamente no fluxo de pesquisa.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
