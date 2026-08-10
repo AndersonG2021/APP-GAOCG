@@ -179,13 +179,18 @@ function aplicarViaCkeditor_(html) {
           altura = instancia.ui.contentsElement.$.offsetHeight || 0;
         }
       } catch (e) { /* instância ainda montando */ }
-      return { nome: nome, readOnly: !!instancia.readOnly, altura: altura };
+      return { nome: nome, readOnly: !!instancia.readOnly, altura: altura, status: instancia.status };
     });
     console.log("[GAOCG SEI Bridge] instâncias CKEditor nesta página:", info);
     if (!info.length) return { ok: false, motivo: "nenhuma instância de CKEditor" };
 
-    const editaveis = info.filter(i => !i.readOnly);
-    const candidatas = editaveis.length ? editaveis : info;
+    // Instância ainda montando ("loaded"/"unloaded") descarta o setData quando
+    // termina de carregar o modelo - por isso só as prontas contam.
+    const prontas = info.filter(i => i.status === "ready");
+    if (!prontas.length) return { ok: false, motivo: "CKEditor ainda não está pronto" };
+
+    const editaveis = prontas.filter(i => !i.readOnly);
+    const candidatas = editaveis.length ? editaveis : prontas;
     const escolhida =
       candidatas.find(i => /principal|conteudo|conteúdo|corpo|texto/i.test(i.nome)) ||
       candidatas.slice().sort((a, b) => b.altura - a.altura)[0];

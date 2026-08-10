@@ -819,26 +819,84 @@ function numeroSofNoModelo_(corpo) {
   return noCabecalho ? noCabecalho[1].replace(/\s/g, "") : null;
 }
 
-async function aplicarConteudo_(corpo, pendente) {
-  // Lê o número ANTES de substituir - depois o modelo do SEI já era. Só faz
-  // sentido procurar quando existe modelo; num editor vazio não há o que ler.
+/**
+ * Espera o conteúdo do editor parar de mudar.
+ *
+ * BUG do 8º teste (2026-08-10): o conteúdo do app não colava e o modelo do SEI
+ * permanecia. Causa: o corpo do editor existe no DOM ANTES de o CKEditor
+ * terminar de carregar o modelo do documento. A extensão injetava nesse
+ * intervalo e, logo depois, o modelo era carregado POR CIMA - resultado
+ * idêntico a "não fez nada".
+ *
+ * Isso não aparecia até a v0.6.0 porque havia a barra de confirmação: o tempo
+ * até o usuário clicar em "Substituir" já servia de espera. Ao remover a
+ * pergunta (v0.11.0), a corrida ficou exposta.
+ */
+async function aguardarEditorEstabilizar_(msEstavel, msLimite) {
+  const inicio = Date.now();
+  let anterior = null;
+  let desde = Date.now();
+  while (Date.now() - inicio < (msLimite || 20000)) {
+    const corpo = corpoDoEditor_();
+    const atual = corpo ? (corpo.innerHTML || "").length : -1;
+    if (atual !== anterior) {
+      anterior = atual;
+      desde = Date.now();
+    } else if (atual >= 0 && Date.now() - desde >= (msEstavel || 1500)) {
+      return true;
+    }
+    await esperar_(300);
+  }
+  return false;
+}
+
+/** O que está no editor se parece com o que tentamos colocar? */
+function conteudoConfere_(html) {
+  const corpo = corpoDoEditor_();
+  if (!corpo) return false;
+  const atual = (corpo.innerHTML || "").length;
+  // Metade do tamanho é folga suficiente: o CKEditor reescreve a marcação
+  // (remove atributos, normaliza tags), mas não corta o documento pela metade.
+  return atual >= Math.floor(html.length * 0.5);
+}
+
+async function aplicarConteudo_(corpoInicial, pendente) {
+  // 1. Deixa o modelo do SEI terminar de carregar antes de qualquer coisa.
+  await aguardarEditorEstabilizar_(1500, 20000);
+  const corpo = corpoDoEditor_() || corpoInicial;
+
+  // 2. Lê o número do modelo (agora que ele existe de verdade) e troca no HTML.
   const numeroSei = editorEstaVazio_(corpo) ? null : numeroSofNoModelo_(corpo);
+  let html = pendente.html;
   if (numeroSei && pendente.marcadorNumero && pendente.marcadorNumero !== numeroSei) {
-    // Troca o número que veio do app pelo que o SEI acabou de gerar, para o
-    // documento sair com a numeração oficial do SEI.
-    pendente.html = pendente.html.split(pendente.marcadorNumero).join(numeroSei);
+    html = html.split(pendente.marcadorNumero).join(numeroSei);
   }
 
-  const resultado = await pedirInjecaoNoMainWorld_(pendente.html);
-  let detalhe;
-  if (resultado.ok) {
-    detalhe = " (seção " + (resultado.escolhida || "?") + ")";
-  } else {
-    detalhe = " (modo DOM)";
-    corpo.innerHTML = pendente.html;
-    corpo.dispatchEvent(new Event("input", { bubbles: true }));
-    corpo.dispatchEvent(new Event("change", { bubbles: true }));
+  // 3. Injeta e CONFERE. Se o modelo ainda vier por cima, tenta de novo - sem
+  //    a conferência, a extensão avisava "inserido" com o modelo na tela.
+  let resultado = { ok: false };
+  let via = "dom";
+  let colou = false;
+  for (let tentativa = 1; tentativa <= 3 && !colou; tentativa++) {
+    resultado = await pedirInjecaoNoMainWorld_(html);
+    via = resultado.ok ? "api" : "dom";
+    if (!resultado.ok) {
+      const alvo = corpoDoEditor_() || corpo;
+      alvo.innerHTML = html;
+      alvo.dispatchEvent(new Event("input", { bubbles: true }));
+      alvo.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await esperar_(1200);
+    colou = conteudoConfere_(html);
+    console.log("[GAOCG SEI Bridge] tentativa " + tentativa + " via " + via + " - colou: " + colou);
   }
+
+  if (!colou) {
+    avisarNaTela_("GAOCG: não consegui colar o conteúdo da SOF no editor. Use \"Salvar e gerar documento SEI\" no app e cole manualmente.");
+    return;
+  }
+
+  const detalhe = via === "api" ? " (seção " + (resultado.escolhida || "?") + ")" : " (modo DOM)";
 
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
 
