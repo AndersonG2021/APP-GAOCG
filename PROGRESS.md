@@ -2523,6 +2523,45 @@ essa leitura mais confiável.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## 9º teste: FLUXO COMPLETO FUNCIONANDO + limpeza de erros de console (v0.13.1)
+
+**Envio da SOF ao SEI validado de ponta a ponta, duas vezes seguidas.** Restaram
+erros no console - nenhum impedia o funcionamento, mas os dois tinham causa real
+na extensão.
+
+### 1. `TypeError: Cannot read properties of null (reading 'executar')`
+
+Erro do **código do próprio SEI** (`alterarNivelAcesso`, em `controlador.php`),
+disparado pela nossa automação: `marcarOpcaoPorRotulo_` acionava o mesmo radio
+**três vezes** - `checked = true`, `.click()` (que já emite `change` nativamente)
+e ainda `dispararChange_`. O handler do SEI rodava repetido e, na segunda
+execução, encontrava um elemento que a primeira ainda não tinha terminado de
+montar.
+
+**Correção:** um único disparo. E, se o campo já estiver marcado - caso de
+"Restrito" e "Nenhum", que são o padrão da tela -, não mexe: reprocessar uma
+mudança que não houve é o que causava o erro.
+
+### 2. "message channel closed before a response was received" (22x e 15x)
+
+Ruído da própria extensão: a página navega (o clique em "Salvar") e mata o
+content script enquanto uma resposta assíncrona ainda estava pendente. O
+trabalho já tinha terminado - por isso tudo funcionava -, mas o console dava a
+impressão de falha.
+
+**Correções:**
+- o handler de `PREENCHER_DOCUMENTO` responde **uma única vez** e no máximo em
+  10s (timeout), então o canal nunca fica aberto esperando algo que não virá;
+- novo `paginaSaindo_` (via `pagehide`/`beforeunload`): com a página saindo,
+  `pedirInjecaoNoMainWorld_` nem tenta a mensagem e cai direto no modo DOM.
+
+**Honestidade sobre esta segunda correção:** ela é defensiva. A causa descrita
+(navegação com mensagem em voo) explica bem o sintoma, mas não foi reproduzida
+de forma isolada - se os erros persistirem, o diagnóstico precisa ser refeito.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

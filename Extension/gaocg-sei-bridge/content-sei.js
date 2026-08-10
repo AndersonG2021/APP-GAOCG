@@ -469,9 +469,20 @@ function marcarOpcaoPorRotulo_(rotulo) {
     if (!texto && entrada.parentElement) texto = textoNormalizado_(entrada.parentElement);
     if (!texto && entrada.nextElementSibling) texto = textoNormalizado_(entrada.nextElementSibling);
     if (texto === alvo) {
-      entrada.checked = true;
-      entrada.click();               // o SEI reage ao clique, não só ao change
-      dispararChange_(entrada);
+      // Já marcado (é o caso de "Restrito" e "Nenhum", que são o padrão da
+      // tela): não mexe. Disparar o evento de novo faria o SEI reprocessar uma
+      // mudança que não houve.
+      if (entrada.checked) return true;
+
+      // Um ÚNICO disparo: o click nativo já marca o campo e emite `change`.
+      //
+      // Erro corrigido no 9º teste (2026-08-10): antes eram três gatilhos
+      // seguidos (checked = true, click() e dispararChange_), o que fazia o
+      // `alterarNivelAcesso` do próprio SEI rodar repetidas vezes e estourar
+      // "Cannot read properties of null (reading 'executar')" no console - a
+      // segunda execução encontrava um elemento que a primeira ainda não tinha
+      // terminado de montar.
+      entrada.click();
       return true;
     }
   }
@@ -501,6 +512,17 @@ const CHAVE_PROCESSO_ABRIR_ = "processoParaAbrir";
 const CHAVE_ENVIO_PENDENTE_ = "envioPendente";
 /** Evita que duas abas retomem o mesmo envio ao mesmo tempo. */
 let retomandoEnvio_ = false;
+
+/**
+ * A página está saindo (navegação/fechamento)?
+ *
+ * Mandar mensagem ao background nesse momento gera o ruído
+ * "A listener indicated an asynchronous response by returning true, but the
+ * message channel closed before a response was received": o canal morre junto
+ * com a página, antes da resposta chegar. Não quebra nada - o trabalho já
+ * terminou -, mas polui o console e faz parecer que algo falhou.
+ */
+let paginaSaindo_ = false;
 
 /** Só dígitos - a comparação ignora pontuação/formatação divergente. */
 function digitos_(texto) {
@@ -938,6 +960,9 @@ function salvarNoEditor_() {
 
 /** Devolve { ok, escolhida } - `escolhida` é o nome da seção do SEI que recebeu o conteúdo. */
 function pedirInjecaoNoMainWorld_(html) {
+  // Com a página saindo, a resposta nunca chegaria: cai direto no modo DOM em
+  // vez de deixar um canal de mensagem órfão (ver paginaSaindo_).
+  if (paginaSaindo_) return Promise.resolve({ ok: false });
   try {
     return chrome.runtime
       .sendMessage({ type: "INJETAR_CKEDITOR", html: html })
@@ -997,9 +1022,24 @@ if (window.top === window) {
     }
 
     if (message.type !== "PREENCHER_DOCUMENTO") return false;
+
+    // Responde UMA vez, e no máximo em 10s. O preenchimento pode terminar com
+    // um clique em "Salvar", que navega a página e mata o content script - se a
+    // resposta ainda estivesse pendente, o canal fecharia sem resposta e o
+    // Chrome registraria o erro "message channel closed" (visto no 9º teste).
+    let respondido = false;
+    const responder = resultado => {
+      if (respondido) return;
+      respondido = true;
+      try { sendResponse(resultado); } catch (e) { /* canal já fechou */ }
+    };
+    const limite = setTimeout(
+      () => responder({ ok: true, parcial: true, aviso: "Preenchimento seguindo no SEI." }),
+      10000
+    );
     preencherDocumento(message.documento)
-      .then(resultado => sendResponse(resultado))
-      .catch(erro => sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }));
+      .then(resultado => { clearTimeout(limite); responder(resultado); })
+      .catch(erro => { clearTimeout(limite); responder({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }); });
     return true; // resposta assíncrona
   });
 
@@ -1010,6 +1050,12 @@ if (window.top === window) {
   // E se havia um envio esperando o processo abrir, ele é retomado sozinho aqui
   // - sem exigir um segundo clique no GAOCG.
   retomarEnvioPendente_();
+
+  // Marca que a página está saindo, para não abrir mensagem que morreria no
+  // meio do caminho (ver paginaSaindo_).
+  for (const evento of ["pagehide", "beforeunload"]) {
+    window.addEventListener(evento, () => { paginaSaindo_ = true; });
+  }
 
   // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
   // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.
