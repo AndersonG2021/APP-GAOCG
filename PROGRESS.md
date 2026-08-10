@@ -2402,6 +2402,52 @@ copia manualmente se quiser.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## 6º teste: seleção do tipo por teclado, sem confirmação e com salvamento (v0.11.0)
+
+Confirmado funcionando: a troca do número da SOF pelo que o SEI gera. Dois
+ajustes restantes.
+
+### 1. O filtro era digitado, mas o item não era selecionado
+
+O SEI usa **autocomplete do jQuery UI**. Um `.click()` no item praticamente
+nunca seleciona: o widget age no `mousedown`/`menuselect`, não no `click`.
+
+**Correção:** passou a usar o caminho nativo do componente - **ArrowDown +
+Enter** no próprio campo de filtro. Detalhe que faz isso funcionar: o construtor
+de `KeyboardEvent` não permite definir `keyCode`/`which` (são getters
+derivados), e é exatamente por eles que o jQuery normaliza a tecla - sem
+`Object.defineProperty` para forjá-los, o handler da página recebe keyCode 0 e
+ignora o evento. Novo helper `teclar_`.
+
+Se o teclado não avançar, cai para clique com a **sequência completa de mouse**
+(`mouseover`→`mousedown`→`mouseup`→`click`, novo `clicarComoUsuario_`), e a
+escolha do item passou a pegar o elemento **mais profundo** que contém o rótulo
+- os ancestrais também "contêm" o texto e clicar neles não faz nada.
+
+### 2. Substituição automática e salvamento
+
+Pedido explícito do usuário: substituir sem perguntar e salvar sozinho ("posso
+depois reabrir e editar sem problema").
+
+A barra de confirmação da v0.4.0 foi **removida** (junto com o código, para não
+ficar morto). Justificativa registrada: ela existia porque o DOM não distingue
+"modelo em branco" de "documento preenchido" - mas como o tipo "SOF" SEMPRE abre
+com o modelo do SEI, a pergunta aparecia em 100% dos envios e virou atrito puro.
+
+Novo `salvarNoEditor_` clica no Salvar do editor (vários candidatos: `#cmdSalvar`,
+`input[value=Salvar]`, `a[title=Salvar]`, `.cke_button__save`). Há uma pausa de
+800ms antes: o CKEditor precisa terminar de processar o `setData`, senão o
+salvamento pega o conteúdo antigo. Não achando o botão, o aviso na tela **pede o
+salvamento manual** em vez de dar a impressão de que ficou tudo pronto.
+
+**Risco aceito, registrado:** sem a confirmação, um pendente não consumido pode,
+em tese, sobrescrever um documento aberto dentro da janela de 15 min. O que
+limita: o pendente só nasce de um envio explícito do GAOCG, é consumido uma
+única vez, expira em 15 min, e o documento criado **nunca é assinado**.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
