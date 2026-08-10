@@ -2184,6 +2184,26 @@ foi usado ("modo DOM" = fallback).
 **Passo manual:** recarregar a extensão em `chrome://extensions`. ID não muda,
 nenhum `.gs` alterado.
 
+### v0.5.1 - Temporal Dead Zone derrubava o content script inteiro
+
+A v0.5.0 quebrou com `Cannot access 'vigilanciaAtiva_' before initialization`.
+Eu tinha declarado `let vigilanciaAtiva_` **abaixo** do bloco que chama
+`iniciarVigilancia_()` na carga. `function` é içada e pode ser chamada de
+qualquer lugar, mas `let`/`const` ficam na Temporal Dead Zone até a linha da
+declaração executar - a chamada estourava e o content script morria **antes de
+registrar qualquer listener**, então nem a etapa 1 funcionava.
+
+**Correção estrutural, não pontual:** todo o código que executa na carga foi
+movido para o FIM do arquivo, depois de todas as declarações. Assim nenhuma
+ordem de declaração acima consegue quebrá-lo de novo - antes bastava alguém
+acrescentar uma constante no meio do arquivo para reintroduzir o mesmo bug, com
+o sintoma "nada acontece" e nenhuma pista na tela.
+
+**Limitação de verificação (registrada de propósito):** esse erro é de
+EXECUÇÃO, não de sintaxe - nenhuma checagem disponível nesta máquina o pegaria
+(não há Node; o JScript do `cscript` nem parseia ES6). A convenção "inicialização
+por último" é a mitigação estrutural adotada no lugar do teste que não existe.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
