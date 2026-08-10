@@ -29,31 +29,61 @@
  */
 const SEI_TAB_URL_PATTERN = "https://sei.pe.gov.br/*";
 
-/** Página do processo aberto ("árvore" do processo), onde o content script sabe operar. */
-const SEI_PAGINA_PROCESSO = "procedimento_trabalhar";
+// A checagem de "é a página do processo" passou a ser feita no content script
+// (conferirProcesso_ -> ehPaginaDeProcesso), que enxerga a URL real de cada aba.
 
 /**
- * Escolhe a aba do SEI mais provável, em ordem de preferência:
- *   1. aba com o processo aberto E o número informado no título/URL;
- *   2. qualquer aba com um processo aberto (mais recente primeiro);
- *   3. qualquer aba do SEI (mais recente primeiro) - o content script devolve
- *      um erro claro se não for uma página de processo.
+ * Localiza a aba que está com EXATAMENTE o processo informado aberto.
+ *
+ * Mudança de segurança (2026-08-10, pedido do usuário): antes havia um fallback
+ * para "qualquer aba do SEI aberta" quando o número não batia. Isso significa
+ * que, com o processo errado em foco, o documento seria criado NO PROCESSO
+ * ERRADO - dentro de um sistema de processos oficial, sem nenhum aviso. Agora,
+ * não achou o número exato, não faz nada: devolve erro e pede para abrir o
+ * processo certo.
+ *
+ * A conferência é feita perguntando ao content script de cada aba quais números
+ * de processo ela EXIBE, e não olhando a URL: a URL do `procedimento_trabalhar`
+ * traz `id_procedimento`, um id interno do banco, que não tem relação com o
+ * número que o analista digitou na SOF.
  */
-async function findMelhorAbaSei(numeroProcesso) {
+async function acharAbaDoProcesso_(numeroProcesso) {
   const tabs = await chrome.tabs.query({ url: SEI_TAB_URL_PATTERN });
-  if (!tabs.length) return null;
+  if (!tabs.length) return { aba: null, motivo: "sem_abas" };
 
   const porRecente = lista => lista.slice().sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-  const comProcesso = tabs.filter(t => (t.url || "").includes(SEI_PAGINA_PROCESSO));
+  const candidatas = [];
 
-  if (numeroProcesso) {
-    const alvo = String(numeroProcesso).trim();
-    const casaNumero = t => (t.title || "").includes(alvo) || decodeURIComponent(t.url || "").includes(alvo);
-    const exato = porRecente(comProcesso).find(casaNumero) || porRecente(tabs).find(casaNumero);
-    if (exato) return exato;
+  for (const aba of porRecente(tabs)) {
+    let resposta = null;
+    try {
+      resposta = await enviarParaAba(aba.id, { type: "CONFERIR_PROCESSO", numero: numeroProcesso });
+    } catch (e) {
+      continue; // aba do SEI sem content script utilizável - ignora
+    }
+    if (resposta && resposta.tem) candidatas.push({ aba: aba, ehPaginaDeProcesso: !!resposta.ehPaginaDeProcesso });
   }
 
-  return porRecente(comProcesso)[0] || porRecente(tabs)[0];
+  if (!candidatas.length) return { aba: null, motivo: "processo_nao_aberto" };
+  // Prefere a aba que está de fato com a árvore do processo aberta - só nela o
+  // botão "Incluir Documento" existe.
+  const comArvore = candidatas.find(c => c.ehPaginaDeProcesso);
+  return { aba: (comArvore || candidatas[0]).aba, motivo: "ok" };
+}
+
+/**
+ * Abre uma aba nova no SEI e deixa o número guardado para o content script
+ * daquela aba usar a pesquisa (ver tentarPesquisarProcesso_ em content-sei.js).
+ * Aba NOVA de propósito: não mexe no que o analista já tem aberto.
+ */
+async function abrirPesquisaDoProcesso_(numeroProcesso) {
+  try {
+    await chrome.storage.local.set({ processoParaAbrir: { numero: numeroProcesso, criadoEm: Date.now() } });
+    await chrome.tabs.create({ url: "https://sei.pe.gov.br/", active: true });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -180,14 +210,28 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         return;
       }
 
-      const aba = await findMelhorAbaSei(message.numeroProcesso);
-      if (!aba) {
+      const numero = message.numeroProcesso;
+      if (!numero) {
+        sendResponse({ ok: false, erro: "Número do processo SEI não informado pelo GAOCG." });
+        return;
+      }
+
+      const busca = await acharAbaDoProcesso_(numero);
+      if (!busca.aba) {
+        // Nenhuma aba com ESTE processo: abre a pesquisa do SEI numa aba nova e
+        // devolve erro. Nunca cai para "qualquer aba do SEI" - ver
+        // acharAbaDoProcesso_.
+        const abriu = await abrirPesquisaDoProcesso_(numero);
         sendResponse({
           ok: false,
-          erro: "Nenhuma aba do SEI encontrada. Abra o processo no SEI (sei.pe.gov.br) antes de enviar."
+          processoNaoAberto: true,
+          erro: busca.motivo === "sem_abas"
+            ? "Nenhuma aba do SEI aberta. " + (abriu ? "Abri o SEI numa aba nova pesquisando o processo " + numero + " - abra o processo e clique em enviar de novo." : "Abra o processo " + numero + " no SEI e tente de novo.")
+            : "O processo " + numero + " não está aberto em nenhuma aba do SEI. " + (abriu ? "Abri a pesquisa dele numa aba nova - abra o processo e clique em enviar de novo." : "Abra o processo e tente de novo.")
         });
         return;
       }
+      const aba = busca.aba;
 
       // Traz a aba do SEI para a frente ANTES de preencher: o usuário vê o
       // formulário sendo montado e já fica na tela onde precisa revisar. Se o

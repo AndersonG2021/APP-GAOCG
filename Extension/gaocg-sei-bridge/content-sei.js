@@ -256,6 +256,99 @@ function preencherCampo_(doc, seletor, valor) {
   return true;
 }
 
+/* ===================== identificação do processo aberto ===================== */
+
+/** Formato do número de processo do SEI (mesmo padrão validado no GAOCG). */
+const REGEX_PROCESSO_SEI_ = /\d{5,10}\.\d{6}\/\d{4}-\d{2}/g;
+const CHAVE_PROCESSO_ABRIR_ = "processoParaAbrir";
+
+/** Só dígitos - a comparação ignora pontuação/formatação divergente. */
+function digitos_(texto) {
+  return String(texto || "").replace(/\D/g, "");
+}
+
+/**
+ * Números de processo visíveis nesta aba (documento do topo + iframes de mesma
+ * origem). Ler o TEXTO da página é mais confiável que olhar a URL: a URL do
+ * `procedimento_trabalhar` traz `id_procedimento`, um id interno do banco, não
+ * o número do processo - não dá para casar com o que o analista digitou na SOF.
+ */
+function processosVisiveis_() {
+  const achados = new Set();
+  for (const doc of documentosDisponiveis_()) {
+    let texto = "";
+    try {
+      texto = (doc.body && (doc.body.innerText || doc.body.textContent)) || "";
+    } catch (e) {
+      texto = "";
+    }
+    const casados = texto.match(REGEX_PROCESSO_SEI_);
+    if (casados) casados.forEach(n => achados.add(n));
+  }
+  return Array.from(achados);
+}
+
+function conferirProcesso_(numeroEsperado) {
+  const alvo = digitos_(numeroEsperado);
+  const visiveis = processosVisiveis_();
+  return {
+    tem: !!alvo && visiveis.some(n => digitos_(n) === alvo),
+    numeros: visiveis,
+    ehPaginaDeProcesso: location.href.includes("procedimento_trabalhar")
+  };
+}
+
+/* ===================== abrir o processo pela pesquisa do SEI ===================== */
+
+/**
+ * Campo de pesquisa do SEI. São vários candidatos porque o id varia entre
+ * versões/temas e NÃO foi confirmado no ambiente da SES-PE - por isso o fluxo
+ * degrada: se nenhum casar, mostra o número na tela para o usuário colar à mão,
+ * em vez de falhar em silêncio.
+ */
+const SELETORES_PESQUISA_SEI_ = [
+  "#txtPesquisaRapida",
+  'input[name="txtPesquisaRapida"]',
+  "#txtInfraPesquisar",
+  'input[type="search"]'
+];
+
+async function tentarPesquisarProcesso_() {
+  let alvo = null;
+  try {
+    const dados = await chrome.storage.local.get(CHAVE_PROCESSO_ABRIR_);
+    alvo = dados && dados[CHAVE_PROCESSO_ABRIR_];
+  } catch (e) {
+    return;
+  }
+  if (!alvo || !alvo.numero) return;
+  // Consome logo: a pesquisa só deve ser tentada uma vez, senão qualquer
+  // navegação seguinte no SEI voltaria a pesquisar sozinha.
+  await chrome.storage.local.remove(CHAVE_PROCESSO_ABRIR_).catch(() => {});
+
+  const campo = await aguardarCondicao_(() => {
+    for (const seletor of SELETORES_PESQUISA_SEI_) {
+      const el = acharEm_(seletor);
+      if (el) return el;
+    }
+    return null;
+  }, 10000, 400);
+
+  if (!campo) {
+    avisarNaTela_("GAOCG: não encontrei a pesquisa do SEI. Abra o processo " + alvo.numero + " manualmente e clique em enviar de novo.");
+    return;
+  }
+
+  campo.focus();
+  campo.value = alvo.numero;
+  campo.dispatchEvent(new Event("input", { bubbles: true }));
+  campo.dispatchEvent(new Event("change", { bubbles: true }));
+  const form = campo.form;
+  if (form) form.submit();
+  else campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
+  avisarNaTela_("GAOCG: pesquisando o processo " + alvo.numero + " no SEI. Abra-o e clique em enviar de novo.");
+}
+
 /* ===================== Etapa 2: conteúdo pendente ===================== */
 
 function agendarConteudo_(documento) {
@@ -500,12 +593,24 @@ function avisarNaTela_(texto) {
 // mais de uma vez.
 if (window.top === window) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.type !== "PREENCHER_DOCUMENTO") return false;
+    if (!message) return false;
+
+    // Pergunta barata e síncrona: esta aba mostra o processo X?
+    if (message.type === "CONFERIR_PROCESSO") {
+      sendResponse(conferirProcesso_(message.numero));
+      return false;
+    }
+
+    if (message.type !== "PREENCHER_DOCUMENTO") return false;
     preencherDocumento(message.documento)
       .then(resultado => sendResponse(resultado))
       .catch(erro => sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }));
     return true; // resposta assíncrona
   });
+
+  // Se a extensão pediu para abrir um processo pela pesquisa, é nesta carga de
+  // página que isso acontece.
+  tentarPesquisarProcesso_();
 
   // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
   // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.
