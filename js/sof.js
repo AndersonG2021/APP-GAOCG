@@ -669,7 +669,7 @@ const TelaSof = (function () {
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
 
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
-      `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnGerarDocumentoSei">Salvar e gerar documento SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
+      `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnGerarDocumentoSei">Salvar e gerar documento SEI</button><button class="botao" id="btnEnviarSofSei" title="Salva a SOF e preenche o formulário de Incluir Documento num processo já aberto no SEI">Salvar e enviar ao SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
       { grande: true });
     if (editando) UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('SOF', sof.id));
 
@@ -756,6 +756,13 @@ const TelaSof = (function () {
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
     document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
+    // "Salvar e enviar ao SEI" (sessão 2026-08-08): exige a extensão GAOCG SEI
+    // Bridge instalada e o processo já aberto numa aba do sei.pe.gov.br - ver
+    // js/sei-bridge.js e Extension/gaocg-sei-bridge/.
+    document.getElementById('btnEnviarSofSei').addEventListener('click', async function () {
+      this.disabled = true;
+      try { await salvarSof(sof, { enviarSei: true }); } finally { this.disabled = false; }
+    });
 
     // Barra do editor "Objeto da despesa" (negrito). mousedown preventDefault
     // pra não perder a seleção ao clicar no botão; Ctrl+B já funciona nativo.
@@ -1141,16 +1148,29 @@ const TelaSof = (function () {
         }
       }
 
-      if (opcoes.gerarDocumento) {
-        const html = montarDocumentoSeiHtml_(Object.assign({}, sofExistente, resposta, dados));
-        baixarArquivo(`SOF_SEI_${resposta.sof_numero || resposta.id}.html`, html, 'text/html;charset=utf-8');
-        abrirDocumentoEmNovaAba_(html);
+      // Mesmo documento nos dois caminhos (baixar/imprimir e enviar ao SEI) -
+      // montarDocumentoSeiHtml_ continua sendo a única fonte do layout da SOF.
+      if (opcoes.gerarDocumento || opcoes.enviarSei) {
+        const sofCompleta = Object.assign({}, sofExistente, resposta, dados);
+        const html = montarDocumentoSeiHtml_(sofCompleta);
+        if (opcoes.gerarDocumento) {
+          baixarArquivo(`SOF_SEI_${resposta.sof_numero || resposta.id}.html`, html, 'text/html;charset=utf-8');
+          abrirDocumentoEmNovaAba_(html);
+        }
+        // Envio ao SEI (sessão 2026-08-08): a SOF é salva primeiro e só então
+        // enviada, pra o que vai pro processo ser exatamente o que ficou
+        // gravado. SeiBridge mostra o próprio toast com o resultado (sucesso,
+        // extensão ausente, nenhuma aba do SEI aberta, etc.) - por isso o
+        // toast genérico abaixo não fala de SEI nesse caso.
+        if (opcoes.enviarSei) await SeiBridge.enviarSof(sofCompleta, html);
       }
 
       CacheAbas.invalidar('sof');
       if (dadosNe) CacheAbas.invalidar('notasEmpenho');
       UI.toast(
-        opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.' : (dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.'),
+        opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.'
+          : opcoes.enviarSei ? 'SOF salva.'
+          : (dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.'),
         'sucesso'
       );
       if (sofExistente) {

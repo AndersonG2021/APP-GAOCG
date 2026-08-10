@@ -1941,6 +1941,95 @@ sintaxe aqui (JScript não parseia ES6).
 **Passo manual pendente:** colar `Relatorios.gs` e `NotasEmpenho.gs` no editor
 do Apps Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
 
+## Envio da SOF ao SEI pela extensão-ponte (sessão 2026-08-08)
+
+**Pedido:** "conseguir enviar para um processo aberto no SEI uma SOF que foi
+criada no app GAOCG através da Extensão" + corrigir as ressalvas levantadas na
+revisão da extensão recém-adicionada.
+
+**Como funciona:** não há API do SEI nem servidor no meio. A extensão automatiza
+o DOM do formulário nativo "Incluir Documento", sobre a sessão que o próprio
+usuário já tem aberta e autenticada no `sei.pe.gov.br`. Só funciona no mesmo
+navegador, com o processo aberto numa aba.
+
+### Correções na extensão (v0.1.0 → v0.2.0)
+
+1. **ID da extensão com espaço à esquerda** no snippet do README
+   (`" jcnnmpp..."`) — fazia `chrome.runtime.sendMessage` falhar em silêncio.
+2. **`externally_connectable` com caminho** (`.../APP-GAOCG/`) — esse campo
+   trabalha por ORIGEM e o Chrome ignora/rejeita caminho. Corrigido para
+   `https://andersong2021.github.io/*`. Consequência inevitável: qualquer página
+   do mesmo usuário no GitHub Pages pode falar com a extensão — limitação do
+   Chrome, documentada no README.
+3. **`host_permissions` amplas** (`*://*.br/*controlador*.php?acao=*` etc., que
+   davam acesso a praticamente qualquer site `.br`) → `https://sei.pe.gov.br/*`
+   apenas (domínio confirmado com o usuário). `activeTab` também saiu, virou
+   desnecessário.
+4. **Pasta duplicada** `gaocg-sei-bridge/gaocg-sei-bridge/` achatada.
+   ⚠️ Como o Chrome deriva o ID de extensão sem compactação do CAMINHO no
+   disco, **isso muda o ID** — por isso `js/sei-bridge.js` aceita override via
+   `localStorage.gaocg_sei_extension_id`, sem exigir novo deploy.
+5. **Chave não-padrão** `"//_comment_..."` no manifest (gerava aviso de "chave
+   não reconhecida" no Chrome) — movida para o README.
+
+### Bug real encontrado no código da extensão
+
+`abrirIncluirDocumento` procurava o botão em `document` (frame do topo), mas no
+SEI a barra de ações do processo fica dentro do iframe `ifrVisualizacao` — **o
+botão nunca seria encontrado** e o fluxo sempre morreria em "não encontrei o
+botão Incluir Documento".
+
+`content-sei.js` foi reescrito: varre o documento do topo + todos os iframes de
+mesma origem (`documentosDisponiveis_`/`acharEm_`), e deixou de depender do
+`window.jQuery` do topo (usa DOM puro, e só aproveita o jQuery da janela do
+próprio elemento quando existe, que é o necessário pro componente "chosen" do
+dropdown de tipo reagir). Também passou a suportar os DOIS formatos de escolha
+de tipo que o SEI usa entre versões (`<select id="selSerie">` ou lista de links).
+
+Outros ajustes: só o frame do topo registra o listener (com `all_frames`, vários
+frames responderiam à mesma mensagem e o primeiro `sendResponse` venceria); e
+`background.js` injeta o content script sob demanda quando a aba do SEI já
+estava aberta ANTES da extensão ser instalada/recarregada (caso comum, que dava
+"Could not establish connection").
+
+### Integração no app
+
+- Novo **`js/sei-bridge.js`**: wrapper Promise de `chrome.runtime.sendMessage`
+  (lendo `chrome.runtime.lastError`, senão o Chrome loga "Unchecked
+  runtime.lastError") + timeout próprio, porque quando a extensão não existe o
+  callback às vezes simplesmente nunca é chamado.
+- **Reaproveita `montarDocumentoSeiHtml_`** (`js/sof.js`) inteiro: o que vai ao
+  SEI é o MESMO documento que o botão "Salvar e gerar documento SEI" já baixa.
+  Como aquele HTML é um documento completo com `<style>` e o CKEditor do SEI
+  descarta folha de estilo, `prepararHtmlParaEditor_` extrai o `<body>` e
+  converte as regras em `style` inline (+ `border="1"` de reforço) — sem isso o
+  documento chegaria no SEI sem nenhuma borda de tabela, que é o grosso do
+  layout da SOF (cronograma, assinaturas).
+- Novo botão **"Salvar e enviar ao SEI"** no formulário de SOF → salva primeiro
+  (pra o que vai ao processo ser o que ficou gravado) e então envia.
+- O processo de destino é achado pelo número SEI da própria SOF (campo `sei`),
+  comparado com título/URL das abas do `sei.pe.gov.br`.
+- **`autoEnviar` é sempre `false`.** O analista revisa e clica em "Confirmar
+  Dados" no SEI. Confirmar automaticamente um documento num sistema de
+  processos oficial não é decisão que o app deva tomar sozinho.
+
+### Limitação conhecida (não é bug)
+
+No SEI, o editor de texto normalmente só abre DEPOIS de "Confirmar Dados" — na
+tela de cadastro ele ainda não existe. Quando isso acontece, a extensão preenche
+o cadastro (tipo, número, descrição, nível de acesso) e o app avisa que o corpo
+precisa ser colado no editor que abrir, em vez de falhar. Se o editor já estiver
+presente, o conteúdo entra direto.
+
+### Verificação feita
+
+`manifest.json` validado (JSON + campos conferidos). **Nada foi testado num SEI
+real** — os seletores do formulário nativo variam entre versões e customizações
+por órgão, e é exatamente esse o ponto mais frágil do fluxo. O README lista, um
+a um, os seletores a confirmar com o DevTools na primeira execução. O JS da
+extensão e do app é ES6 e não tem como ser validado por sintaxe nesta máquina
+(sem Node; JScript não parseia ES6).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
