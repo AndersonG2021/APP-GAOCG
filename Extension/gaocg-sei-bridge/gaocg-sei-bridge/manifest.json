@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "GAOCG SEI Bridge",
+  "short_name": "GAOCG↔SEI",
+  "description": "Envia dados criados no app GAOCG (SOF, Notas de Empenho, Recibos) diretamente para um processo aberto no SEI.",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "GAOCG SEI Bridge",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.br/sei/*",
+    "*://*.br/*/sei/*",
+    "*://*.br/*controlador*.php?acao=*",
+    "*://*.org/sei/*",
+    "*://*.org/*controlador*.php?acao=*"
+  ],
+
+  "//_comment_externally_connectable": "Só a origem do GAOCG (GitHub Pages) pode falar com esta extensão. Troque pelo domínio real do seu app antes de publicar.",
+  "externally_connectable": {
+    "matches": [
+      "https://andersong2021.github.io/APP-GAOCG/"
+    ]
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "js": ["content-sei.js"],
+      "matches": [
+        "*://*.br/*controlador.php?acao=procedimento_trabalhar*",
+        "*://*.br/*controlador.php?acao=procedimento_controlar*",
+        "*://*.br/*/controlador.php?acao=procedimento_trabalhar*",
+        "*://*.org/*controlador.php?acao=procedimento_trabalhar*"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}
