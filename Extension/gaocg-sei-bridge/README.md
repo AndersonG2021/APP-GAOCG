@@ -49,7 +49,13 @@ o SEI aberto e logado.
 4. **Você revisa e clica em "Confirmar Dados"** — a extensão nunca confirma
    sozinha (`autoEnviar` é sempre `false` no app).
 5. O SEI abre o editor do documento. **É nesse momento que o conteúdo da SOF
-   entra**, sozinho, e um aviso verde aparece no canto da tela. Revise e salve.
+   entra:**
+   - se o editor abrir **vazio**, o conteúdo entra sozinho e um aviso verde
+     aparece no canto;
+   - se o tipo escolhido tiver **modelo próprio** no SEI (o tipo "SOF" tem), o
+     editor abre com o template em branco. Aí aparece uma barra azul no canto
+     perguntando se pode substituir — clique em **"Substituir"**.
+6. Revise e salve o documento.
 
 O processo de destino é encontrado pelo número SEI da própria SOF (campo
 `sei`), comparado com o título/URL das abas abertas no `sei.pe.gov.br`.
@@ -67,11 +73,14 @@ injetá-lo. Consequências práticas:
 
 - Funciona mesmo que você escolha o tipo e preencha o cadastro **na mão** — as
   duas etapas são independentes.
-- O pendente expira em **15 minutos** e só entra em editor **vazio**. Essa
-  segunda regra é proposital: sem ela, abrir um documento já existente dentro
-  da janela de 15 min faria a extensão sobrescrever o conteúdo dele.
-- Se você desistir no meio, o pendente some sozinho — ou abra qualquer documento
-  novo em branco para consumi-lo.
+- O pendente expira em **15 minutos**.
+- Em editor **vazio**, entra sozinho. Em editor **com conteúdo**, a extensão
+  **pergunta** antes (barra azul com "Substituir"). Não dá para distinguir pelo
+  DOM o modelo em branco de um documento já preenchido — as duas coisas são só
+  HTML no corpo do editor — então quem decide é você. Sem essa pergunta, a
+  escolha seria entre "não funciona com tipos que têm modelo" e "pode apagar um
+  documento oficial sem avisar".
+- Se você desistir no meio, o pendente some sozinho ao expirar.
 
 ### Tipo do documento
 

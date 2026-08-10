@@ -2091,6 +2091,44 @@ o comportamento que agora foi eliminado.
 `manifest.json`, `content-sei.js`, `background.js`). O ID **não** muda - a pasta
 continua a mesma. Nenhum `.gs` alterado.
 
+## 2º teste real do envio ao SEI: modelo do SEI bloqueava a injeção (2026-08-10)
+
+**Sintoma:** ao escolher o tipo de documento, o editor abriu com **o modelo
+padrão de SOF do próprio SEI, com todos os campos vazios** - o conteúdo do GAOCG
+não entrou.
+
+**Causa: a salvaguarda da v0.3.0.** O tipo "SOF" tem MODELO próprio cadastrado
+no SEI; ao escolher o tipo, o editor já nasce preenchido com esse template em
+branco. Como a v0.3.0 só injetava em editor **vazio** (regra criada para não
+sobrescrever documento existente), ela encontrava o template, concluía "já tem
+conteúdo" e não fazia nada.
+
+**Por que não dá pra resolver com heurística:** pelo DOM, "modelo em branco de um
+documento novo" e "documento oficial já preenchido" são a mesma coisa - HTML no
+corpo do editor. Qualquer tentativa de adivinhar erra num dos dois lados, e um
+dos erros é apagar documento oficial sem aviso.
+
+**Correção (v0.4.0):** a decisão passou para o usuário, na própria tela do SEI.
+- Editor **vazio** → injeta direto, como antes (não há o que perder).
+- Editor **com conteúdo** → barra azul no canto: *"este editor já tem conteúdo
+  (provavelmente o modelo do SEI). Substituir pelo documento da SOF X?"* com
+  **"Substituir"** e **"Agora não"**.
+
+A assimetria é proposital: "Agora não" só esconde a barra e mantém o pendente
+válido (a barra reaparece no próximo documento aberto, dentro dos 15 min),
+porque deixar de inserir é reversível e inserir por engano não é.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions`. ID não muda,
+nenhum `.gs` alterado.
+
+**Ainda não verificado (perguntar no próximo teste):** se o conteúdo PERSISTE
+depois de salvar o documento no SEI. A injeção é feita no DOM do editor; o
+CKEditor normalmente serializa a partir daí, mas se ele salvar vazio será
+preciso chamar a API `CKEDITOR.instances[...].setData()`, o que exige injetar
+script no *main world* (content script roda em contexto isolado e não enxerga
+`window.CKEDITOR`). Também falta confirmar se as bordas das tabelas
+sobreviveram - se não, o SEI está higienizando os `style` inline.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
