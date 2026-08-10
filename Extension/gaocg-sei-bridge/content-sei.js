@@ -181,6 +181,41 @@ function dispararChange_(el) {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+const esperar_ = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Tecla sintética que o jQuery enxerga.
+ *
+ * O construtor de KeyboardEvent não deixa definir `keyCode`/`which` (são
+ * getters derivados), e o jQuery normaliza justamente por eles - sem
+ * redefini-los, o handler da página recebe keyCode 0 e ignora a tecla. Por isso
+ * o defineProperty.
+ */
+function teclar_(el, key, keyCode) {
+  for (const tipo of ["keydown", "keypress", "keyup"]) {
+    const ev = new KeyboardEvent(tipo, { key: key, bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "keyCode", { get: () => keyCode });
+    Object.defineProperty(ev, "which", { get: () => keyCode });
+    el.dispatchEvent(ev);
+  }
+}
+
+/**
+ * Clique com a sequência completa de eventos de mouse. Componentes de
+ * autocomplete costumam agir no `mousedown` (antes do blur do campo), não no
+ * `click` - um `.click()` seco simplesmente não seleciona.
+ */
+function clicarComoUsuario_(el) {
+  for (const tipo of ["mouseover", "mouseenter", "mousemove", "mousedown", "mouseup", "click"]) {
+    el.dispatchEvent(new MouseEvent(tipo, { bubbles: true, cancelable: true, view: el.ownerDocument.defaultView }));
+  }
+}
+
+/** A tela de cadastro chegou? "Nome na Árvore" é o marco confiável. */
+function chegouTelaCadastro_() {
+  return !!(acharEm_("#frmDocumentoCadastro") || campoPorRotulo_("Nome na Árvore"));
+}
+
 /* ===================== Etapa 1: cadastro (best-effort) ===================== */
 
 async function preencherDocumento(documento) {
@@ -313,16 +348,24 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
       filtro.focus();
       filtro.value = cfg.filtro;
       filtro.dispatchEvent(new Event("input", { bubbles: true }));
-      // O autocomplete do SEI reage a keyup; sem isso a lista não filtra.
-      for (const evento of ["keydown", "keypress", "keyup"]) {
-        filtro.dispatchEvent(new KeyboardEvent(evento, { key: cfg.filtro.slice(-1), bubbles: true }));
-      }
+      teclar_(filtro, cfg.filtro.slice(-1), cfg.filtro.toUpperCase().charCodeAt(cfg.filtro.length - 1));
       dispararChange_(filtro);
+
+      // 2. Seleção pelo TECLADO - caminho nativo do autocomplete (o SEI usa
+      //    jQuery UI). Um `.click()` no item quase nunca seleciona: o widget
+      //    age no mousedown/menuselect, não no click. Seta pra baixo destaca o
+      //    primeiro item, Enter confirma.
+      await esperar_(700); // a lista precisa chegar antes da seta
+      teclar_(filtro, "ArrowDown", 40);
+      await esperar_(250);
+      teclar_(filtro, "Enter", 13);
+      if (await aguardarCondicao_(chegouTelaCadastro_, 3500, 250)) return true;
     }
   }
 
-  // 2. Espera o item da lista e clica. Comparação por "contém", porque o texto
-  //    exibido traz a sigla da unidade na frente ("SES - ...").
+  // 3. Não avançou pelo teclado: procura o item e clica com a sequência
+  //    completa de mouse. Comparação por "contém", porque o texto exibido traz
+  //    a sigla da unidade na frente ("SES - ...").
   const achado = await aguardarCondicao_(() => {
     const select = escopo.querySelector("#selSerie");
     if (select) {
@@ -330,19 +373,22 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
         rotulos.some(r => (o.textContent || "").toLowerCase().indexOf(r.toLowerCase()) !== -1));
       if (opcao) return { tipo: "select", select: select, opcao: opcao };
     }
-    const item = Array.from(escopo.querySelectorAll('li, a, tr, td, div, span')).find(el => {
-      if (el.children.length > 3 || el.offsetParent === null) return false;
+    const itens = Array.from(escopo.querySelectorAll("li, a, tr, td, div, span")).filter(el => {
+      if (el.offsetParent === null) return false;
       const texto = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
       return texto && rotulos.some(r => texto.indexOf(r.toLowerCase()) !== -1);
     });
-    if (item) return { tipo: "item", item: item };
+    // O item real é o mais PROFUNDO que ainda contém o rótulo inteiro - os
+    // ancestrais (body, div do container) também "contêm" o texto e clicar
+    // neles não faz nada.
+    if (itens.length) return { tipo: "item", item: itens[itens.length - 1] };
     return null;
-  }, 10000, 300);
+  }, 8000, 300);
 
   if (!achado) return false;
   if (achado.tipo === "item") {
-    achado.item.click();
-    return true;
+    clicarComoUsuario_(achado.item);
+    return await aguardarCondicao_(chegouTelaCadastro_, 5000, 250) ? true : true;
   }
   achado.select.value = achado.opcao.value;
   dispararChange_(achado.select);
@@ -675,24 +721,20 @@ function editorEstaVazio_(corpo) {
 }
 
 /**
- * Etapa 2.
+ * Etapa 2: coloca o conteúdo no editor assim que ele abrir - e salva.
  *
- * Achado no 2º teste real (2026-08-10): o tipo de documento "SOF" tem MODELO
- * próprio no SEI - ao escolher o tipo, o editor já abre preenchido com o
- * template em branco da SOF. A v0.3.0 só injetava em editor VAZIO (salvaguarda
- * contra sobrescrever documento existente), então encontrava o template,
- * concluía "já tem conteúdo" e não fazia nada: o usuário terminava com o modelo
- * vazio do SEI, sem os dados do GAOCG.
+ * Histórico das decisões, para não regredir:
+ * - v0.3.0 só injetava em editor VAZIO, como salvaguarda contra sobrescrever um
+ *   documento existente. Mas o tipo "SOF" tem MODELO próprio no SEI: o editor
+ *   SEMPRE abre preenchido com o template. Resultado: nunca injetava.
+ * - v0.4.0 passou a PERGUNTAR quando havia conteúdo. Como o modelo aparece em
+ *   100% dos envios, a pergunta virou atrito puro.
+ * - v0.11.0 substitui sempre, sem perguntar, e ainda salva - pedido explícito
+ *   do usuário, que aceita reabrir e editar no SEI quando precisar.
  *
- * Não existe jeito confiável de distinguir, pelo DOM, "modelo em branco de um
- * documento novo" de "documento já preenchido que eu apagaria" - as duas coisas
- * são apenas HTML no corpo do editor. Então:
- *
- *   - editor VAZIO    -> injeta direto (não há o que perder);
- *   - editor COM ALGO -> PERGUNTA, com um botão na própria tela do SEI.
- *
- * Perguntar é o único caminho que não obriga a escolher entre "não funciona com
- * tipos que têm modelo" e "pode apagar um documento oficial sem avisar".
+ * O que continua limitando o estrago: o pendente só nasce de um envio explícito
+ * do GAOCG, é consumido uma única vez, expira em 15 minutos, e o documento
+ * criado nunca é assinado.
  */
 async function vigiarEditorParaConteudoPendente_() {
   const pendente = await lerConteudoPendente_();
@@ -706,11 +748,18 @@ async function vigiarEditorParaConteudoPendente_() {
   const corpo = await aguardarCondicao_(() => corpoDoEditor_(), restante, 600);
   if (!corpo) return;
 
-  if (editorEstaVazio_(corpo)) {
-    await aplicarConteudo_(corpo, pendente);
-    return;
-  }
-  mostrarConfirmacao_(corpo, pendente);
+  // Substitui SEMPRE, sem perguntar (decisão do usuário, 2026-08-10).
+  //
+  // A barra de confirmação existia porque, pelo DOM, não dá para distinguir "o
+  // modelo em branco de um documento novo" de "um documento já preenchido". Na
+  // prática o tipo "SOF" SEMPRE abre com o modelo do SEI, então a pergunta
+  // aparecia em 100% dos envios e virou só atrito. O usuário aceitou o risco
+  // explicitamente: o documento ainda não está assinado e pode ser reaberto e
+  // editado no próprio SEI.
+  //
+  // O que continua limitando o estrago: o pendente só é criado por um envio
+  // explícito do GAOCG, é consumido numa única vez e expira em 15 minutos.
+  await aplicarConteudo_(corpo, pendente);
 }
 
 /**
@@ -755,8 +804,9 @@ function numeroSofNoModelo_(corpo) {
 }
 
 async function aplicarConteudo_(corpo, pendente) {
-  // Lê o número ANTES de substituir - depois o modelo do SEI já era.
-  const numeroSei = numeroSofNoModelo_(corpo);
+  // Lê o número ANTES de substituir - depois o modelo do SEI já era. Só faz
+  // sentido procurar quando existe modelo; num editor vazio não há o que ler.
+  const numeroSei = editorEstaVazio_(corpo) ? null : numeroSofNoModelo_(corpo);
   if (numeroSei && pendente.marcadorNumero && pendente.marcadorNumero !== numeroSei) {
     // Troca o número que veio do app pelo que o SEI acabou de gerar, para o
     // documento sair com a numeração oficial do SEI.
@@ -775,11 +825,41 @@ async function aplicarConteudo_(corpo, pendente) {
   }
 
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
+
+  // Salvar automaticamente (pedido do usuário, 2026-08-10). Pequena pausa antes:
+  // o CKEditor precisa terminar de processar o setData, senão o salvamento pode
+  // pegar o conteúdo antigo.
+  await esperar_(800);
+  const salvou = salvarNoEditor_();
+
   avisarNaTela_(
     "GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido" + detalhe +
-    (numeroSei ? ". Nº da SOF no SEI: " + numeroSei : "") +
-    ". Revise e salve o documento."
+    (numeroSei ? " · Nº da SOF no SEI: " + numeroSei : "") +
+    (salvou ? " · salvo automaticamente." : " · SALVE o documento (não achei o botão Salvar).")
   );
+}
+
+/**
+ * Clica no "Salvar" do editor do SEI. São vários candidatos porque o botão
+ * muda de forma entre versões (botão da barra do SEI, item da toolbar do
+ * CKEditor, input submit). Devolve false sem lançar - aí o aviso na tela pede
+ * o salvamento manual, em vez de dar a impressão de que ficou tudo pronto.
+ */
+function salvarNoEditor_() {
+  const seletores = [
+    "#cmdSalvar",
+    'input[value="Salvar"]',
+    'button[value="Salvar"]',
+    'a[title="Salvar"]',
+    'img[title="Salvar"]',
+    "a.cke_button__save",
+    ".cke_button__save"
+  ].join(", ");
+
+  const botao = acharTodos_(seletores).find(b => b.offsetParent !== null);
+  if (!botao) return false;
+  clicarComoUsuario_(botao.closest("a") || botao);
+  return true;
 }
 
 /** Devolve { ok, escolhida } - `escolhida` é o nome da seção do SEI que recebeu o conteúdo. */
@@ -792,51 +872,6 @@ function pedirInjecaoNoMainWorld_(html) {
   } catch (e) {
     return Promise.resolve({ ok: false });
   }
-}
-
-/**
- * Barra de confirmação na própria página do SEI. Não some sozinha - o usuário
- * pode continuar mexendo no documento e decidir depois.
- *
- * "Agora não" apenas esconde a barra: o pendente continua válido (até o limite
- * de 15 min) e a barra reaparece no próximo documento aberto. É assimétrico de
- * propósito - deixar de inserir é reversível (basta abrir o documento de novo),
- * inserir por engano por cima de um documento oficial não é.
- */
-function mostrarConfirmacao_(corpo, pendente) {
-  const barra = document.createElement("div");
-  barra.style.cssText = [
-    "position:fixed", "top:12px", "right:12px", "z-index:2147483647",
-    "background:#1e3a8a", "color:#fff", "padding:12px 14px", "border-radius:8px",
-    "font:13px system-ui,sans-serif", "box-shadow:0 4px 14px rgba(0,0,0,.3)", "max-width:380px"
-  ].join(";");
-
-  const texto = document.createElement("div");
-  texto.textContent = "GAOCG: este editor já tem conteúdo (provavelmente o modelo do SEI). Substituir pelo documento da "
-    + (pendente.rotulo || "SOF") + "?";
-  texto.style.cssText = "margin-bottom:10px;line-height:1.4";
-
-  const linha = document.createElement("div");
-  linha.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
-
-  const btnDepois = document.createElement("button");
-  btnDepois.textContent = "Agora não";
-  btnDepois.style.cssText = "background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:6px 12px;cursor:pointer;font:13px system-ui,sans-serif";
-  btnDepois.addEventListener("click", () => barra.remove());
-
-  const btnSubstituir = document.createElement("button");
-  btnSubstituir.textContent = "Substituir";
-  btnSubstituir.style.cssText = "background:#1c7a37;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font:13px system-ui,sans-serif";
-  btnSubstituir.addEventListener("click", async () => {
-    barra.remove();
-    await aplicarConteudo_(corpo, pendente);
-  });
-
-  linha.appendChild(btnDepois);
-  linha.appendChild(btnSubstituir);
-  barra.appendChild(texto);
-  barra.appendChild(linha);
-  document.body.appendChild(barra);
 }
 
 /** Aviso discreto na própria página do SEI - o app GAOCG pode nem estar visível quando o editor abre. */
