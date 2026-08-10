@@ -2360,6 +2360,48 @@ agendado (`envioAgendado`) - virou informativo, porque não há nada a refazer.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## 5º teste: filtro do tipo na caixa errada + número da SOF do SEI (v0.10.0)
+
+Fluxo funcionando de ponta a ponta, com dois ajustes.
+
+### 1. Escolha do tipo continuava manual - eu digitava na caixa errada
+
+`escolherTipoDocumento_` procurava "o primeiro input de texto visível" varrendo
+**todos** os documentos acessíveis. O primeiro é o da **busca da barra superior
+do SEI**, que fica no documento do TOPO - a tela de escolha do tipo fica dentro
+de um iframe de conteúdo. Ou seja: a extensão digitava "SOF" na pesquisa do SEI
+e a lista de tipos nunca filtrava.
+
+**Correção:** novo `documentoComTexto_("Escolha o Tipo do Documento")` escopa a
+busca ao documento certo antes de procurar o filtro e o item da lista. Também
+passou a disparar `keydown`/`keypress`/`keyup` (o autocomplete do SEI reage a
+keyup, não a `input`).
+
+### 2. Número da SOF gerado pelo SEI
+
+Achado do usuário: mesmo com "Texto Inicial: Nenhum", o editor abre com o modelo
+padrão de SOF - e esse modelo **já traz o número novo da SOF** (ex.: "173/2026"),
+sequencial, gerado pelo SEI no momento da criação. O app não tem como saber esse
+número de antemão.
+
+**Solução:** `numeroSofNoModelo_` lê o número do modelo ANTES de substituir o
+conteúdo (depois o modelo já era) e troca, no HTML vindo do app, o
+`marcadorNumeroSof` (o `sof_numero` do app) pelo número oficial do SEI. O aviso
+na tela mostra o número detectado, para conferência.
+
+Heurística da leitura: primeiro um número colado à sigla "SOF"
+(`/SOF[^\d]{0,20}(\d{1,4}\/\d{4})/i`); se não achar, o primeiro `NNN/AAAA` nos
+1000 primeiros caracteres (o cabeçalho) - assim não captura data ou valor solto
+no meio do texto.
+
+**Em aberto:** o número lido fica só no documento do SEI; **não** volta para o
+registro da SOF no app. Fazer isso exigiria a extensão escrever na página do
+GAOCG (host permission nova para github.io) - não implementado, o analista
+copia manualmente se quiser.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
