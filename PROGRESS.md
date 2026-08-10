@@ -2283,6 +2283,56 @@ desta versão que ainda depende de validação real.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## Cadastro do documento 100% automático no SEI (v0.8.0, 2026-08-10)
+
+**Pedido:** automatizar também os dois passos manuais que sobravam - escolher o
+tipo ("SES - SOF - Solicitação Orçamentária e Financeira") e o Nível de Acesso
+(Restrito + Hipótese Legal "Controle Interno") - e já abrir o editor.
+
+### O que as telas enviadas revelaram (e eu não tinha)
+
+1. **A escolha do tipo NÃO é um `<select>`.** É um campo de filtro + lista de
+   sugestões, e o item traz a sigla da unidade na frente: *"SES - SOF -
+   Solicitação Orçamentária e Financeira"*. O código comparava por igualdade
+   exata com `"SOF"` - nunca casaria. Agora digita o filtro, espera a lista e
+   casa por **"contém"**.
+2. **Existe "Texto Inicial: Nenhum".** Marcando essa opção, o editor abre
+   **vazio** - então o conteúdo entra sozinho, sem a barra de confirmação (que
+   só existe para não sobrescrever o modelo do SEI). Elimina um clique e a
+   ambiguidade toda.
+3. **O botão é "Salvar"**, não "Confirmar Dados" como em outras versões do SEI.
+   Os dois passaram a ser aceitos.
+
+### Campos localizados por RÓTULO, não por id
+
+Os ids do formulário do SEI variam por versão/customização e nunca foram
+confirmados aqui - já erramos com `#txtNumero`/`#txtDescricao`. Os **rótulos**,
+por outro lado, estão na tela e são estáveis: "Descrição:", "Nome na Árvore:",
+"Observações desta unidade:", "Hipótese Legal:", "Restrito", "Nenhum". Novos
+helpers `campoPorRotulo_`, `marcarOpcaoPorRotulo_` e `selecionarOpcaoPorTexto_`
+procuram por texto visível e caem no campo seguinte na ordem do documento (ou
+usam `label[for]` quando existe).
+
+A Hipótese Legal só é preenchida **depois** de marcar Restrito - o SEI só
+mostra esse `<select>` nesse momento.
+
+### Padrões ficam no APP, não na extensão
+
+`PADRAO_DOCUMENTO_SOF_` (`js/sei-bridge.js`) concentra tipo, texto inicial,
+nível de acesso e hipótese legal. São decisão de negócio da GAOCG, não detalhe
+de automação - e assim mudam com um deploy do app, sem reinstalar a extensão em
+cada máquina.
+
+### autoEnviar passou a ser true
+
+Decisão explícita do usuário. Eu havia mantido manual por cautela; registrando o
+raciocínio de que a cautela continua válida onde importa: o documento é apenas
+**criado**, nunca assinado, e permanece removível pelo próprio SEI. A assinatura
+segue 100% manual.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
