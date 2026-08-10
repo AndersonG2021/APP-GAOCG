@@ -388,69 +388,24 @@ const TelaUnidades = (function () {
 
   /**
    * "Gerar Relatório" (sessão 2026-07-29, era "Gerar PDF"): escolha de colunas
-   * + as mesmas 4 saídas do assistente do Dashboard (tela/PDF/CSV/Sheets).
-   * Não duplica nada da geração em si - monta a config e entrega pro
-   * TelaRelatorios.gerarComConfig (js/relatorios.js), com os filtros que já
-   * estão aplicados NA TELA (não só a página de 20 visível: quem pagina é o
-   * listarUnidades da tela, o relatório roda a fonte inteira no backend).
-   * As colunas vêm do catálogo do backend, que já ordena as de valor por
-   * último - a ordem do relatório é a do catálogo, não a de marcação.
+   * + as mesmas 4 saídas do assistente do Dashboard (tela/PDF/CSV/Sheets),
+   * usando os filtros que já estão aplicados NA TELA.
+   *
+   * O modal em si vive em TelaRelatorios.abrirParaTela (js/relatorios.js) desde
+   * a sessão 2026-08-08, quando Recibos e Notas de Empenho ganharam o mesmo
+   * botão - antes esse bloco era ~55 linhas de HTML e wiring aqui dentro, e
+   * copiá-lo pras outras duas telas daria três cópias quase idênticas.
    */
-  async function abrirGerarRelatorio() {
-    let colunas;
-    try {
-      const catalogo = await Api.chamar('obterCatalogoRelatorios', {}, { cache: true });
-      colunas = (catalogo.fontes.filter(f => f.fonte === 'unidades')[0] || {}).colunas || [];
+  function abrirGerarRelatorio() {
+    return TelaRelatorios.abrirParaTela({
+      fonte: 'unidades',
+      titulo: 'Gerar Relatório de Unidades',
+      obterFiltros: filtrosAtuais,
       // "Ativa" não é útil no relatório (a tela já lista só ativas por
-      // padrão) - filtrada só aqui, sem tirar do catálogo compartilhado com
+      // padrão) - escondida só aqui, sem tirar do catálogo compartilhado com
       // o assistente do Dashboard.
-      colunas = colunas.filter(c => c.key !== 'ativo');
-    } catch (e) {
-      UI.toast('Não foi possível carregar as opções de relatório. ' + (e.message || ''), 'erro');
-      return;
-    }
-
-    const corpo = `
-      <div class="rel-wizard">
-        <div class="rel-secao">
-          <div class="rel-linha" style="justify-content:space-between">
-            <label style="margin:0">Colunas <span class="rel-hint">(marque as que entram; as de valor saem sempre por último)</span></label>
-            <button type="button" class="botao" id="btnUniRelTodasColunas">Marcar/desmarcar todas</button>
-          </div>
-          <div class="rel-colunas">${colunas.map(c =>
-            `<label class="rotulo-checkbox rel-col-item"><input type="checkbox" class="uni-rel-col" value="${c.key}" checked /> ${UI.escaparHtml(c.rotulo)}</label>`
-          ).join('')}</div>
-        </div>
-        <div class="rel-secao">
-          <label>Formato de saída</label>
-          <div class="rel-formatos">
-            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="tela" checked /> Visualizar na tela</label>
-            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="pdf" /> PDF (impressão)</label>
-            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="csv" /> Excel / CSV</label>
-            <label class="rotulo-checkbox"><input type="radio" name="uniRelFormato" value="sheets" /> Google Sheets</label>
-          </div>
-        </div>
-        <p class="ajuda">O relatório usa os filtros aplicados na tela. Sem filtro, entram todas as unidades.</p>
-      </div>`;
-
-    UI.abrirModal('Gerar Relatório de Unidades', corpo,
-      `<button class="botao" id="btnUniRelFechar">Cancelar</button><button class="botao primario" id="btnUniRelGerar">Gerar</button>`,
-      { grande: true });
-
-    document.getElementById('btnUniRelFechar').addEventListener('click', UI.fecharModal);
-    document.getElementById('btnUniRelTodasColunas').addEventListener('click', () => {
-      const caixas = Array.from(document.querySelectorAll('.uni-rel-col'));
-      const marcarTodas = caixas.some(cb => !cb.checked);
-      caixas.forEach(cb => { cb.checked = marcarTodas; });
-    });
-    document.getElementById('btnUniRelGerar').addEventListener('click', async () => {
-      const marcadas = Array.from(document.querySelectorAll('.uni-rel-col:checked')).map(el => el.value);
-      const formato = (document.querySelector('input[name=uniRelFormato]:checked') || {}).value || 'tela';
-      const gerou = await TelaRelatorios.gerarComConfig({
-        fonte: 'unidades', filtros: filtrosAtuais(), colunas: marcadas,
-        agruparPor: '', incluirGrafico: false, formato
-      });
-      if (gerou) UI.fecharModal();
+      colunasOcultas: ['ativo'],
+      ajuda: 'O relatório usa os filtros aplicados na tela. Sem filtro, entram todas as unidades.'
     });
   }
 

@@ -134,6 +134,7 @@ const TelaRecibos = (function () {
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnExportarRec">Exportar CSV</button>
+          <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
         </div>
@@ -152,6 +153,7 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
+    document.getElementById('btnGerarRelatorioRec').addEventListener('click', abrirGerarRelatorio);
     // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
     // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
     const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
@@ -439,6 +441,30 @@ const TelaRecibos = (function () {
       </div>`;
     document.getElementById('recPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('recPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
+  }
+
+  /**
+   * "Gerar Relatório" (sessão 2026-08-08): escolha de colunas + agrupamento +
+   * as 4 saídas (tela/PDF/CSV/Sheets), com os filtros já aplicados na tela.
+   * Modal compartilhado com Unidades e Notas de Empenho
+   * (TelaRelatorios.abrirParaTela, js/relatorios.js).
+   *
+   * Diferente do "Exportar CSV" ao lado, que despeja as colunas cruas da
+   * planilha (inclusive ids e URLs de anexo) sem formatação nem totais: o
+   * relatório traz colunas com rótulo, moeda formatada, subtotais por grupo e
+   * total geral.
+   *
+   * Os filtros vão via `filtrosAtuais` (a função, não o resultado) pra serem
+   * lidos no clique em "Gerar" - se o analista mexer num filtro com o modal
+   * aberto, vale o estado do momento da geração.
+   */
+  function abrirGerarRelatorio() {
+    return TelaRelatorios.abrirParaTela({
+      fonte: 'recibos',
+      titulo: 'Gerar Relatório de Recibos',
+      obterFiltros: filtrosAtuais,
+      ajuda: 'O relatório usa os filtros aplicados na tela (todas as páginas, não só a visível). Sem filtro, entram todos os recibos.'
+    });
   }
 
   async function exportarCsv() {

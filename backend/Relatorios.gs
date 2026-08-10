@@ -22,45 +22,62 @@ function relFiltroCompetenciaOk_(competencia, iniOrd, fimOrd) {
   return true;
 }
 
+/**
+ * Reaproveita `filtrarLinhasRecibos_` (Recibos.gs) - a MESMA função que a tela
+ * de Recibos usa - em vez de reimplementar um subconjunto dos filtros aqui.
+ *
+ * Antes (corrigido na sessão 2026-08-08, junto com o botão "Gerar Relatório"
+ * na própria tela de Recibos) esta função só entendia 5 filtros:
+ * competenciaInicio/Fim, oss, unidade_id, fonte e status. Os outros 8 da tela
+ * (competencia como multi-seleção, objeto, tipo_unidade, dea, instrumento,
+ * nota_empenho, numero_processo e busca livre) eram descartados EM SILÊNCIO -
+ * o analista filtrava "jul.26" na tela, gerava o relatório e recebia todos os
+ * meses, sem nenhum aviso de que o filtro não valeu. Com a função
+ * compartilhada, qualquer filtro novo que a tela ganhar passa a valer no
+ * relatório automaticamente.
+ *
+ * competenciaInicio/competenciaFim (faixa) continua sendo aplicado aqui por
+ * cima, porque é exclusivo do assistente do Dashboard - a tela de Recibos usa
+ * a multi-seleção `competencia`, que filtrarLinhasRecibos_ já trata. Os dois
+ * formatos coexistem: quem não manda faixa não é filtrado por faixa.
+ */
 function montarLinhasRecibos_(session, filtros) {
+  filtros = filtros || {};
   var iniOrd = competenciaParaOrdinal_(filtros.competenciaInicio);
   var fimOrd = competenciaParaOrdinal_(filtros.competenciaFim);
-  var oss = paraArrayFiltro_(filtros.oss), uni = paraArrayFiltro_(filtros.unidade_id),
-    fontes = paraArrayFiltro_(filtros.fonte), status = paraArrayFiltro_(filtros.status);
   var unidadesPorId = {};
   todasUnidadesComCache_().forEach(function (u) { unidadesPorId[u.id] = u; });
+  var mapaDea = mapaDeaPorNumeroNe_();
 
-  return todasRecibosComCache_()
-    .filter(function (r) { return !toBool_(r.excluido); })
-    .filter(function (r) {
-      if (!relFiltroCompetenciaOk_(r.competencia, iniOrd, fimOrd)) return false;
-      if (oss.length && oss.indexOf(r.oss_snapshot) === -1) return false;
-      if (uni.length && uni.indexOf(String(r.unidade_id)) === -1) return false;
-      if (fontes.length && fontes.indexOf(r.fonte) === -1) return false;
-      if (status.length && status.indexOf(r.status) === -1) return false;
-      return true;
-    })
+  return filtrarLinhasRecibos_(todasRecibosComCache_(), filtros)
+    .filter(function (r) { return relFiltroCompetenciaOk_(r.competencia, iniOrd, fimOrd); })
     .map(function (r) {
       var u = unidadesPorId[r.unidade_id] || {};
       return {
         competencia: r.competencia || '', unidade: u.nome || '', oss: r.oss_snapshot || '',
         tipo_unidade: r.tipo_unidade || u.tipo || '', objeto: r.objeto || '', instrumento: r.instrumento || '',
-        fonte: r.fonte || '', nota_empenho: r.nota_empenho || '', status: r.status || '',
-        valor_liquidado: toNumber_(r.valor_liquidado), valor_pago: toNumber_(r.valor_pago),
-        ordem_bancaria: r.ordem_bancaria || '', numero_processo: r.numero_processo || ''
+        fonte: r.fonte || '', nota_empenho: r.nota_empenho || '',
+        dea: mapaDea[r.nota_empenho] || '', status: r.status || '',
+        // Percentual só existe em Recibo de parcela dividida - em linha avulsa
+        // sai vazio (e não "0%", que sugeriria uma parcela de zero por cento).
+        percentual_parcela_dividida: (r.percentual_parcela_dividida === '' || r.percentual_parcela_dividida == null)
+          ? '' : String(r.percentual_parcela_dividida) + '%',
+        ordem_bancaria: r.ordem_bancaria || '', numero_processo: r.numero_processo || '',
+        parcela_contratual: toNumber_(r.parcela_contratual),
+        valor_liquidado: toNumber_(r.valor_liquidado), valor_pago: toNumber_(r.valor_pago)
       };
     });
 }
 
+/**
+ * Mesma ideia de montarLinhasRecibos_ acima: reaproveita
+ * `filtrarGruposNotasEmpenho_` (NotasEmpenho.gs), a mesma função que
+ * listarNotasEmpenho usa, em vez dos 3 filtros que estavam reimplementados
+ * aqui (oss, unidade, fonte) - objeto, tipo_unidade, dea, saldoBaixo e busca
+ * eram ignorados em silêncio.
+ */
 function montarLinhasNe_(session, filtros) {
-  var oss = paraArrayFiltro_(filtros.oss), uni = paraArrayFiltro_(filtros.unidade_id), fontes = paraArrayFiltro_(filtros.fonte);
-  return montarGruposNotasEmpenho_(session)
-    .filter(function (g) {
-      if (oss.length && oss.indexOf(g.sof_oss) === -1) return false;
-      if (uni.length && uni.indexOf(String(g.sof_unidade_id)) === -1) return false;
-      if (fontes.length && fontes.indexOf(g.fonte) === -1) return false;
-      return true;
-    })
+  return filtrarGruposNotasEmpenho_(montarGruposNotasEmpenho_(session), filtros || {})
     .map(function (g) {
       return {
         numero_ne: g.numero_ne || '', unidade: g.unidade_nome || '', oss: g.sof_oss || '', fonte: g.fonte || '',
@@ -68,8 +85,13 @@ function montarLinhasNe_(session, filtros) {
         // esta NE (SofFontes.objeto - ex. "CONTRATO DE GESTÃO (TES)"), mais
         // preciso que o Objeto geral do SOF usado antes aqui.
         objeto: g.objeto || '',
+        sei: g.sof_sei || '', sof_numero: g.sof_numero || '',
+        tipo_unidade: g.sof_tipo_unidade || '', dea: g.sof_dea || '',
+        alerta: g.alerta ? 'Sim' : 'Não',
         total_solicitado: g.total_solicitado, total_atendido: g.total_atendido,
-        saldo_atual: g.saldo_atual, falta_atendido: g.falta_atendido
+        valor_liquidado: g.valor_liquidado,
+        saldo_atual: g.saldo_atual, falta_atendido: g.falta_atendido,
+        parcela_mensal_referencia: g.parcela_mensal_referencia
       };
     });
 }
@@ -160,11 +182,15 @@ var RELATORIO_CATALOGO_ = {
       { key: 'instrumento', rotulo: 'Instrumento', tipo: 'texto' },
       { key: 'fonte', rotulo: 'Fonte', tipo: 'texto' },
       { key: 'nota_empenho', rotulo: 'Nota de Empenho', tipo: 'texto' },
+      { key: 'dea', rotulo: 'DEA', tipo: 'texto' },
       { key: 'status', rotulo: 'Status', tipo: 'texto' },
-      { key: 'valor_liquidado', rotulo: 'Liquidado', tipo: 'moeda' },
-      { key: 'valor_pago', rotulo: 'Pago', tipo: 'moeda' },
+      { key: 'percentual_parcela_dividida', rotulo: 'Parcela (%)', tipo: 'texto' },
       { key: 'ordem_bancaria', rotulo: 'Ordem bancária', tipo: 'texto' },
-      { key: 'numero_processo', rotulo: 'Nº Processo', tipo: 'texto' }
+      { key: 'numero_processo', rotulo: 'Nº Processo', tipo: 'texto' },
+      // Colunas de valor por último (mesma convenção de `unidades` abaixo).
+      { key: 'parcela_contratual', rotulo: 'Parcela Contratual', tipo: 'moeda' },
+      { key: 'valor_liquidado', rotulo: 'Liquidado', tipo: 'moeda' },
+      { key: 'valor_pago', rotulo: 'Pago', tipo: 'moeda' }
     ]
   },
   notasEmpenho: {
@@ -173,12 +199,19 @@ var RELATORIO_CATALOGO_ = {
       { key: 'numero_ne', rotulo: 'Número NE', tipo: 'texto' },
       { key: 'unidade', rotulo: 'Unidade', tipo: 'texto' },
       { key: 'oss', rotulo: 'OSS', tipo: 'texto' },
+      { key: 'tipo_unidade', rotulo: 'Tipo', tipo: 'texto' },
       { key: 'fonte', rotulo: 'Fonte', tipo: 'texto' },
       { key: 'objeto', rotulo: 'Objeto', tipo: 'texto' },
+      { key: 'sei', rotulo: 'SEI', tipo: 'texto' },
+      { key: 'sof_numero', rotulo: 'Nº SOF', tipo: 'texto' },
+      { key: 'dea', rotulo: 'DEA', tipo: 'texto' },
+      { key: 'alerta', rotulo: 'Saldo baixo', tipo: 'texto' },
       { key: 'total_solicitado', rotulo: 'Total Solicitado', tipo: 'moeda' },
       { key: 'total_atendido', rotulo: 'Total Atendido', tipo: 'moeda' },
+      { key: 'valor_liquidado', rotulo: 'Liquidado', tipo: 'moeda' },
       { key: 'saldo_atual', rotulo: 'Saldo Atual', tipo: 'moeda' },
-      { key: 'falta_atendido', rotulo: 'Falta ser Atendido', tipo: 'moeda' }
+      { key: 'falta_atendido', rotulo: 'Falta ser Atendido', tipo: 'moeda' },
+      { key: 'parcela_mensal_referencia', rotulo: 'Parcela Mensal Ref.', tipo: 'moeda' }
     ]
   },
   sof: {

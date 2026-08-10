@@ -1001,9 +1001,20 @@ function grupoNeComSaldoBaixo_(g) {
     g.valor_atual < FRACAO_SALDO_BAIXO_NE_ * g.parcela_mensal_referencia;
 }
 
-function listarNotasEmpenho(session, params) {
+/**
+ * Filtros da tela de Notas de Empenho, aplicados sobre os grupos já montados
+ * por montarGruposNotasEmpenho_. Extraída de dentro de listarNotasEmpenho
+ * (sessão 2026-08-08) pra ser a ÚNICA definição desses filtros, compartilhada
+ * com o gerador de relatórios (montarLinhasNe_, Relatorios.gs).
+ *
+ * Motivo: montarLinhasNe_ reimplementava só 3 dos 8 filtros (oss, unidade,
+ * fonte). Quando o botão "Gerar Relatório" passou a existir na própria tela de
+ * NE, mandando os filtros que o analista já aplicou, os outros 5 (objeto,
+ * tipo_unidade, dea, saldoBaixo, busca) seriam descartados em silêncio - o
+ * relatório traria linhas que a tela não estava mostrando, sem nenhum aviso.
+ */
+function filtrarGruposNotasEmpenho_(resultado, params) {
   params = params || {};
-  var resultado = montarGruposNotasEmpenho_(session);
 
   // Filtro do Dashboard (card "NEs com saldo baixo"): só grupos com saldo
   // atual abaixo de 20% da parcela mensal de referência.
@@ -1037,6 +1048,13 @@ function listarNotasEmpenho(session, params) {
       });
     });
   }
+
+  return resultado;
+}
+
+function listarNotasEmpenho(session, params) {
+  params = params || {};
+  var resultado = filtrarGruposNotasEmpenho_(montarGruposNotasEmpenho_(session), params);
 
   resultado.sort(function (a, b) {
     if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;

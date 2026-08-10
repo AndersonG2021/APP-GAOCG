@@ -1865,6 +1865,82 @@ SOF (também virou `.campo-moeda`) somando certo; a soma automática do valor pa
 na parcela de 70% com múltiplas Ordens Bancárias; e os fluxos que exigem backend
 real (OCR de anexo, documento SEI, relatórios, edição simultânea).
 
+## Relatórios nas telas de Recibos e Notas de Empenho (sessão 2026-08-08)
+
+**Pedido:** "criar relatórios nas abas de recibo e de Notas de Empenho tbm.
+Reaproveite o máximo possível do que já existe. Focando em otimização."
+
+O backend **já tinha** `recibos` e `notasEmpenho` no `RELATORIO_CATALOGO_`
+(usados pelo assistente do Dashboard desde 2026-07-28) — faltava só o botão
+nas telas. Mas copiar o padrão da tela de Unidades ia produzir **relatório com
+dado errado**, por causa do item abaixo.
+
+### Achado: os montadores ignoravam a maioria dos filtros, em silêncio
+
+`montarLinhasRecibos_` reimplementava só 5 filtros (`competenciaInicio/Fim`,
+`oss`, `unidade_id`, `fonte`, `status`). A tela de Recibos tem 12. Passar
+`filtrosAtuais()` direto faria os outros 7 (`competencia` como multi-seleção,
+`objeto`, `tipo_unidade`, `dea`, `instrumento`, `nota_empenho`,
+`numero_processo`, `busca`) serem **descartados sem nenhum aviso** — o
+analista filtraria "jul.26" na tela e receberia todos os meses no relatório.
+`montarLinhasNe_` tinha o mesmo problema: 3 dos 8 filtros da tela de NE.
+
+A tela de Unidades nunca sofreu disso porque `montarLinhasUnidades_` foi
+escrita espelhando `listarUnidades` de propósito (o comentário dela diz isso).
+
+**Correção — o reuso de verdade:** os montadores passaram a chamar as MESMAS
+funções de filtro das telas, em vez de reimplementar um subconjunto:
+- `montarLinhasRecibos_` → `filtrarLinhasRecibos_` (`Recibos.gs`), a mesma de
+  `listarRecibos`. A faixa `competenciaInicio/Fim` (exclusiva do assistente do
+  Dashboard) continua aplicada por cima; os dois formatos coexistem.
+- Nova `filtrarGruposNotasEmpenho_` (`NotasEmpenho.gs`), extraída de dentro de
+  `listarNotasEmpenho` → usada pelos dois.
+
+Efeito colateral bom: qualquer filtro novo que uma tela ganhar passa a valer no
+relatório automaticamente, sem ninguém lembrar de replicar.
+
+### Frontend — um modal só para as 3 telas
+
+O modal "Gerar Relatório" estava embutido em `js/unidades.js` (~55 linhas de
+HTML + wiring). Copiar pras outras duas daria 3 cópias quase idênticas.
+Extraído para **`TelaRelatorios.abrirParaTela(opcoes)`** (`js/relatorios.js`):
+`{ fonte, titulo, obterFiltros, colunasOcultas, ajuda }`. As 3 telas chamam
+essa função; `js/unidades.js` encolheu ~50 linhas.
+
+Ganhos que vieram junto, por ser compartilhado:
+- **Agrupamento + subtotais** agora existe também nas telas (antes só no
+  assistente do Dashboard). As opções são derivadas da fonte — Unidades só
+  oferece "Por OSS", porque não tem coluna `unidade`/`fonte`.
+- `obterFiltros` é a FUNÇÃO, não o resultado: os filtros são lidos no clique em
+  "Gerar", então mexer num filtro com o modal aberto vale.
+
+### Colunas novas no catálogo
+
+- **Recibos:** `dea`, `percentual_parcela_dividida` ("70%"/"30%", vazio em
+  linha avulsa) e `parcela_contratual`. As de valor foram movidas para o fim,
+  seguindo a convenção já documentada em `unidades`.
+- **Notas de Empenho:** `tipo_unidade`, `sei`, `sof_numero`, `dea`, `alerta`
+  ("Saldo baixo": Sim/Não), `valor_liquidado`, `parcela_mensal_referencia`.
+
+Modelos de relatório já salvos continuam funcionando (`gerarRelatorio` descarta
+key desconhecida); só não trazem as colunas novas, que não estavam na lista
+deles. A ordem das colunas de Recibos muda um pouco nos modelos antigos
+(valores por último) — cosmético.
+
+### Verificação feita
+
+Sintaxe dos 16 `.gs` via JScript/`cscript`: OK (só o lookbehind pré-existente
+de `NotasEmpenho.gs`, como sempre). **Bug pego na revisão do próprio código:**
+eu tinha usado `RELATORIO_CAMPO_GRUPO_` no frontend, mas essa constante só
+existe no backend — daria `ReferenceError` e o modal não abriria. Corrigido
+para derivar de `ROTULO_DIMENSAO_`.
+
+**Nada testado em execução real.** O frontend não tem como ser validado por
+sintaxe aqui (JScript não parseia ES6).
+
+**Passo manual pendente:** colar `Relatorios.gs` e `NotasEmpenho.gs` no editor
+do Apps Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

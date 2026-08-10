@@ -62,6 +62,7 @@ const TelaNotasEmpenho = (function () {
           </div>
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosNe">Limpar filtros</button>
+          <button class="botao" id="btnGerarRelatorioNe">Gerar Relatório</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovaNe">+ Nova Nota de Empenho</button>
         </div>
@@ -71,6 +72,7 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('btnFiltrarNe').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
+    document.getElementById('btnGerarRelatorioNe').addEventListener('click', abrirGerarRelatorio);
     // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
     // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
     const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
@@ -129,6 +131,25 @@ const TelaNotasEmpenho = (function () {
   /** Evita reler a lista/mostrar o spinner quando Filtrar/Limpar filtros/"x" não mudam nada de fato. */
   function filtrosMudaram_() {
     return JSON.stringify(filtrosAtuais()) !== ultimoFiltroJson;
+  }
+
+  /**
+   * "Gerar Relatório" (sessão 2026-08-08): escolha de colunas + agrupamento +
+   * as 4 saídas (tela/PDF/CSV/Sheets), com os filtros já aplicados na tela.
+   * Modal compartilhado com Unidades e Recibos
+   * (TelaRelatorios.abrirParaTela, js/relatorios.js).
+   *
+   * Cada linha do relatório é um CARD desta tela - ou seja, uma NE agrupada
+   * (original + reforços somados), com os mesmos totais que o card mostra -
+   * e não uma linha solta da aba NotasEmpenho.
+   */
+  function abrirGerarRelatorio() {
+    return TelaRelatorios.abrirParaTela({
+      fonte: 'notasEmpenho',
+      titulo: 'Gerar Relatório de Notas de Empenho',
+      obterFiltros: filtrosAtuais,
+      ajuda: 'Cada linha é uma Nota de Empenho agrupada (original + reforços), como nos cards. O relatório usa os filtros aplicados na tela, em todas as páginas.'
+    });
   }
 
   async function carregar() {
