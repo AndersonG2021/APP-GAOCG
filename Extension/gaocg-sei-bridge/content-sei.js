@@ -415,6 +415,10 @@ function selecionarOpcaoPorTexto_(trecho) {
 /** Formato do número de processo do SEI (mesmo padrão validado no GAOCG). */
 const REGEX_PROCESSO_SEI_ = /\d{5,10}\.\d{6}\/\d{4}-\d{2}/g;
 const CHAVE_PROCESSO_ABRIR_ = "processoParaAbrir";
+/** Envio inteiro (documento + número do processo) aguardando o processo abrir. */
+const CHAVE_ENVIO_PENDENTE_ = "envioPendente";
+/** Evita que duas abas retomem o mesmo envio ao mesmo tempo. */
+let retomandoEnvio_ = false;
 
 /** Só dígitos - a comparação ignora pontuação/formatação divergente. */
 function digitos_(texto) {
@@ -501,6 +505,55 @@ async function tentarPesquisarProcesso_() {
   if (form) form.submit();
   else campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
   avisarNaTela_("GAOCG: pesquisando o processo " + alvo.numero + " no SEI. Abra-o e clique em enviar de novo.");
+}
+
+/* ===================== retomada automática do envio ===================== */
+
+/**
+ * Fecha o ciclo do "processo não estava aberto".
+ *
+ * Antes (v0.7/0.8) a extensão abria a pesquisa do SEI e devolvia erro pedindo
+ * ao analista para **clicar em enviar de novo** no GAOCG depois de abrir o
+ * processo. Na prática isso é um passo a mais sem necessidade: a intenção já
+ * tinha sido declarada no primeiro clique.
+ *
+ * Agora o envio inteiro (documento + número do processo) fica guardado e é
+ * retomado sozinho assim que uma aba do SEI carregar com AQUELE processo
+ * aberto. Se o analista abrir outro processo, nada acontece - a conferência de
+ * número continua valendo, e o pendente só expira pelo tempo (15 min).
+ */
+async function retomarEnvioPendente_() {
+  if (retomandoEnvio_) return;
+  if (!location.href.includes("procedimento_trabalhar")) return;
+
+  let pendente = null;
+  try {
+    const dados = await chrome.storage.local.get(CHAVE_ENVIO_PENDENTE_);
+    pendente = dados && dados[CHAVE_ENVIO_PENDENTE_];
+  } catch (e) {
+    return;
+  }
+  if (!pendente || !pendente.documento || !pendente.numeroProcesso) return;
+  if (Date.now() - (pendente.criadoEm || 0) > VALIDADE_PENDENTE_MS_) {
+    await chrome.storage.local.remove(CHAVE_ENVIO_PENDENTE_).catch(() => {});
+    return;
+  }
+
+  // A árvore do processo pode demorar a montar; só depois disso o número
+  // aparece no texto da página.
+  const bate = await aguardarCondicao_(() => conferirProcesso_(pendente.numeroProcesso).tem, 15000, 500);
+  if (!bate) return; // outro processo nesta aba - deixa o pendente para a próxima
+
+  retomandoEnvio_ = true;
+  await chrome.storage.local.remove(CHAVE_ENVIO_PENDENTE_).catch(() => {});
+  avisarNaTela_("GAOCG: processo " + pendente.numeroProcesso + " encontrado. Criando o documento da SOF...");
+  try {
+    await preencherDocumento(pendente.documento);
+  } catch (e) {
+    avisarNaTela_("GAOCG: falha ao criar o documento - " + (e && e.message ? e.message : e));
+  } finally {
+    retomandoEnvio_ = false;
+  }
 }
 
 /* ===================== Etapa 2: conteúdo pendente ===================== */
@@ -765,6 +818,10 @@ if (window.top === window) {
   // Se a extensão pediu para abrir um processo pela pesquisa, é nesta carga de
   // página que isso acontece.
   tentarPesquisarProcesso_();
+
+  // E se havia um envio esperando o processo abrir, ele é retomado sozinho aqui
+  // - sem exigir um segundo clique no GAOCG.
+  retomarEnvioPendente_();
 
   // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
   // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.

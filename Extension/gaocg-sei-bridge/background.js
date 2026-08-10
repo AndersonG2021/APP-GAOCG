@@ -72,13 +72,23 @@ async function acharAbaDoProcesso_(numeroProcesso) {
 }
 
 /**
- * Abre uma aba nova no SEI e deixa o número guardado para o content script
- * daquela aba usar a pesquisa (ver tentarPesquisarProcesso_ em content-sei.js).
+ * Processo não está aberto: guarda o envio INTEIRO (documento + número) e abre
+ * uma aba nova no SEI já pesquisando o processo.
+ *
+ * O envio guardado é o que permite a extensão **retomar sozinha** assim que o
+ * analista abrir o processo certo (ver retomarEnvioPendente_ em
+ * content-sei.js) - antes era preciso voltar ao GAOCG e clicar em enviar de
+ * novo, um passo a mais sem necessidade, já que a intenção foi declarada no
+ * primeiro clique.
+ *
  * Aba NOVA de propósito: não mexe no que o analista já tem aberto.
  */
-async function abrirPesquisaDoProcesso_(numeroProcesso) {
+async function agendarEnvioEAbrirPesquisa_(numeroProcesso, documento) {
   try {
-    await chrome.storage.local.set({ processoParaAbrir: { numero: numeroProcesso, criadoEm: Date.now() } });
+    await chrome.storage.local.set({
+      envioPendente: { numeroProcesso: numeroProcesso, documento: documento, criadoEm: Date.now() },
+      processoParaAbrir: { numero: numeroProcesso, criadoEm: Date.now() }
+    });
     await chrome.tabs.create({ url: "https://sei.pe.gov.br/", active: true });
     return true;
   } catch (e) {
@@ -218,16 +228,17 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
       const busca = await acharAbaDoProcesso_(numero);
       if (!busca.aba) {
-        // Nenhuma aba com ESTE processo: abre a pesquisa do SEI numa aba nova e
-        // devolve erro. Nunca cai para "qualquer aba do SEI" - ver
-        // acharAbaDoProcesso_.
-        const abriu = await abrirPesquisaDoProcesso_(numero);
+        // Nenhuma aba com ESTE processo: guarda o envio, abre a pesquisa numa
+        // aba nova e a extensão retoma sozinha quando o processo abrir. Nunca
+        // cai para "qualquer aba do SEI" - ver acharAbaDoProcesso_.
+        const agendou = await agendarEnvioEAbrirPesquisa_(numero, message.documento);
         sendResponse({
           ok: false,
           processoNaoAberto: true,
-          erro: busca.motivo === "sem_abas"
-            ? "Nenhuma aba do SEI aberta. " + (abriu ? "Abri o SEI numa aba nova pesquisando o processo " + numero + " - abra o processo e clique em enviar de novo." : "Abra o processo " + numero + " no SEI e tente de novo.")
-            : "O processo " + numero + " não está aberto em nenhuma aba do SEI. " + (abriu ? "Abri a pesquisa dele numa aba nova - abra o processo e clique em enviar de novo." : "Abra o processo e tente de novo.")
+          envioAgendado: agendou,
+          erro: agendou
+            ? "O processo " + numero + " não estava aberto. Abri a pesquisa dele no SEI - é só abrir o processo que o documento é criado automaticamente."
+            : "O processo " + numero + " não está aberto em nenhuma aba do SEI. Abra o processo e tente de novo."
         });
         return;
       }

@@ -2333,6 +2333,33 @@ segue 100% manual.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## Retomada automática do envio ao abrir o processo (v0.9.0, 2026-08-10)
+
+**Relato:** "está abrindo o processo corretamente, mas só está buscando anexar a
+SOF quando eu solicito novamente no app".
+
+Comportamento por desenho da v0.7/0.8 - eu **exigia** o segundo clique ("abra o
+processo e clique em enviar de novo"). Na prática é um passo a mais sem
+necessidade: a intenção já foi declarada no primeiro clique.
+
+**Correção:** quando o processo não está aberto, o background passa a guardar o
+envio INTEIRO (`envioPendente` = documento + número do processo) junto do
+`processoParaAbrir`. Ao carregar qualquer página `procedimento_trabalhar`, o
+content script chama `retomarEnvioPendente_`, espera a árvore montar (o número
+só aparece no texto depois disso), confere o número e, batendo, executa
+`preencherDocumento` sozinho.
+
+**Salvaguardas mantidas:** abrir um processo DIFERENTE não dispara nada - a
+conferência de número continua valendo e o pendente fica esperando; expira em 15
+min; e `retomandoEnvio_` evita que duas abas retomem o mesmo envio ao mesmo
+tempo.
+
+**No app:** "processo não aberto" deixou de ser toast vermelho quando o envio foi
+agendado (`envioAgendado`) - virou informativo, porque não há nada a refazer.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
