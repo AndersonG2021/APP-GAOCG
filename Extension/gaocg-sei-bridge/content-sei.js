@@ -216,6 +216,25 @@ function chegouTelaCadastro_() {
   return !!(acharEm_("#frmDocumentoCadastro") || campoPorRotulo_("Nome na Árvore"));
 }
 
+/**
+ * Item visível da lista de sugestões cujo texto contenha um dos rótulos.
+ *
+ * Devolve o elemento MAIS PROFUNDO que ainda contém o rótulo inteiro: os
+ * ancestrais (body, div do container) também "contêm" o texto, e clicar neles
+ * não seleciona nada.
+ *
+ * Serve para dois fins: saber que a lista já apareceu (espera adaptativa antes
+ * de mandar ArrowDown) e, no fallback, saber onde clicar.
+ */
+function itemDaLista_(escopo, rotulos) {
+  const itens = Array.from(escopo.querySelectorAll("li, a, tr, td, div, span")).filter(el => {
+    if (el.offsetParent === null) return false;
+    const texto = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+    return texto && rotulos.some(r => texto.indexOf(r.toLowerCase()) !== -1);
+  });
+  return itens.length ? itens[itens.length - 1] : null;
+}
+
 /* ===================== Etapa 1: cadastro (best-effort) ===================== */
 
 async function preencherDocumento(documento) {
@@ -334,7 +353,7 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
   //    superior do SEI, no documento do topo - era ali que o filtro estava
   //    sendo digitado (ver documentoComTexto_).
   const escopo = await aguardarCondicao_(
-    () => documentoComTexto_("Escolha o Tipo do Documento"), 8000, 300
+    () => documentoComTexto_("Escolha o Tipo do Documento"), 8000, 120
   ) || document;
 
   // 1. Preenche o filtro, se a tela tiver um. É o que faz a lista aparecer.
@@ -342,7 +361,7 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
     const filtro = await aguardarCondicao_(
       () => Array.from(escopo.querySelectorAll('input[type=text], input:not([type])'))
         .find(i => i.offsetParent !== null),
-      6000, 300
+      6000, 100
     );
     if (filtro) {
       filtro.focus();
@@ -355,17 +374,23 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
       //    jQuery UI). Um `.click()` no item quase nunca seleciona: o widget
       //    age no mousedown/menuselect, não no click. Seta pra baixo destaca o
       //    primeiro item, Enter confirma.
-      await esperar_(700); // a lista precisa chegar antes da seta
+      //
+      // A espera aqui é ADAPTATIVA: age assim que a sugestão aparece na tela,
+      // em vez do 700ms fixo "por garantia" que existia antes - o usuário
+      // notou a demora e ela não tinha razão de ser. Só se a lista não aparecer
+      // é que sobra um respiro fixo, para não desistir cedo demais numa rede
+      // lenta.
+      const apareceu = await aguardarCondicao_(() => itemDaLista_(escopo, rotulos), 6000, 80);
+      await esperar_(apareceu ? 80 : 400);
       teclar_(filtro, "ArrowDown", 40);
-      await esperar_(250);
+      await esperar_(80);
       teclar_(filtro, "Enter", 13);
-      if (await aguardarCondicao_(chegouTelaCadastro_, 3500, 250)) return true;
+      if (await aguardarCondicao_(chegouTelaCadastro_, 3500, 120)) return true;
     }
   }
 
   // 3. Não avançou pelo teclado: procura o item e clica com a sequência
-  //    completa de mouse. Comparação por "contém", porque o texto exibido traz
-  //    a sigla da unidade na frente ("SES - ...").
+  //    completa de mouse.
   const achado = await aguardarCondicao_(() => {
     const select = escopo.querySelector("#selSerie");
     if (select) {
@@ -373,17 +398,10 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
         rotulos.some(r => (o.textContent || "").toLowerCase().indexOf(r.toLowerCase()) !== -1));
       if (opcao) return { tipo: "select", select: select, opcao: opcao };
     }
-    const itens = Array.from(escopo.querySelectorAll("li, a, tr, td, div, span")).filter(el => {
-      if (el.offsetParent === null) return false;
-      const texto = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-      return texto && rotulos.some(r => texto.indexOf(r.toLowerCase()) !== -1);
-    });
-    // O item real é o mais PROFUNDO que ainda contém o rótulo inteiro - os
-    // ancestrais (body, div do container) também "contêm" o texto e clicar
-    // neles não faz nada.
-    if (itens.length) return { tipo: "item", item: itens[itens.length - 1] };
+    const item = itemDaLista_(escopo, rotulos);
+    if (item) return { tipo: "item", item: item };
     return null;
-  }, 8000, 300);
+  }, 8000, 120);
 
   if (!achado) return false;
   if (achado.tipo === "item") {

@@ -2562,6 +2562,38 @@ de forma isolada - se os erros persistirem, o diagnóstico precisa ser refeito.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## Espera adaptativa na escolha do tipo (v0.14.0, 2026-08-10)
+
+**Relato:** a automação demora alguns segundos entre digitar o filtro e apertar
+seta-baixo + Enter.
+
+Não era proposital: era um `esperar_(700)` fixo "por garantia" antes da seta,
+mais 250ms antes do Enter, e polling de 300ms em todas as esperas do caminho.
+Somando, quase 1,3s de espera cega.
+
+**Correção:** a espera virou **adaptativa** - novo `itemDaLista_` detecta a
+sugestão assim que ela aparece e a extensão age em seguida (80ms de folga), com
+polling de 80-120ms em vez de 300ms. Só quando a lista NÃO aparece é que sobra
+um respiro fixo de 400ms, para não desistir cedo demais numa rede lenta. Na
+prática deve cair para ~200-300ms.
+
+`itemDaLista_` também eliminou a duplicação: a mesma busca de item servia à
+detecção da lista e ao fallback de clique, escrita duas vezes.
+
+### As duas esperas que NÃO foram reduzidas (de propósito)
+
+- `esperar_(1200)` na verificação da injeção;
+- `esperar_(800)` antes de salvar.
+
+Essas são **load-bearing**: a de 1200ms é uma janela de acomodação para
+detectar o modelo do SEI sobrescrevendo o conteúdo DEPOIS da injeção (foi
+exatamente o bug da v0.13.0). Torná-la adaptativa - "para assim que o conteúdo
+bater" - reintroduziria o bug, porque a sobrescrita chega depois do primeiro
+acerto. A de 800ms dá tempo do CKEditor processar o `setData` antes do salvamento.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
