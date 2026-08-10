@@ -2484,6 +2484,45 @@ listagem agora cai corretamente no fluxo de pesquisa.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## 8º teste: corrida com o carregamento do modelo do SEI (v0.13.0)
+
+**Sintoma:** tudo funciona até a colagem - o conteúdo do app não entra e o
+modelo padrão de SOF do SEI permanece no editor.
+
+### Causa: corrida, não falha de seletor
+
+O corpo do editor existe no DOM **antes** de o CKEditor terminar de carregar o
+modelo do documento. A extensão injetava nesse intervalo e o modelo era
+carregado **por cima** logo depois - resultado idêntico a "não fez nada".
+
+Por que só apareceu agora: até a v0.6.0 havia a barra de confirmação, e o tempo
+até o usuário clicar em "Substituir" já servia de espera. Ao remover a pergunta
+(v0.11.0, a pedido do usuário), a corrida ficou exposta. **A funcionalidade não
+regrediu por um bug novo - a espera acidental é que sumiu.**
+
+### Correções
+
+1. **`aguardarEditorEstabilizar_`** - só injeta depois que o `innerHTML` do
+   editor para de mudar por 1,5s (limite de 20s). É o sinal de que o modelo
+   terminou de carregar.
+2. **`conteudoConfere_` + até 3 tentativas** - depois de injetar, confere se o
+   que está no editor tem pelo menos metade do tamanho do que foi enviado
+   (folga para o CKEditor reescrever a marcação). Não conferindo, reinjeta.
+   Sem isso a extensão anunciava "inserido" com o modelo na tela - foi
+   exatamente o que o usuário viu.
+3. **`status === "ready"`** no main world - instância ainda em "loaded"/
+   "unloaded" descarta o `setData` quando termina de carregar. Agora só
+   instâncias prontas são consideradas, e "não está pronto" vira um motivo
+   explícito de nova tentativa.
+4. Falhando as 3 tentativas, o aviso na tela **diz que não colou** e manda usar
+   "Salvar e gerar documento SEI" - em vez de dar a impressão de sucesso.
+
+O número da SOF passou a ser lido depois da estabilização, o que também torna
+essa leitura mais confiável.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
