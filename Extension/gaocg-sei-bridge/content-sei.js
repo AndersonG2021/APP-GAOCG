@@ -287,18 +287,45 @@ async function lerConteudoPendente_() {
   }
 }
 
-/** Corpo editável do CKEditor, em qualquer frame acessível desta página. */
+/**
+ * Corpo editável do documento, em qualquer frame acessível desta página.
+ *
+ * Um documento do SEI tem seções pré-definidas (cabeçalho, principal, rodapé,
+ * assinatura), cada uma com seu próprio editor - e só a "principal" aceita
+ * edição. A versão anterior pegava o PRIMEIRO `iframe.cke_wysiwyg_frame` que
+ * encontrasse, que é o cabeçalho: era ali que o conteúdo ia parar (4º teste
+ * real, 2026-08-10).
+ *
+ * Agora coleta todos os candidatos, descarta os travados (`isContentEditable`
+ * false, que é como o SEI protege cabeçalho/rodapé) e, entre os que sobram,
+ * fica com o de maior altura - o corpo do documento é sempre o maior.
+ */
 function corpoDoEditor_() {
-  const iframe = acharEm_('iframe.cke_wysiwyg_frame, iframe[title="Rich Text Editor"]');
-  if (iframe) {
+  const candidatos = [];
+
+  for (const iframe of acharTodos_('iframe.cke_wysiwyg_frame, iframe[title="Rich Text Editor"]')) {
     try {
       const corpo = iframe.contentDocument && iframe.contentDocument.body;
-      if (corpo && corpo.isContentEditable !== false) return corpo;
+      if (corpo) {
+        candidatos.push({
+          corpo: corpo,
+          editavel: corpo.isContentEditable !== false,
+          altura: iframe.offsetHeight || 0
+        });
+      }
     } catch (e) { /* cross-origin */ }
   }
+
   // CKEditor 5 / modo "div editável" (sem iframe).
-  const editavel = acharEm_('.cke_editable[contenteditable="true"], div[contenteditable="true"].cke_editable');
-  return editavel || null;
+  for (const el of acharTodos_('.cke_editable[contenteditable="true"], div[contenteditable="true"].cke_editable')) {
+    candidatos.push({ corpo: el, editavel: true, altura: el.offsetHeight || 0 });
+  }
+
+  if (!candidatos.length) return null;
+  const editaveis = candidatos.filter(c => c.editavel);
+  const pool = editaveis.length ? editaveis : candidatos;
+  pool.sort((a, b) => b.altura - a.altura);
+  return pool[0].corpo;
 }
 
 /** Editor sem nada dentro - dá pra preencher sozinho, sem risco de apagar nada. */
@@ -366,10 +393,12 @@ async function vigiarEditorParaConteudoPendente_() {
  * versão que não exponha a instância).
  */
 async function aplicarConteudo_(corpo, pendente) {
-  let via = "api";
-  const ok = await pedirInjecaoNoMainWorld_(pendente.html);
-  if (!ok) {
-    via = "dom";
+  const resultado = await pedirInjecaoNoMainWorld_(pendente.html);
+  let detalhe;
+  if (resultado.ok) {
+    detalhe = " (seção " + (resultado.escolhida || "?") + ")";
+  } else {
+    detalhe = " (modo DOM)";
     corpo.innerHTML = pendente.html;
     corpo.dispatchEvent(new Event("input", { bubbles: true }));
     corpo.dispatchEvent(new Event("change", { bubbles: true }));
@@ -377,19 +406,20 @@ async function aplicarConteudo_(corpo, pendente) {
 
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
   avisarNaTela_(
-    "GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido" +
-    (via === "dom" ? " (modo DOM)" : "") + ". Revise e salve o documento."
+    "GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido" + detalhe +
+    ". Revise e salve o documento."
   );
 }
 
+/** Devolve { ok, escolhida } - `escolhida` é o nome da seção do SEI que recebeu o conteúdo. */
 function pedirInjecaoNoMainWorld_(html) {
   try {
     return chrome.runtime
       .sendMessage({ type: "INJETAR_CKEDITOR", html: html })
-      .then(r => !!(r && r.ok))
-      .catch(() => false);
+      .then(r => (r && r.ok) ? { ok: true, escolhida: r.escolhida } : { ok: false })
+      .catch(() => ({ ok: false }));
   } catch (e) {
-    return Promise.resolve(false);
+    return Promise.resolve({ ok: false });
   }
 }
 

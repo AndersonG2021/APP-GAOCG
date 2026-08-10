@@ -2204,6 +2204,43 @@ EXECUÇÃO, não de sintaxe - nenhuma checagem disponível nesta máquina o pega
 (não há Node; o JScript do `cscript` nem parseia ES6). A convenção "inicialização
 por último" é a mitigação estrutural adotada no lugar do teste que não existe.
 
+## 4º teste: conteúdo ia para a seção errada do documento (2026-08-10)
+
+**Sintoma:** o botão funcionou, mas o editor do SEI tem **três áreas** (cima,
+meio, baixo) e só a do meio aceita edição - o conteúdo não foi para lá.
+
+**Causa:** um documento do SEI é dividido em seções pré-definidas -
+**cabeçalho, principal, rodapé e assinatura** (documentação oficial do SEI) - e
+cada uma é uma instância separada do CKEditor. O SEI trava cabeçalho/rodapé
+como read-only. Meu código errava nas duas pontas:
+
+- **caminho DOM** (`corpoDoEditor_`): pegava o PRIMEIRO
+  `iframe.cke_wysiwyg_frame` encontrado, que é o cabeçalho;
+- **caminho API** (`aplicarViaCkeditor_`): chamava `setData` em **todas** as
+  instâncias, ou seja, escrevia o documento inteiro por cima do cabeçalho e do
+  rodapé também.
+
+**Correção (v0.6.0):** os dois caminhos passam a escolher UMA seção, pelo mesmo
+critério - descarta as read-only (é como o próprio SEI protege
+cabeçalho/rodapé, e foi exatamente o que o usuário descreveu), prefere nome que
+remeta ao corpo (`principal|conteudo|corpo|texto`) e, empatando, fica com a de
+maior altura visível.
+
+**Diagnóstico embutido:** `aplicarViaCkeditor_` roda no main world, então
+`console.log` sai no console DA PÁGINA DO SEI - lista nome, `readOnly` e altura
+de cada instância, e qual foi escolhida. O aviso verde na tela passou a mostrar
+a seção usada (`(seção X)`), ou `(modo DOM)` quando caiu no fallback. Se a
+heurística errar, os nomes reais ficam visíveis sem precisar de mais um ciclo às
+cegas.
+
+**Sobre o SEI Pro:** o `init.js` dele (entrada da página do editor) não trata
+disso - a lógica está em `sei-pro-editor.js`, 440 KB minificados. Não foi
+necessário: o discriminador confiável (read-only) veio da documentação do SEI e
+do relato do usuário, não do código deles.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** dar F5 na
+aba do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

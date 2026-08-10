@@ -82,23 +82,59 @@ async function enviarParaAba(abaId, payload) {
  * por `args` - não pode fechar sobre nenhuma variável daqui, porque a função é
  * serializada para ser executada no outro contexto.
  *
- * Devolve true se conseguiu aplicar por alguma instância do CKEditor.
+ * ===== Por que escolher UMA instância, e não todas =====
+ *
+ * Um documento do SEI é dividido em seções pré-definidas - cabeçalho,
+ * principal, rodapé e assinatura (documentação oficial do SEI) - e cada uma é
+ * uma instância separada do CKEditor. Só a "principal" aceita edição; as outras
+ * ficam travadas (read-only).
+ *
+ * Bug real (4º teste, 2026-08-10): a v0.5.x chamava setData em TODAS as
+ * instâncias, ou seja, escrevia o documento inteiro por cima do cabeçalho e do
+ * rodapé também. O usuário viu as três áreas e só a do meio editável.
+ *
+ * Critério de escolha, nesta ordem:
+ *   1. descarta as read-only (é o discriminador confiável - o próprio SEI trava
+ *      cabeçalho/rodapé);
+ *   2. entre as restantes, prefere uma cujo nome remeta ao corpo do documento;
+ *   3. empatando, a de maior altura visível (o corpo é sempre a maior).
+ *
+ * Também loga as instâncias encontradas no console DA PÁGINA DO SEI - é onde o
+ * usuário consegue ver os nomes reais e me reportar, caso a heurística erre.
  */
 function aplicarViaCkeditor_(html) {
   try {
     const CK = window.CKEDITOR;
-    if (!CK || !CK.instances) return false;
-    let aplicou = false;
-    for (const nome of Object.keys(CK.instances)) {
+    if (!CK || !CK.instances) return { ok: false, motivo: "CKEDITOR não encontrado nesta página" };
+
+    const info = Object.keys(CK.instances).map(nome => {
       const instancia = CK.instances[nome];
-      if (instancia && typeof instancia.setData === "function") {
-        instancia.setData(html);
-        aplicou = true;
-      }
+      let altura = 0;
+      try {
+        if (instancia.ui && instancia.ui.contentsElement && instancia.ui.contentsElement.$) {
+          altura = instancia.ui.contentsElement.$.offsetHeight || 0;
+        }
+      } catch (e) { /* instância ainda montando */ }
+      return { nome: nome, readOnly: !!instancia.readOnly, altura: altura };
+    });
+    console.log("[GAOCG SEI Bridge] instâncias CKEditor nesta página:", info);
+    if (!info.length) return { ok: false, motivo: "nenhuma instância de CKEditor" };
+
+    const editaveis = info.filter(i => !i.readOnly);
+    const candidatas = editaveis.length ? editaveis : info;
+    const escolhida =
+      candidatas.find(i => /principal|conteudo|conteúdo|corpo|texto/i.test(i.nome)) ||
+      candidatas.slice().sort((a, b) => b.altura - a.altura)[0];
+
+    const instancia = CK.instances[escolhida.nome];
+    if (!instancia || typeof instancia.setData !== "function") {
+      return { ok: false, motivo: "instância sem setData" };
     }
-    return aplicou;
+    instancia.setData(html);
+    console.log("[GAOCG SEI Bridge] conteúdo aplicado na instância:", escolhida.nome);
+    return { ok: true, escolhida: escolhida.nome, candidatas: info };
   } catch (e) {
-    return false;
+    return { ok: false, motivo: String(e && e.message ? e.message : e) };
   }
 }
 
@@ -123,7 +159,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         func: aplicarViaCkeditor_,
         args: [message.html]
       });
-      sendResponse({ ok: resultados.some(r => r && r.result === true) });
+      // Só o frame que hospeda o editor tem CKEDITOR; os demais devolvem
+      // ok:false. Basta um ter dado certo.
+      const sucesso = resultados.map(r => r && r.result).filter(r => r && r.ok)[0];
+      sendResponse(sucesso
+        ? { ok: true, escolhida: sucesso.escolhida }
+        : { ok: false, erro: "Nenhum frame aplicou o conteúdo pela API do CKEditor." });
     } catch (erro) {
       sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) });
     }
