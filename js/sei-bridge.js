@@ -175,8 +175,15 @@ const SeiBridge = (function () {
       });
 
       if (!resposta.ok) {
-        UI.toast('SEI: ' + (resposta.erro || 'erro desconhecido ao preencher o documento.'), 'erro');
-        return false;
+        // Processo não aberto NÃO é erro quando a extensão já agendou o envio:
+        // ela abre a pesquisa e cria o documento sozinha assim que o analista
+        // abrir o processo certo. Mostrar isso como falha vermelha faria o
+        // analista achar que precisa refazer alguma coisa.
+        UI.toast(
+          'SEI: ' + (resposta.erro || 'erro desconhecido ao preencher o documento.'),
+          resposta.envioAgendado ? 'info' : 'erro'
+        );
+        return !!resposta.envioAgendado;
       }
 
       // O envio tem duas etapas independentes (ver content-sei.js): o cadastro

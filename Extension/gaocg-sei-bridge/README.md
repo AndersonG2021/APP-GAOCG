@@ -67,10 +67,16 @@ Lê o texto da página, e não a URL, porque a URL do `procedimento_trabalhar` t
 `id_procedimento` — um id interno do banco, sem relação com o número que o
 analista digitou na SOF.
 
-**Se o processo não estiver aberto, a extensão NÃO envia.** Ela devolve erro e
-abre o SEI numa aba nova já pesquisando aquele número. Até a v0.6.0 havia um
-fallback para "qualquer aba do SEI aberta" — o que criaria o documento **no
-processo errado**, sem aviso, dentro de um sistema de processos oficial.
+**Se o processo não estiver aberto, a extensão NÃO envia** para outra aba. Em
+vez disso ela guarda o envio, abre o SEI numa aba nova já pesquisando aquele
+número e **retoma sozinha** assim que você abrir o processo certo — sem precisar
+voltar ao GAOCG e clicar de novo (v0.9.0). Abrir um processo diferente não
+dispara nada: a conferência do número continua valendo, e o envio guardado
+expira em 15 minutos.
+
+Até a v0.6.0 havia um fallback para "qualquer aba do SEI aberta" — o que criaria
+o documento **no processo errado**, sem aviso, dentro de um sistema de processos
+oficial.
 
 ### Por que em duas etapas
 
