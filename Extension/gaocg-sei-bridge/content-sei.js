@@ -129,6 +129,30 @@ function acharTodos_(seletor) {
   return encontrados;
 }
 
+/**
+ * Documento (topo ou iframe) que contém um texto - usado para ESCOPAR a busca
+ * de campos a uma tela específica.
+ *
+ * Bug real (5º teste, 2026-08-10): `escolherTipoDocumento_` pegava "o primeiro
+ * input de texto visível" varrendo TODOS os documentos. O primeiro é o da busca
+ * da barra superior do SEI, que fica no documento do topo - ou seja, a extensão
+ * digitava "SOF" na caixa de pesquisa do SEI em vez do filtro de tipo de
+ * documento (que fica dentro do iframe de conteúdo), e a lista nunca filtrava.
+ */
+function documentoComTexto_(trecho) {
+  const alvo = trecho.toLowerCase();
+  for (const doc of documentosDisponiveis_()) {
+    let texto = "";
+    try {
+      texto = (doc.body && (doc.body.innerText || doc.body.textContent)) || "";
+    } catch (e) {
+      texto = "";
+    }
+    if (texto.toLowerCase().indexOf(alvo) !== -1) return doc;
+  }
+  return null;
+}
+
 function aguardarCondicao_(condicao, timeoutMs = 10000, intervaloMs = 200) {
   return new Promise(resolve => {
     const inicio = Date.now();
@@ -270,17 +294,29 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
   const rotulos = (cfg.rotulos || []).filter(Boolean);
   if (!rotulos.length) return false;
 
+  // 0. ESCOPO: a tela de escolha do tipo fica num iframe de conteúdo. Sem
+  //    escopar, o "primeiro input de texto visível" é o da busca da barra
+  //    superior do SEI, no documento do topo - era ali que o filtro estava
+  //    sendo digitado (ver documentoComTexto_).
+  const escopo = await aguardarCondicao_(
+    () => documentoComTexto_("Escolha o Tipo do Documento"), 8000, 300
+  ) || document;
+
   // 1. Preenche o filtro, se a tela tiver um. É o que faz a lista aparecer.
   if (cfg.filtro) {
     const filtro = await aguardarCondicao_(
-      () => acharTodos_('input[type=text], input:not([type])').find(i => i.offsetParent !== null),
+      () => Array.from(escopo.querySelectorAll('input[type=text], input:not([type])'))
+        .find(i => i.offsetParent !== null),
       6000, 300
     );
     if (filtro) {
       filtro.focus();
       filtro.value = cfg.filtro;
       filtro.dispatchEvent(new Event("input", { bubbles: true }));
-      filtro.dispatchEvent(new KeyboardEvent("keyup", { key: cfg.filtro.slice(-1), bubbles: true }));
+      // O autocomplete do SEI reage a keyup; sem isso a lista não filtra.
+      for (const evento of ["keydown", "keypress", "keyup"]) {
+        filtro.dispatchEvent(new KeyboardEvent(evento, { key: cfg.filtro.slice(-1), bubbles: true }));
+      }
       dispararChange_(filtro);
     }
   }
@@ -288,13 +324,13 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
   // 2. Espera o item da lista e clica. Comparação por "contém", porque o texto
   //    exibido traz a sigla da unidade na frente ("SES - ...").
   const achado = await aguardarCondicao_(() => {
-    const select = acharEm_("#selSerie");
+    const select = escopo.querySelector("#selSerie");
     if (select) {
       const opcao = Array.from(select.options).find(o =>
         rotulos.some(r => (o.textContent || "").toLowerCase().indexOf(r.toLowerCase()) !== -1));
       if (opcao) return { tipo: "select", select: select, opcao: opcao };
     }
-    const item = acharTodos_('li, a, tr, div[onclick], span[onclick]').find(el => {
+    const item = Array.from(escopo.querySelectorAll('li, a, tr, td, div, span')).find(el => {
       if (el.children.length > 3 || el.offsetParent === null) return false;
       const texto = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
       return texto && rotulos.some(r => texto.indexOf(r.toLowerCase()) !== -1);
@@ -565,6 +601,9 @@ function agendarConteudo_(documento) {
       [CHAVE_PENDENTE_]: {
         html: documento.conteudoHtml,
         rotulo: documento.numero || "",
+        // Número da SOF como está no app - é o texto que será trocado pelo
+        // número que o SEI gerar no modelo (ver numeroSofNoModelo_).
+        marcadorNumero: documento.marcadorNumeroSof || "",
         criadoEm: Date.now()
       }
     })
@@ -692,7 +731,38 @@ async function vigiarEditorParaConteudoPendente_() {
  * Fallback para `innerHTML` quando não houver CKEditor (editor em modo div, ou
  * versão que não exponha a instância).
  */
+/**
+ * Número da SOF que o próprio SEI gerou no modelo do documento (ex.: "173/2026").
+ *
+ * O SEI numera cada nova SOF sequencialmente e já entrega o modelo com esse
+ * número - mesmo com "Texto Inicial: Nenhum" marcado, confirmado no 5º teste
+ * real. Esse número é gerado NA HORA da criação, então o app não tem como
+ * saber de antemão: só dá para lê-lo aqui, do modelo, antes de substituir o
+ * conteúdo.
+ *
+ * Primeiro procura um número colado à sigla "SOF" (mais confiável); se não
+ * achar, cai para o primeiro NNN/AAAA nos 1000 primeiros caracteres - o
+ * cabeçalho do documento -, para não capturar uma data ou valor perdido no meio
+ * do texto.
+ */
+function numeroSofNoModelo_(corpo) {
+  if (!corpo) return null;
+  const texto = ((corpo.innerText || corpo.textContent) || "").replace(/\s+/g, " ");
+  const comSigla = texto.match(/SOF[^\d]{0,20}(\d{1,4}\s*\/\s*\d{4})/i);
+  if (comSigla) return comSigla[1].replace(/\s/g, "");
+  const noCabecalho = texto.slice(0, 1000).match(/\b(\d{1,4}\s*\/\s*\d{4})\b/);
+  return noCabecalho ? noCabecalho[1].replace(/\s/g, "") : null;
+}
+
 async function aplicarConteudo_(corpo, pendente) {
+  // Lê o número ANTES de substituir - depois o modelo do SEI já era.
+  const numeroSei = numeroSofNoModelo_(corpo);
+  if (numeroSei && pendente.marcadorNumero && pendente.marcadorNumero !== numeroSei) {
+    // Troca o número que veio do app pelo que o SEI acabou de gerar, para o
+    // documento sair com a numeração oficial do SEI.
+    pendente.html = pendente.html.split(pendente.marcadorNumero).join(numeroSei);
+  }
+
   const resultado = await pedirInjecaoNoMainWorld_(pendente.html);
   let detalhe;
   if (resultado.ok) {
@@ -707,6 +777,7 @@ async function aplicarConteudo_(corpo, pendente) {
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
   avisarNaTela_(
     "GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido" + detalhe +
+    (numeroSei ? ". Nº da SOF no SEI: " + numeroSei : "") +
     ". Revise e salve o documento."
   );
 }

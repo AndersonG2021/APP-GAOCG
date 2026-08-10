@@ -170,6 +170,12 @@ const SeiBridge = (function () {
           descricaoEspecificacao: sof.objeto || '',
           observacoes: sof.observacao || '',
           conteudoHtml: prepararHtmlParaEditor_(htmlCompleto),
+          // O SEI numera cada nova SOF sozinho (ex.: "173/2026") e entrega o
+          // modelo já com esse número - que só existe no momento da criação,
+          // então o app não tem como saber antes. A extensão lê o número do
+          // modelo e troca ESTE valor por ele no documento, para o que fica no
+          // processo sair com a numeração oficial do SEI.
+          marcadorNumeroSof: sof.sof_numero || '',
           autoEnviar: true
         })
       });
