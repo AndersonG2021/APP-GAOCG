@@ -44,13 +44,48 @@ o SEI aberto e logado.
 
 1. No SEI, abra o processo que vai receber o documento (deixe a aba aberta).
 2. No GAOCG, abra a SOF e clique em **"Salvar e enviar ao SEI"**.
-3. A extensão traz a aba do SEI para a frente, abre "Incluir Documento",
-   escolhe o tipo, preenche os campos e injeta o conteúdo.
+3. A extensão traz a aba do SEI para a frente, abre "Incluir Documento" e tenta
+   escolher o tipo e preencher o cadastro.
 4. **Você revisa e clica em "Confirmar Dados"** — a extensão nunca confirma
-   sozinha (`autoEnviar` fica sempre `false` no app).
+   sozinha (`autoEnviar` é sempre `false` no app).
+5. O SEI abre o editor do documento. **É nesse momento que o conteúdo da SOF
+   entra**, sozinho, e um aviso verde aparece no canto da tela. Revise e salve.
 
 O processo de destino é encontrado pelo número SEI da própria SOF (campo
 `sei`), comparado com o título/URL das abas abertas no `sei.pe.gov.br`.
+
+### Por que em duas etapas
+
+No SEI, o editor de texto **não existe** na tela de cadastro: ele só abre depois
+de "Confirmar Dados", geralmente numa janela nova. A v0.2.0 tentava injetar o
+conteúdo durante o cadastro e, como o editor ainda não existia, o documento
+nascia vazio — foi o que aconteceu no primeiro teste real.
+
+Agora o conteúdo é guardado em `chrome.storage.local` como *pendente* logo no
+começo, e **qualquer** página do SEI que carregar procura um editor vazio para
+injetá-lo. Consequências práticas:
+
+- Funciona mesmo que você escolha o tipo e preencha o cadastro **na mão** — as
+  duas etapas são independentes.
+- O pendente expira em **15 minutos** e só entra em editor **vazio**. Essa
+  segunda regra é proposital: sem ela, abrir um documento já existente dentro
+  da janela de 15 min faria a extensão sobrescrever o conteúdo dele.
+- Se você desistir no meio, o pendente some sozinho — ou abra qualquer documento
+  novo em branco para consumi-lo.
+
+### Tipo do documento
+
+`MAPA_TIPO_DOCUMENTO` (em `content-sei.js`) tem uma lista **em ordem de
+preferência** por tipo do GAOCG:
+
+```javascript
+sof: ["SOF", "Solicitação Orçamentária e Financeira", "Anexo"]
+```
+
+A extensão tenta cada nome e usa o primeiro que existir na sua unidade. Se
+nenhum existir, ela **não falha** — deixa a tela de escolha aberta para você
+decidir, e o conteúdo entra normalmente na etapa 2. Ajuste a lista se sua
+unidade usar outro nome.
 
 ## Configuração por ambiente
 
@@ -74,10 +109,9 @@ na primeira vez:
   `<select id="selSerie">` ou uma lista de links com o nome do tipo.
 - **Campos do cadastro** — `#txtNumero`, `#txtDescricao`, `#txaObservacoes`,
   `input[name="rdoNivelAcesso"]`, dentro de `#frmDocumentoCadastro`.
-- **Conteúdo do documento** — no SEI, o editor de texto normalmente só abre
-  DEPOIS de "Confirmar Dados". Quando isso acontece, a extensão preenche o
-  cadastro e avisa que o corpo precisa ser colado no editor que abrir; ela não
-  falha por causa disso.
+- **Conteúdo do documento** — injetado na etapa 2, quando o editor abrir (ver
+  "Por que em duas etapas" acima). Confirmado no teste real de 2026-08-10: o
+  editor não existe na tela de cadastro.
 
 ## Licenciamento
 

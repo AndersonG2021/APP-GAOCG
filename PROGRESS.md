@@ -2030,6 +2030,67 @@ a um, os seletores a confirmar com o DevTools na primeira execução. O JS da
 extensão e do app é ES6 e não tem como ser validado por sintaxe nesta máquina
 (sem Node; JScript não parseia ES6).
 
+## 1º teste real do envio ao SEI: documento saía vazio (sessão 2026-08-10)
+
+**Sintoma:** a extensão levou o usuário para a aba do SEI, mas o SEI pediu que
+ele escolhesse o tipo de documento e preenchesse o cadastro na mão; ao final, o
+documento ("ANEXO") foi criado **sem conteúdo nenhum**.
+
+### Duas causas
+
+**1. O editor do SEI não existe na tela de cadastro.** Ele só abre DEPOIS de
+"Confirmar Dados", normalmente numa janela nova. A v0.2.0 tentava injetar o
+conteúdo durante o cadastro, encontrava `iframe.cke_wysiwyg_frame` inexistente e
+seguia adiante - documento vazio. Isso estava previsto como "limitação
+conhecida" na sessão anterior, mas tratado só como aviso ao usuário; na prática
+inviabiliza o recurso, porque colar o documento à mão é justamente o trabalho
+que o botão deveria eliminar.
+
+**2. Erro meu de arquitetura: isolated world.** `content-sei.js` tinha um
+`jqueryDoElemento_` que lia `window.jQuery` da página para disparar
+`chosen:updated`. Content script roda em contexto JS **isolado**: compartilha o
+DOM, mas não enxerga variáveis da página - aquele helper devolvia `null` sempre
+e era código morto, com um comentário afirmando que funcionava. Removido.
+Eventos nativos (`new Event('change', {bubbles:true})`) acionam normalmente os
+handlers da página, inclusive os registrados por jQuery, então bastam.
+
+**3. Tipo "SOF" não existe na unidade.** `MAPA_TIPO_DOCUMENTO` apontava para um
+único nome e a extensão lançava erro quando não achava. O usuário acabou
+escolhendo "Anexo" manualmente.
+
+### Correção (v0.3.0) - envio em duas etapas independentes
+
+- **Etapa 1 (best-effort):** abre "Incluir Documento", tenta escolher o tipo e
+  preencher o cadastro. Nada mais lança erro: cada parte que falha é apenas
+  reportada, e o usuário completa na mão.
+- **Etapa 2 (a que importa):** o HTML é gravado em `chrome.storage.local` como
+  *pendente* logo no início, ANTES de qualquer automação. Toda página do SEI que
+  carregar procura um editor vazio e injeta o conteúdo ali, mostrando um aviso
+  verde na própria tela do SEI (o app pode nem estar visível nesse momento).
+
+Com isso o conteúdo chega ao documento **mesmo que o cadastro inteiro seja feito
+manualmente** - que é exatamente o cenário do teste que falhou.
+
+**Duas salvaguardas no pendente:**
+- expira em 15 minutos;
+- só entra em editor **VAZIO**. Sem essa regra, abrir um documento já existente
+  dentro da janela de 15 min faria a extensão **sobrescrever o conteúdo dele** -
+  destruição de trabalho num sistema de processos oficial.
+
+`MAPA_TIPO_DOCUMENTO` virou lista ordenada de candidatos
+(`sof: ["SOF", "Solicitação Orçamentária e Financeira", "Anexo"]`) - usa o
+primeiro que existir na unidade; se nenhum existir, deixa a escolha para o
+usuário em vez de falhar.
+
+As mensagens no app foram reescritas para deixar explícito que o trabalho **não
+acabou** quando o toast aparece: o conteúdo entra ao clicar em "Confirmar Dados".
+A mensagem anterior ("cole o conteúdo no editor que abrir") descrevia justamente
+o comportamento que agora foi eliminado.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` (mudou
+`manifest.json`, `content-sei.js`, `background.js`). O ID **não** muda - a pasta
+continua a mesma. Nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
