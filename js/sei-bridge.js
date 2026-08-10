@@ -121,15 +121,34 @@ const SeiBridge = (function () {
   }
 
   /**
+   * Padrões do documento de SOF no SEI da SES-PE. Ficam AQUI, e não na
+   * extensão, porque são decisão de negócio (o que a GAOCG usa), não detalhe
+   * técnico de automação - e assim mudam sem precisar reinstalar a extensão em
+   * cada máquina.
+   */
+  const PADRAO_DOCUMENTO_SOF_ = {
+    // Rótulo exato do tipo na tela "Escolha o Tipo do Documento" do SEI.
+    tipoConfig: {
+      filtro: 'SOF',
+      rotulos: ['SES - SOF - Solicitação Orçamentária e Financeira', 'SOF - Solicitação Orçamentária e Financeira', 'SOF']
+    },
+    // "Nenhum" faz o editor abrir VAZIO - o conteúdo da SOF entra sozinho, sem
+    // a barra de confirmação (que só existe pra não sobrescrever o modelo do SEI).
+    textoInicial: 'Nenhum',
+    nivelAcesso: 'restrito',
+    hipoteseLegal: 'Controle Interno'
+  };
+
+  /**
    * Envia a SOF para o SEI. `htmlCompleto` é o retorno de
    * montarDocumentoSeiHtml_ (js/sof.js) - reaproveitado exatamente como está,
    * pra o que vai ao SEI ser o MESMO documento que o botão "Salvar e gerar
    * documento SEI" baixa.
    *
-   * autoEnviar fica sempre false: o analista revisa e clica em "Confirmar
-   * Dados" no próprio SEI. É um sistema de processos oficial - confirmar
-   * automaticamente um documento sem revisão humana não é algo que o app deva
-   * fazer por conta própria.
+   * autoEnviar: true (decisão do usuário, sessão 2026-08-10) - a extensão
+   * também clica em "Salvar" e deixa o editor aberto. O documento é apenas
+   * CRIADO, nunca assinado: continua removível pelo próprio SEI se algo sair
+   * errado. A assinatura permanece 100% manual.
    */
   async function enviarSof(sof, htmlCompleto) {
     if (!extensaoDisponivel()) {
@@ -145,15 +164,14 @@ const SeiBridge = (function () {
       const resposta = await enviarMensagem_({
         type: 'ENVIAR_DOCUMENTO',
         numeroProcesso: sof.sei,
-        documento: {
+        documento: Object.assign({}, PADRAO_DOCUMENTO_SOF_, {
           tipo: 'sof',
           numero: sof.sof_numero ? ('SOF ' + sof.sof_numero) : String(sof.id || ''),
           descricaoEspecificacao: sof.objeto || '',
           observacoes: sof.observacao || '',
-          nivelAcesso: 'publico',
           conteudoHtml: prepararHtmlParaEditor_(htmlCompleto),
-          autoEnviar: false
-        }
+          autoEnviar: true
+        })
       });
 
       if (!resposta.ok) {
@@ -175,10 +193,11 @@ const SeiBridge = (function () {
         UI.toast('SEI: ' + resposta.aviso, 'info');
       }
       UI.toast(
-        (resposta.cadastroPreenchido
-          ? 'Cadastro preenchido no SEI. '
-          : 'Continue o cadastro no SEI. ') +
-        'Ao clicar em "Confirmar Dados", o conteúdo da SOF entra sozinho no editor.',
+        resposta.salvou
+          ? 'Documento criado no SEI. O editor vai abrir com o conteúdo da SOF - revise e assine.'
+          : (resposta.cadastroPreenchido
+              ? 'Cadastro preenchido no SEI. Clique em "Salvar" - o conteúdo entra sozinho no editor.'
+              : 'Continue o cadastro no SEI. Ao salvar, o conteúdo entra sozinho no editor.'),
         'sucesso'
       );
       return true;

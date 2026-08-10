@@ -46,9 +46,9 @@
  * aberta para o usuário decidir, e o conteúdo entra depois pela Etapa 2.
  */
 const MAPA_TIPO_DOCUMENTO = {
-  sof: ["SOF", "Solicitação Orçamentária e Financeira", "Anexo"],
-  nota_empenho: ["Nota de Empenho", "Anexo"],
-  recibo: ["Recibo", "Anexo"]
+  sof: { filtro: "SOF", rotulos: ["SES - SOF - Solicitação Orçamentária e Financeira", "SOF - Solicitação Orçamentária e Financeira", "SOF"] },
+  nota_empenho: { filtro: "Nota de Empenho", rotulos: ["Nota de Empenho"] },
+  recibo: { filtro: "Recibo", rotulos: ["Recibo"] }
 };
 
 const MAPA_NIVEL_ACESSO = { publico: "0", restrito: "1", sigiloso: "2" };
@@ -179,18 +179,56 @@ async function preencherDocumento(documento) {
     };
   }
 
-  const tipoSelecionado = await escolherTipoDocumento_(documento.tipo);
-  const form = await aguardarCondicao_(() => acharEm_("#frmDocumentoCadastro"), tipoSelecionado ? 12000 : 4000);
+  const tipoSelecionado = await escolherTipoDocumento_(documento.tipo, documento.tipoConfig);
+
+  // O formulário de cadastro nem sempre tem id #frmDocumentoCadastro; o sinal
+  // mais confiável de que ele chegou é o rótulo "Nome na Árvore".
+  const chegouCadastro = await aguardarCondicao_(
+    () => acharEm_("#frmDocumentoCadastro") || campoPorRotulo_("Nome na Árvore"),
+    tipoSelecionado ? 12000 : 4000, 300
+  );
 
   let cadastroPreenchido = false;
-  if (form) {
-    const doc = form.ownerDocument;
-    preencherCampo_(doc, "#txtNumero", documento.numero);
-    preencherCampo_(doc, "#txtDescricao", documento.descricaoEspecificacao);
-    preencherCampo_(doc, "#txaObservacoes", documento.observacoes);
-    const radio = doc.querySelector(`input[name="rdoNivelAcesso"][value="${MAPA_NIVEL_ACESSO[documento.nivelAcesso] || "0"}"]`);
-    if (radio) { radio.checked = true; dispararChange_(radio); }
+  if (chegouCadastro) {
+    // "Texto Inicial: Nenhum" - com isso o editor abre VAZIO e o conteúdo da
+    // SOF entra sozinho, sem a barra de confirmação (que só existe para não
+    // sobrescrever conteúdo preexistente, como o modelo do próprio SEI).
+    marcarOpcaoPorRotulo_(documento.textoInicial || "Nenhum");
+
+    const nomeArvore = campoPorRotulo_("Nome na Árvore");
+    if (nomeArvore && documento.numero) { nomeArvore.value = documento.numero; dispararChange_(nomeArvore); }
+
+    const descricao = campoPorRotulo_("Descrição");
+    if (descricao && documento.descricaoEspecificacao) { descricao.value = documento.descricaoEspecificacao; dispararChange_(descricao); }
+
+    const observacoes = campoPorRotulo_("Observações desta unidade");
+    if (observacoes && documento.observacoes) { observacoes.value = documento.observacoes; dispararChange_(observacoes); }
+
+    // Nível de acesso: tenta pelo rótulo visível (Público/Restrito/Sigiloso) e,
+    // se não achar, pelo name nativo do SEI.
+    const rotuloNivel = { publico: "Público", restrito: "Restrito", sigiloso: "Sigiloso" }[documento.nivelAcesso] || "Público";
+    if (!marcarOpcaoPorRotulo_(rotuloNivel)) {
+      const doc = (chegouCadastro.ownerDocument || document);
+      const radio = doc.querySelector(`input[name="rdoNivelAcesso"][value="${MAPA_NIVEL_ACESSO[documento.nivelAcesso] || "0"}"]`);
+      if (radio) { radio.checked = true; radio.click(); dispararChange_(radio); }
+    }
+    // A Hipótese Legal só aparece depois de marcar Restrito/Sigiloso.
+    if (documento.hipoteseLegal) {
+      await aguardarCondicao_(() => selecionarOpcaoPorTexto_(documento.hipoteseLegal), 4000, 250);
+    }
+
     cadastroPreenchido = true;
+  }
+
+  if (documento.autoEnviar && cadastroPreenchido) {
+    // O botão da tela real se chama "Salvar" (não "Confirmar Dados", como em
+    // outras versões do SEI) - os dois são aceitos.
+    const botao = acharTodos_('#sbmSalvar, input[value="Salvar"], button[value="Salvar"], input[value="Confirmar Dados"], button[value="Confirmar Dados"]')
+      .find(b => b.offsetParent !== null);
+    if (botao) {
+      botao.click();
+      return { ok: true, conteudoAgendado: agendou, tipoSelecionado, cadastroPreenchido, salvou: true };
+    }
   }
 
   return {
@@ -198,6 +236,7 @@ async function preencherDocumento(documento) {
     conteudoAgendado: agendou,
     tipoSelecionado,
     cadastroPreenchido,
+    salvou: false,
     aviso: tipoSelecionado ? "" : "Não achei o tipo de documento esperado na sua unidade - escolha o tipo manualmente."
   };
 }
@@ -215,31 +254,58 @@ async function abrirIncluirDocumento_() {
 }
 
 /**
- * Tenta cada nome de MAPA_TIPO_DOCUMENTO na ordem. Suporta os dois formatos que
- * o SEI usa entre versões: um <select id="selSerie"> ou uma lista de links.
- * Devolve false (sem lançar) quando nenhum nome bate - o usuário escolhe na mão.
+ * Escolhe o tipo do documento na tela "Gerar Documento".
+ *
+ * Corrigido depois de ver a tela real (2026-08-10): NÃO é um `<select>`. É um
+ * campo de filtro + uma lista de sugestões, e o rótulo do item é o nome
+ * completo - "SES - SOF - Solicitação Orçamentária e Financeira". A versão
+ * anterior comparava por igualdade exata com "SOF", o que nunca casaria.
+ *
+ * Fluxo: digita o filtro (ex.: "SOF"), espera a lista reagir e clica no item
+ * cujo texto CONTENHA um dos rótulos configurados. O `<select id="selSerie">`
+ * das versões antigas continua suportado como alternativa.
  */
-async function escolherTipoDocumento_(tipoGaocg) {
-  const candidatos = MAPA_TIPO_DOCUMENTO[tipoGaocg] || [];
-  if (!candidatos.length) return false;
+async function escolherTipoDocumento_(tipoGaocg, override) {
+  const cfg = Object.assign({}, MAPA_TIPO_DOCUMENTO[tipoGaocg] || {}, override || {});
+  const rotulos = (cfg.rotulos || []).filter(Boolean);
+  if (!rotulos.length) return false;
 
-  const achado = await aguardarCondicao_(() => {
-    for (const nome of candidatos) {
-      const alvo = nome.trim().toLowerCase();
-      const select = acharEm_("#selSerie");
-      if (select) {
-        const opcao = Array.from(select.options).find(o => o.textContent.trim().toLowerCase() === alvo);
-        if (opcao) return { tipo: "select", select, opcao };
-      }
-      const link = acharTodos_("a").find(a => a.textContent.trim().toLowerCase() === alvo);
-      if (link) return { tipo: "link", link };
+  // 1. Preenche o filtro, se a tela tiver um. É o que faz a lista aparecer.
+  if (cfg.filtro) {
+    const filtro = await aguardarCondicao_(
+      () => acharTodos_('input[type=text], input:not([type])').find(i => i.offsetParent !== null),
+      6000, 300
+    );
+    if (filtro) {
+      filtro.focus();
+      filtro.value = cfg.filtro;
+      filtro.dispatchEvent(new Event("input", { bubbles: true }));
+      filtro.dispatchEvent(new KeyboardEvent("keyup", { key: cfg.filtro.slice(-1), bubbles: true }));
+      dispararChange_(filtro);
     }
+  }
+
+  // 2. Espera o item da lista e clica. Comparação por "contém", porque o texto
+  //    exibido traz a sigla da unidade na frente ("SES - ...").
+  const achado = await aguardarCondicao_(() => {
+    const select = acharEm_("#selSerie");
+    if (select) {
+      const opcao = Array.from(select.options).find(o =>
+        rotulos.some(r => (o.textContent || "").toLowerCase().indexOf(r.toLowerCase()) !== -1));
+      if (opcao) return { tipo: "select", select: select, opcao: opcao };
+    }
+    const item = acharTodos_('li, a, tr, div[onclick], span[onclick]').find(el => {
+      if (el.children.length > 3 || el.offsetParent === null) return false;
+      const texto = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return texto && rotulos.some(r => texto.indexOf(r.toLowerCase()) !== -1);
+    });
+    if (item) return { tipo: "item", item: item };
     return null;
-  }, 10000);
+  }, 10000, 300);
 
   if (!achado) return false;
-  if (achado.tipo === "link") {
-    achado.link.click();
+  if (achado.tipo === "item") {
+    achado.item.click();
     return true;
   }
   achado.select.value = achado.opcao.value;
@@ -254,6 +320,94 @@ function preencherCampo_(doc, seletor, valor) {
   campo.value = valor;
   dispararChange_(campo);
   return true;
+}
+
+/* ============ localização de campos POR RÓTULO VISÍVEL ============
+ *
+ * Os ids do formulário "Gerar Documento" do SEI variam por versão/customização
+ * e não foram confirmados no ambiente da SES-PE. Os RÓTULOS, por outro lado,
+ * estão na tela e são estáveis: "Descrição:", "Nome na Árvore:", "Hipótese
+ * Legal:", "Nível de Acesso", "Texto Inicial". Procurar pelo rótulo é bem mais
+ * resistente a diferença de versão do que chutar `#txtDescricao` e afins.
+ */
+
+function textoNormalizado_(el) {
+  return (el.textContent || "").replace(/\s+/g, " ").replace(/:\s*$/, "").trim().toLowerCase();
+}
+
+/** Todos os elementos de todos os documentos acessíveis, em ordem de documento. */
+function todosElementos_() {
+  const lista = [];
+  for (const doc of documentosDisponiveis_()) {
+    lista.push(...Array.from(doc.querySelectorAll("*")));
+  }
+  return lista;
+}
+
+const SELETOR_CAMPO_ = "input:not([type=hidden]):not([type=button]):not([type=submit]), select, textarea";
+
+/**
+ * Campo associado a um rótulo visível. Primeiro tenta `<label for=...>`
+ * (relação explícita); senão, pega o primeiro campo que aparece DEPOIS do
+ * rótulo na ordem do documento - que é como o formulário do SEI é montado.
+ */
+function campoPorRotulo_(rotulo, tipoDesejado) {
+  const alvo = rotulo.toLowerCase();
+  const elementos = todosElementos_();
+
+  for (let i = 0; i < elementos.length; i++) {
+    const el = elementos[i];
+    if (el.children.length > 2) continue;          // só folhas/rótulos curtos
+    if (textoNormalizado_(el) !== alvo) continue;
+
+    if (el.tagName === "LABEL" && el.htmlFor) {
+      const porFor = el.ownerDocument.getElementById(el.htmlFor);
+      if (porFor) return porFor;
+    }
+    for (let j = i + 1; j < Math.min(i + 40, elementos.length); j++) {
+      const cand = elementos[j];
+      if (!cand.matches || !cand.matches(SELETOR_CAMPO_)) continue;
+      if (tipoDesejado && cand.tagName.toLowerCase() !== tipoDesejado) continue;
+      return cand;
+    }
+  }
+  return null;
+}
+
+/** Radio/checkbox cujo texto ao lado (ou label associado) é `rotulo`. */
+function marcarOpcaoPorRotulo_(rotulo) {
+  const alvo = rotulo.trim().toLowerCase();
+  for (const entrada of acharTodos_('input[type=radio], input[type=checkbox]')) {
+    let texto = "";
+    const doc = entrada.ownerDocument;
+    if (entrada.id) {
+      const lbl = doc.querySelector('label[for="' + entrada.id + '"]');
+      if (lbl) texto = textoNormalizado_(lbl);
+    }
+    if (!texto && entrada.parentElement) texto = textoNormalizado_(entrada.parentElement);
+    if (!texto && entrada.nextElementSibling) texto = textoNormalizado_(entrada.nextElementSibling);
+    if (texto === alvo) {
+      entrada.checked = true;
+      entrada.click();               // o SEI reage ao clique, não só ao change
+      dispararChange_(entrada);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** <select> que contenha uma opção cujo texto contenha `trecho` - e a seleciona. */
+function selecionarOpcaoPorTexto_(trecho) {
+  const alvo = trecho.trim().toLowerCase();
+  for (const select of acharTodos_("select")) {
+    const opcao = Array.from(select.options).find(o => (o.textContent || "").toLowerCase().indexOf(alvo) !== -1);
+    if (opcao) {
+      select.value = opcao.value;
+      dispararChange_(select);
+      return true;
+    }
+  }
+  return false;
 }
 
 /* ===================== identificação do processo aberto ===================== */
