@@ -237,6 +237,135 @@ const TelaRelatorios = (function () {
     return { fonte: config.fonte, filtros: config.filtros, colunas: config.colunas, agruparPor: config.agruparPor };
   }
 
+  // ----- modal "Gerar Relatório" das telas (Unidades/Recibos/Notas de Empenho) -----
+
+  /**
+   * Colunas de uma fonte, direto do catálogo do backend (com cache do Api) -
+   * caminho leve, sem carregar modelos/unidades/OSS/status como carregarBase_
+   * faz para o assistente completo do Dashboard.
+   */
+  async function colunasDaFonte_(fonte) {
+    if (!state.catalogo[fonte]) {
+      const catalogo = await Api.chamar('obterCatalogoRelatorios', {}, { cache: true });
+      catalogo.fontes.forEach(f => { state.catalogo[f.fonte] = f; });
+    }
+    return (state.catalogo[fonte] || {}).colunas || [];
+  }
+
+  /**
+   * Modal "Gerar Relatório" de uma TELA (diferente do assistente completo do
+   * Dashboard, que é o `abrir()` acima): o analista só escolhe colunas,
+   * agrupamento e formato - os FILTROS são os que ele já aplicou na própria
+   * tela, não são pedidos de novo.
+   *
+   * Generalizado a partir do que estava embutido em js/unidades.js (sessão
+   * 2026-07-29): quando Recibos e Notas de Empenho ganharam o mesmo botão
+   * (sessão 2026-08-08), copiar aquele bloco daria três cópias quase iguais do
+   * mesmo modal. As três telas passam a chamar esta função.
+   *
+   * opcoes:
+   *   fonte           - chave do catálogo ('recibos' | 'notasEmpenho' | 'unidades' | 'sof')
+   *   titulo          - título do modal
+   *   obterFiltros    - função que devolve os filtros da tela NO MOMENTO do clique
+   *                     em "Gerar" (não no momento da abertura do modal)
+   *   colunasOcultas  - (opcional) keys que não fazem sentido nesta tela
+   *   ajuda           - (opcional) texto do rodapé explicativo
+   *
+   * IMPORTANTE: o relatório roda a fonte inteira no backend com esses filtros,
+   * não só a página visível - a paginação é da tela, não do relatório.
+   */
+  async function abrirParaTela(opcoes) {
+    let todasColunas;
+    try {
+      todasColunas = await colunasDaFonte_(opcoes.fonte);
+    } catch (e) {
+      UI.toast('Não foi possível carregar as opções de relatório. ' + (e.message || ''), 'erro');
+      return;
+    }
+    if (!todasColunas.length) { UI.toast('Fonte de relatório não encontrada.', 'erro'); return; }
+
+    const ocultas = opcoes.colunasOcultas || [];
+    const colunas = todasColunas.filter(c => ocultas.indexOf(c.key) === -1);
+
+    // Só oferece agrupar por uma dimensão que exista como coluna nesta fonte
+    // (ex.: Unidades não tem coluna "unidade"/"fonte", então só "Por OSS"
+    // aparece). Usa a lista COMPLETA de propósito: gerarRelatorio calcula o
+    // grupo sobre a linha bruta, antes de projetar, então dá pra agrupar por
+    // um campo que o analista escolheu não exibir.
+    //
+    // A comparação é `c.key === dim` porque as 3 dimensões têm o mesmo nome da
+    // coluna correspondente - é o espelho de RELATORIO_CAMPO_GRUPO_
+    // (backend/Relatorios.gs), que é a autoridade sobre esse mapeamento. Se
+    // algum dia uma dimensão passar a apontar pra uma coluna de nome
+    // diferente, este ponto precisa acompanhar.
+    const agrupamentos = Object.keys(ROTULO_DIMENSAO_)
+      .filter(dim => todasColunas.some(c => c.key === dim));
+
+    const corpo = `
+      <div class="rel-wizard">
+        <div class="rel-secao">
+          <div class="rel-linha" style="justify-content:space-between">
+            <label style="margin:0">Colunas <span class="rel-hint">(marque as que entram; as de valor saem sempre por último)</span></label>
+            <button type="button" class="botao" id="btnRelTelaTodasColunas">Marcar/desmarcar todas</button>
+          </div>
+          <div class="rel-colunas">${colunas.map(c =>
+            `<label class="rotulo-checkbox rel-col-item"><input type="checkbox" class="rel-tela-col" value="${UI.escaparHtml(c.key)}" checked /> ${UI.escaparHtml(c.rotulo)}</label>`
+          ).join('')}</div>
+        </div>
+        ${agrupamentos.length ? `
+        <div class="rel-secao">
+          <label>Agrupar e totais</label>
+          <div class="rel-linha">
+            <select id="relTelaAgrupar" class="rel-input">
+              <option value="">Sem agrupamento</option>
+              ${agrupamentos.map(d => `<option value="${d}">Por ${UI.escaparHtml(ROTULO_DIMENSAO_[d])}</option>`).join('')}
+            </select>
+            <label class="rotulo-checkbox"><input type="checkbox" id="relTelaGrafico" /> Incluir gráfico (por grupo)</label>
+          </div>
+        </div>` : ''}
+        <div class="rel-secao">
+          <label>Formato de saída</label>
+          <div class="rel-formatos">
+            <label class="rotulo-checkbox"><input type="radio" name="relTelaFormato" value="tela" checked /> Visualizar na tela</label>
+            <label class="rotulo-checkbox"><input type="radio" name="relTelaFormato" value="pdf" /> PDF (impressão)</label>
+            <label class="rotulo-checkbox"><input type="radio" name="relTelaFormato" value="csv" /> Excel / CSV</label>
+            <label class="rotulo-checkbox"><input type="radio" name="relTelaFormato" value="sheets" /> Google Sheets</label>
+          </div>
+        </div>
+        <p class="ajuda">${UI.escaparHtml(opcoes.ajuda || 'O relatório usa os filtros aplicados na tela. Sem filtro, entram todos os registros.')}</p>
+      </div>`;
+
+    UI.abrirModal(opcoes.titulo || 'Gerar Relatório', corpo,
+      `<button class="botao" id="btnRelTelaFechar">Cancelar</button><button class="botao primario" id="btnRelTelaGerar">Gerar</button>`,
+      { grande: true });
+
+    document.getElementById('btnRelTelaFechar').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnRelTelaTodasColunas').addEventListener('click', () => {
+      const caixas = Array.from(document.querySelectorAll('.rel-tela-col'));
+      const marcarTodas = caixas.some(cb => !cb.checked);
+      caixas.forEach(cb => { cb.checked = marcarTodas; });
+    });
+    document.getElementById('btnRelTelaGerar').addEventListener('click', async function () {
+      const botao = this;
+      botao.disabled = true;
+      try {
+        const gerou = await gerarComConfig({
+          fonte: opcoes.fonte,
+          filtros: opcoes.obterFiltros ? opcoes.obterFiltros() : {},
+          colunas: Array.from(document.querySelectorAll('.rel-tela-col:checked')).map(el => el.value),
+          agruparPor: valId_('relTelaAgrupar'),
+          incluirGrafico: !!(document.getElementById('relTelaGrafico') || {}).checked,
+          formato: (document.querySelector('input[name=relTelaFormato]:checked') || {}).value || 'tela'
+        });
+        // Só fecha quando gerou de fato - senão o analista perderia a seleção
+        // de colunas que acabou de fazer.
+        if (gerou) UI.fecharModal();
+      } finally {
+        botao.disabled = false;
+      }
+    });
+  }
+
   // ----- modelos -----
   async function salvarModelo_() {
     const nome = (document.getElementById('relNomeModelo').value || '').trim();
@@ -393,5 +522,5 @@ const TelaRelatorios = (function () {
     @media print { body { margin: 0; } .rel-tabela thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   `;
 
-  return { abrir, gerarComConfig };
+  return { abrir, abrirParaTela, gerarComConfig };
 })();
