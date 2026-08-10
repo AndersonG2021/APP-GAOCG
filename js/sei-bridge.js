@@ -28,7 +28,7 @@ const SeiBridge = (function () {
    * O ID abaixo veio do README da extensão (lá ele estava com um espaço à
    * esquerda, o que fazia o sendMessage falhar silenciosamente - corrigido).
    */
-  const ID_PADRAO_ = 'jcnnmppmgkakilloogidgocfmiibggfk';
+  const ID_PADRAO_ = 'mnohlkhmphcilholmgolecdelpmebkdg';
   const CHAVE_ID_LOCAL_ = 'gaocg_sei_extension_id';
 
   function idExtensao() {
