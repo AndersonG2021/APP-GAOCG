@@ -277,30 +277,50 @@ function corpoDoEditor_() {
   return editavel || null;
 }
 
-/**
- * Só injeta em editor VAZIO. Salvaguarda importante: o pendente vale por 15
- * minutos, e sem essa checagem abrir um documento JÁ EXISTENTE nesse intervalo
- * faria a extensão sobrescrever o conteúdo dele - destruindo trabalho num
- * sistema de processos oficial.
- */
+/** Editor sem nada dentro - dá pra preencher sozinho, sem risco de apagar nada. */
 function editorEstaVazio_(corpo) {
   if (!corpo) return false;
   if (corpo.querySelector("table, img, ul, ol")) return false;
   return corpo.textContent.replace(/ /g, " ").trim() === "";
 }
 
+/**
+ * Etapa 2.
+ *
+ * Achado no 2º teste real (2026-08-10): o tipo de documento "SOF" tem MODELO
+ * próprio no SEI - ao escolher o tipo, o editor já abre preenchido com o
+ * template em branco da SOF. A v0.3.0 só injetava em editor VAZIO (salvaguarda
+ * contra sobrescrever documento existente), então encontrava o template,
+ * concluía "já tem conteúdo" e não fazia nada: o usuário terminava com o modelo
+ * vazio do SEI, sem os dados do GAOCG.
+ *
+ * Não existe jeito confiável de distinguir, pelo DOM, "modelo em branco de um
+ * documento novo" de "documento já preenchido que eu apagaria" - as duas coisas
+ * são apenas HTML no corpo do editor. Então:
+ *
+ *   - editor VAZIO    -> injeta direto (não há o que perder);
+ *   - editor COM ALGO -> PERGUNTA, com um botão na própria tela do SEI.
+ *
+ * Perguntar é o único caminho que não obriga a escolher entre "não funciona com
+ * tipos que têm modelo" e "pode apagar um documento oficial sem avisar".
+ */
 async function vigiarEditorParaConteudoPendente_() {
   const pendente = await lerConteudoPendente_();
   if (!pendente) return;
 
   // O editor abre logo depois do carregamento da própria página do editor;
   // 45s cobrem uma rede lenta sem ficar vigiando indefinidamente.
-  const corpo = await aguardarCondicao_(() => {
-    const c = corpoDoEditor_();
-    return c && editorEstaVazio_(c) ? c : null;
-  }, 45000, 400);
+  const corpo = await aguardarCondicao_(() => corpoDoEditor_(), 45000, 400);
   if (!corpo) return;
 
+  if (editorEstaVazio_(corpo)) {
+    await aplicarConteudo_(corpo, pendente);
+    return;
+  }
+  mostrarConfirmacao_(corpo, pendente);
+}
+
+async function aplicarConteudo_(corpo, pendente) {
   corpo.innerHTML = pendente.html;
   // Avisa o CKEditor/página que o conteúdo mudou, pra ele não salvar vazio.
   corpo.dispatchEvent(new Event("input", { bubbles: true }));
@@ -308,6 +328,51 @@ async function vigiarEditorParaConteudoPendente_() {
 
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
   avisarNaTela_("GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido. Revise e salve o documento.");
+}
+
+/**
+ * Barra de confirmação na própria página do SEI. Não some sozinha - o usuário
+ * pode continuar mexendo no documento e decidir depois.
+ *
+ * "Agora não" apenas esconde a barra: o pendente continua válido (até o limite
+ * de 15 min) e a barra reaparece no próximo documento aberto. É assimétrico de
+ * propósito - deixar de inserir é reversível (basta abrir o documento de novo),
+ * inserir por engano por cima de um documento oficial não é.
+ */
+function mostrarConfirmacao_(corpo, pendente) {
+  const barra = document.createElement("div");
+  barra.style.cssText = [
+    "position:fixed", "top:12px", "right:12px", "z-index:2147483647",
+    "background:#1e3a8a", "color:#fff", "padding:12px 14px", "border-radius:8px",
+    "font:13px system-ui,sans-serif", "box-shadow:0 4px 14px rgba(0,0,0,.3)", "max-width:380px"
+  ].join(";");
+
+  const texto = document.createElement("div");
+  texto.textContent = "GAOCG: este editor já tem conteúdo (provavelmente o modelo do SEI). Substituir pelo documento da "
+    + (pendente.rotulo || "SOF") + "?";
+  texto.style.cssText = "margin-bottom:10px;line-height:1.4";
+
+  const linha = document.createElement("div");
+  linha.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
+
+  const btnDepois = document.createElement("button");
+  btnDepois.textContent = "Agora não";
+  btnDepois.style.cssText = "background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:6px 12px;cursor:pointer;font:13px system-ui,sans-serif";
+  btnDepois.addEventListener("click", () => barra.remove());
+
+  const btnSubstituir = document.createElement("button");
+  btnSubstituir.textContent = "Substituir";
+  btnSubstituir.style.cssText = "background:#1c7a37;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font:13px system-ui,sans-serif";
+  btnSubstituir.addEventListener("click", async () => {
+    barra.remove();
+    await aplicarConteudo_(corpo, pendente);
+  });
+
+  linha.appendChild(btnDepois);
+  linha.appendChild(btnSubstituir);
+  barra.appendChild(texto);
+  barra.appendChild(linha);
+  document.body.appendChild(barra);
 }
 
 /** Aviso discreto na própria página do SEI - o app GAOCG pode nem estar visível quando o editor abre. */
