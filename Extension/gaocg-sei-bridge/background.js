@@ -77,6 +77,60 @@ async function enviarParaAba(abaId, payload) {
   }
 }
 
+/**
+ * Roda DENTRO da página (main world), não no content script. Recebe só o `html`
+ * por `args` - não pode fechar sobre nenhuma variável daqui, porque a função é
+ * serializada para ser executada no outro contexto.
+ *
+ * Devolve true se conseguiu aplicar por alguma instância do CKEditor.
+ */
+function aplicarViaCkeditor_(html) {
+  try {
+    const CK = window.CKEDITOR;
+    if (!CK || !CK.instances) return false;
+    let aplicou = false;
+    for (const nome of Object.keys(CK.instances)) {
+      const instancia = CK.instances[nome];
+      if (instancia && typeof instancia.setData === "function") {
+        instancia.setData(html);
+        aplicou = true;
+      }
+    }
+    return aplicou;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Mensagem INTERNA (do content script). O content script roda em contexto
+ * isolado e não enxerga `window.CKEDITOR`; só a API `chrome.scripting` com
+ * `world: "MAIN"` alcança o objeto real da página. `allFrames: true` porque o
+ * editor do SEI costuma estar num iframe - a função devolve false nos frames
+ * que não têm CKEditor, e basta um dar certo.
+ */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.type !== "INJETAR_CKEDITOR") return false;
+  (async () => {
+    try {
+      if (!sender.tab || sender.tab.id === undefined) {
+        sendResponse({ ok: false, erro: "Remetente sem aba." });
+        return;
+      }
+      const resultados = await chrome.scripting.executeScript({
+        target: { tabId: sender.tab.id, allFrames: true },
+        world: "MAIN",
+        func: aplicarViaCkeditor_,
+        args: [message.html]
+      });
+      sendResponse({ ok: resultados.some(r => r && r.result === true) });
+    } catch (erro) {
+      sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) });
+    }
+  })();
+  return true;
+});
+
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   (async () => {
     try {

@@ -71,7 +71,43 @@ if (window.top === window) {
 
   // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
   // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.
-  vigiarEditorParaConteudoPendente_();
+  iniciarVigilancia_();
+
+  /**
+   * Rede de segurança para o caso em que o editor abre SEM recarregar o
+   * documento do topo (o SEI navega dentro de iframes). Nesse cenário o
+   * content script não roda de novo, então a vigilância precisa ser (re)ligada
+   * pelo próprio evento de gravação do pendente - inclusive quando o pendente
+   * foi criado por OUTRA aba.
+   */
+  chrome.storage.onChanged.addListener((mudancas, area) => {
+    if (area === "local" && mudancas[CHAVE_PENDENTE_] && mudancas[CHAVE_PENDENTE_].newValue) {
+      iniciarVigilancia_();
+    }
+  });
+}
+
+/**
+ * BUG CORRIGIDO (3º teste real, 2026-08-10): a vigilância era disparada UMA vez,
+ * no carregamento da página. Na prática a sequência é:
+ *
+ *   1. página do processo carrega -> vigia roda, não há pendente ainda, encerra;
+ *   2. usuário clica em "Enviar ao SEI" -> pendente é gravado;
+ *   3. o SEI abre o cadastro e depois o editor DENTRO DE IFRAMES, sem recarregar
+ *      o documento do topo -> o content script não roda de novo;
+ *   4. ninguém mais procura o editor. Nenhuma barra aparecia.
+ *
+ * Agora a vigilância é (re)ligada em três momentos - carregamento, gravação do
+ * pendente (storage.onChanged) e logo depois de agendar - e é idempotente, pra
+ * os três gatilhos não criarem três laços concorrentes.
+ */
+let vigilanciaAtiva_ = false;
+function iniciarVigilancia_() {
+  if (vigilanciaAtiva_) return;
+  vigilanciaAtiva_ = true;
+  vigiarEditorParaConteudoPendente_()
+    .catch(() => {})
+    .then(() => { vigilanciaAtiva_ = false; });
 }
 
 /* ===================== varredura de frames ===================== */
@@ -146,6 +182,9 @@ async function preencherDocumento(documento) {
   // Guarda o conteúdo ANTES de qualquer automação: mesmo que tudo abaixo falhe
   // e o usuário faça o cadastro na mão, o conteúdo entra quando o editor abrir.
   const agendou = await agendarConteudo_(documento);
+  // Liga a vigilância JÁ - o editor pode abrir dentro de um iframe, sem novo
+  // carregamento desta página (ver comentário em iniciarVigilancia_).
+  if (agendou) iniciarVigilancia_();
 
   const abriu = await abrirIncluirDocumento_();
   if (!abriu) {
@@ -308,9 +347,12 @@ async function vigiarEditorParaConteudoPendente_() {
   const pendente = await lerConteudoPendente_();
   if (!pendente) return;
 
-  // O editor abre logo depois do carregamento da própria página do editor;
-  // 45s cobrem uma rede lenta sem ficar vigiando indefinidamente.
-  const corpo = await aguardarCondicao_(() => corpoDoEditor_(), 45000, 400);
+  // Vigia até o pendente expirar, não por 45s fixos: entre clicar em "Enviar ao
+  // SEI" e o editor abrir existe o cadastro inteiro sendo preenchido à mão, o
+  // que passa fácil de um minuto. O intervalo de 600ms mantém o custo baixo.
+  const restante = VALIDADE_PENDENTE_MS_ - (Date.now() - (pendente.criadoEm || 0));
+  if (restante <= 0) return;
+  const corpo = await aguardarCondicao_(() => corpoDoEditor_(), restante, 600);
   if (!corpo) return;
 
   if (editorEstaVazio_(corpo)) {
@@ -320,14 +362,50 @@ async function vigiarEditorParaConteudoPendente_() {
   mostrarConfirmacao_(corpo, pendente);
 }
 
+/**
+ * Aplica o conteúdo pelo caminho mais confiável disponível.
+ *
+ * Preferência: API do CKEditor (`setData`), executada no MAIN world via
+ * background (ver INJETAR_CKEDITOR em background.js). Motivo: o CKEditor mantém
+ * um modelo interno e o que ele grava vem de `getData()`, não necessariamente do
+ * DOM - escrever `innerHTML` no corpo editável pode ser ignorado na hora de
+ * salvar. Content script roda em contexto isolado e NÃO enxerga
+ * `window.CKEDITOR`, por isso a chamada precisa passar pelo main world.
+ *
+ * Essa é a mesma barreira que o SEI Pro resolve declarando o CKEditor em
+ * `web_accessible_resources` e injetando um <script> na página (técnica da era
+ * MV2). O `chrome.scripting.executeScript({ world: 'MAIN' })` do MV3 chega ao
+ * mesmo lugar sem expor nenhum recurso da extensão a páginas de terceiros.
+ *
+ * Fallback para `innerHTML` quando não houver CKEditor (editor em modo div, ou
+ * versão que não exponha a instância).
+ */
 async function aplicarConteudo_(corpo, pendente) {
-  corpo.innerHTML = pendente.html;
-  // Avisa o CKEditor/página que o conteúdo mudou, pra ele não salvar vazio.
-  corpo.dispatchEvent(new Event("input", { bubbles: true }));
-  corpo.dispatchEvent(new Event("change", { bubbles: true }));
+  let via = "api";
+  const ok = await pedirInjecaoNoMainWorld_(pendente.html);
+  if (!ok) {
+    via = "dom";
+    corpo.innerHTML = pendente.html;
+    corpo.dispatchEvent(new Event("input", { bubbles: true }));
+    corpo.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 
   await chrome.storage.local.remove(CHAVE_PENDENTE_).catch(() => {});
-  avisarNaTela_("GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido. Revise e salve o documento.");
+  avisarNaTela_(
+    "GAOCG: conteúdo da " + (pendente.rotulo || "SOF") + " inserido" +
+    (via === "dom" ? " (modo DOM)" : "") + ". Revise e salve o documento."
+  );
+}
+
+function pedirInjecaoNoMainWorld_(html) {
+  try {
+    return chrome.runtime
+      .sendMessage({ type: "INJETAR_CKEDITOR", html: html })
+      .then(r => !!(r && r.ok))
+      .catch(() => false);
+  } catch (e) {
+    return Promise.resolve(false);
+  }
 }
 
 /**

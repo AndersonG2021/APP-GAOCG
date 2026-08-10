@@ -2129,6 +2129,61 @@ script no *main world* (content script roda em contexto isolado e não enxerga
 `window.CKEDITOR`). Também falta confirmar se as bordas das tabelas
 sobreviveram - se não, o SEI está higienizando os `style` inline.
 
+## 3º teste + estudo do SEI Pro: vigilância morria cedo (2026-08-10)
+
+**Sintoma:** nenhuma barra/aviso do GAOCG aparecia quando o editor do SEI abria.
+A etapa 2 nunca rodava.
+
+### Causa raiz: a vigilância era disparada uma única vez, no load
+
+Sequência real:
+1. página do processo carrega → vigia roda, **ainda não há pendente**, encerra;
+2. usuário clica em "Enviar ao SEI" → pendente é gravado;
+3. o SEI abre o cadastro e depois o editor **dentro de iframes**, sem recarregar
+   o documento do topo → o content script não roda de novo;
+4. ninguém mais procura o editor.
+
+Somado a isso, o laço esperava só 45s — menos do que o tempo real de preencher o
+cadastro à mão.
+
+**Correção:** a vigilância virou idempotente (`iniciarVigilancia_`) e é ligada em
+três momentos: no load, logo após gravar o pendente, e por
+`chrome.storage.onChanged` (cobre inclusive pendente criado por outra aba).
+O laço agora dura até o pendente expirar (15 min), com intervalo de 600ms.
+
+### Estudo do repositório SEI Pro (github.com/SEI-Pro/sei-pro)
+
+Extensão MV3, ~3,5 MB de JS, ~60 funções no SEI, tudo client-side. Empacota
+jQuery/chosen/moment/pdf.js/DOMPurify próprios. Três achados relevantes:
+
+1. **Como alcança o CKEditor:** declara `web_accessible_resources` com CKEditor e
+   jQuery (match `*://*.br/*`) — isso existe para o content script injetar um
+   `<script src="chrome-extension://…">` na página e escapar do *isolated
+   world*. Confirma que escrever `innerHTML` no corpo editável **não basta**: o
+   CKEditor grava a partir de `getData()`, do modelo interno, não do DOM.
+2. **Bloco de content script dedicado** a `controlador.php?acao=editor_montar`
+   com `run_at: document_end` — confirma que o editor é página própria e valida
+   a arquitetura em duas etapas.
+3. **Não tem `externally_connectable` nem background service worker.** Nenhum
+   site externo consegue falar com ele: a integração GAOCG→extensão, que é o
+   objetivo do usuário, o SEI Pro **não faz**. Não há o que copiar ali.
+
+**Licença:** AGPL-3.0. Estudar arquitetura/técnica é livre (técnica não é
+protegida por direito autoral); copiar trechos obrigaria esta extensão a virar
+AGPL, com publicação de código. Nada do que foi implementado aqui saiu do código
+deles.
+
+**Melhoria sobre a técnica do SEI Pro (v0.5.0):** em vez de
+`web_accessible_resources` (padrão MV2), usamos
+`chrome.scripting.executeScript({ world: "MAIN", func, args })` — alcança
+`window.CKEDITOR` sem expor recurso nenhum da extensão a páginas de terceiros.
+`aplicarConteudo_` tenta `CKEDITOR.instances[...].setData(html)` primeiro e só
+cai para `innerHTML` se não houver CKEditor; o aviso na tela indica qual caminho
+foi usado ("modo DOM" = fallback).
+
+**Passo manual:** recarregar a extensão em `chrome://extensions`. ID não muda,
+nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
