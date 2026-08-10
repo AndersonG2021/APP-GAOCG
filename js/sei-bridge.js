@@ -25,8 +25,9 @@ const SeiBridge = (function () {
    *
    *     localStorage.setItem('gaocg_sei_extension_id', 'novo-id-aqui');
    *
-   * O ID abaixo veio do README da extensão (lá ele estava com um espaço à
-   * esquerda, o que fazia o sendMessage falhar silenciosamente - corrigido).
+   * O ID abaixo foi copiado do chrome://extensions depois que a pasta duplicada
+   * da extensão foi achatada (o ID anterior, do README, deixou de valer junto
+   * com o caminho antigo).
    */
   const ID_PADRAO_ = 'mnohlkhmphcilholmgolecdelpmebkdg';
   const CHAVE_ID_LOCAL_ = 'gaocg_sei_extension_id';
@@ -159,14 +160,25 @@ const SeiBridge = (function () {
         UI.toast('SEI: ' + (resposta.erro || 'erro desconhecido ao preencher o documento.'), 'erro');
         return false;
       }
-      // conteudoInserido === false: o cadastro foi preenchido, mas o editor de
-      // texto ainda não estava aberto (no SEI ele só aparece depois de
-      // "Confirmar Dados"). O usuário precisa saber disso, senão confirma um
-      // documento vazio achando que deu tudo certo.
+
+      // O envio tem duas etapas independentes (ver content-sei.js): o cadastro
+      // (best-effort) e o conteúdo, que só entra quando o editor do SEI abrir -
+      // depois de "Confirmar Dados". A mensagem precisa deixar claro que o
+      // trabalho NÃO acabou quando este toast aparece, senão o analista confirma
+      // o documento e acha que o conteúdo já foi (foi assim que o primeiro teste
+      // real gerou um documento vazio).
+      if (!resposta.conteudoAgendado) {
+        UI.toast('SEI: não consegui preparar o conteúdo do documento. Use "Salvar e gerar documento SEI" e cole manualmente.', 'erro');
+        return false;
+      }
+      if (resposta.aviso) {
+        UI.toast('SEI: ' + resposta.aviso, 'info');
+      }
       UI.toast(
-        resposta.conteudoInserido
-          ? 'Dados enviados ao SEI. Revise na aba do SEI e clique em "Confirmar Dados".'
-          : 'Cadastro preenchido no SEI. Confirme os dados e cole o conteúdo do documento no editor que abrir.',
+        (resposta.cadastroPreenchido
+          ? 'Cadastro preenchido no SEI. '
+          : 'Continue o cadastro no SEI. ') +
+        'Ao clicar em "Confirmar Dados", o conteúdo da SOF entra sozinho no editor.',
         'sucesso'
       );
       return true;
