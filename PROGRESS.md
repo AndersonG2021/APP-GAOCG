@@ -2241,6 +2241,48 @@ do relato do usuário, não do código deles.
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** dar F5 na
 aba do SEI. ID não muda, nenhum `.gs` alterado.
 
+## Verificação estrita do processo de destino (v0.7.0, 2026-08-10)
+
+Envio ao SEI **funcionando de ponta a ponta** a partir da v0.6.0 (confirmado
+pelo usuário). Esta sessão fecha um risco que sobrava.
+
+### O risco
+
+`findMelhorAbaSei` tinha um fallback: não achando o número, usava "qualquer aba
+do SEI aberta". Ou seja, com outro processo em foco, **o documento da SOF seria
+criado no processo errado** - sem nenhum aviso, num sistema de processos
+oficial. Pedido do usuário: conferir o número e, não achando, recusar.
+
+### Como a conferência é feita
+
+Perguntando a cada aba do SEI **quais números de processo ela exibe**
+(`CONFERIR_PROCESSO` → `conferirProcesso_`), varrendo o texto do documento do
+topo + iframes de mesma origem com o padrão `\d{5,10}\.\d{6}/\d{4}-\d{2}`, e
+comparando só os dígitos (ignora diferença de formatação).
+
+**Por que pelo texto e não pela URL:** a URL do `procedimento_trabalhar` traz
+`id_procedimento`, um id interno do banco - não tem relação com o número que o
+analista digitou na SOF. Não dá para casar os dois.
+
+Entre as abas que batem, prefere a que está de fato com a árvore do processo
+aberta (`ehPaginaDeProcesso`) - só nela existe o botão "Incluir Documento".
+
+### Não achou: abre a pesquisa
+
+`abrirPesquisaDoProcesso_` grava o número em `chrome.storage.local` e abre uma
+aba **nova** em `sei.pe.gov.br` (nova de propósito: não mexe no que o analista
+já tem aberto). O content script daquela aba consome o número e preenche a
+pesquisa do SEI.
+
+⚠️ **Parte não confirmada no ambiente da SES-PE:** o seletor do campo de
+pesquisa. São tentados `#txtPesquisaRapida`, `input[name=txtPesquisaRapida]`,
+`#txtInfraPesquisar` e `input[type=search]`; se nenhum casar, mostra o número na
+tela para o usuário colar à mão, em vez de falhar em silêncio. É o único ponto
+desta versão que ainda depende de validação real.
+
+**Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
+do SEI. ID não muda, nenhum `.gs` alterado.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

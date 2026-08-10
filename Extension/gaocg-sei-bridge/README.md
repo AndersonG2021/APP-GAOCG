@@ -57,8 +57,20 @@ o SEI aberto e logado.
      perguntando se pode substituir — clique em **"Substituir"**.
 6. Revise e salve o documento.
 
-O processo de destino é encontrado pelo número SEI da própria SOF (campo
-`sei`), comparado com o título/URL das abas abertas no `sei.pe.gov.br`.
+### Como o processo de destino é identificado
+
+O número vem do campo `sei` da própria SOF. A extensão pergunta a cada aba do
+`sei.pe.gov.br` **quais números de processo ela exibe** e só age na que mostrar
+exatamente aquele número.
+
+Lê o texto da página, e não a URL, porque a URL do `procedimento_trabalhar` traz
+`id_procedimento` — um id interno do banco, sem relação com o número que o
+analista digitou na SOF.
+
+**Se o processo não estiver aberto, a extensão NÃO envia.** Ela devolve erro e
+abre o SEI numa aba nova já pesquisando aquele número. Até a v0.6.0 havia um
+fallback para "qualquer aba do SEI aberta" — o que criaria o documento **no
+processo errado**, sem aviso, dentro de um sistema de processos oficial.
 
 ### Por que em duas etapas
 
