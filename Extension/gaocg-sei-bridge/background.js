@@ -61,14 +61,20 @@ async function acharAbaDoProcesso_(numeroProcesso) {
     } catch (e) {
       continue; // aba do SEI sem content script utilizável - ignora
     }
-    if (resposta && resposta.tem) candidatas.push({ aba: aba, ehPaginaDeProcesso: !!resposta.ehPaginaDeProcesso });
+    // EXIGE estar na página do processo, não só exibir o número.
+    //
+    // Bug encontrado no 7º teste (2026-08-10): a tela "Controle de Processos"
+    // LISTA vários números de processo. Se o processo alvo estivesse nessa
+    // lista, a conferência achava o número e dava a aba como válida - mas ali
+    // não existe árvore nem botão "Incluir Documento", então a criação
+    // quebrava logo depois. Estar listado não é estar aberto.
+    if (resposta && resposta.tem && resposta.ehPaginaDeProcesso) {
+      candidatas.push({ aba: aba });
+    }
   }
 
   if (!candidatas.length) return { aba: null, motivo: "processo_nao_aberto" };
-  // Prefere a aba que está de fato com a árvore do processo aberta - só nela o
-  // botão "Incluir Documento" existe.
-  const comArvore = candidatas.find(c => c.ehPaginaDeProcesso);
-  return { aba: (comArvore || candidatas[0]).aba, motivo: "ok" };
+  return { aba: candidatas[0].aba, motivo: "ok" };
 }
 
 /**
@@ -86,13 +92,31 @@ async function acharAbaDoProcesso_(numeroProcesso) {
 async function agendarEnvioEAbrirPesquisa_(numeroProcesso, documento) {
   try {
     await chrome.storage.local.set({
-      envioPendente: { numeroProcesso: numeroProcesso, documento: documento, criadoEm: Date.now() },
-      processoParaAbrir: { numero: numeroProcesso, criadoEm: Date.now() }
+      envioPendente: { numeroProcesso: numeroProcesso, documento: documento, criadoEm: Date.now() }
     });
+
+    // Reaproveita uma aba do SEI que já esteja aberta: a barra "Pesquisar..."
+    // do canto superior existe em QUALQUER tela do SEI (Controle de Processos
+    // inclusive), então abrir uma aba nova só para pesquisar era desperdício -
+    // observação do usuário no 7º teste.
+    const tabs = await chrome.tabs.query({ url: SEI_TAB_URL_PATTERN });
+    const aba = tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+    if (aba) {
+      await chrome.tabs.update(aba.id, { active: true });
+      try { await chrome.windows.update(aba.windowId, { focused: true }); } catch (e) { /* janela sumiu */ }
+      try {
+        const r = await enviarParaAba(aba.id, { type: "PESQUISAR_PROCESSO", numero: numeroProcesso });
+        if (r && r.ok) return { ok: true, modo: "aba_atual" };
+      } catch (e) { /* cai para aba nova */ }
+    }
+
+    // Nenhuma aba utilizável: aí sim abre uma nova e deixa o número guardado
+    // para o content script daquela aba pesquisar quando carregar.
+    await chrome.storage.local.set({ processoParaAbrir: { numero: numeroProcesso, criadoEm: Date.now() } });
     await chrome.tabs.create({ url: "https://sei.pe.gov.br/", active: true });
-    return true;
+    return { ok: true, modo: "aba_nova" };
   } catch (e) {
-    return false;
+    return { ok: false };
   }
 }
 
@@ -231,13 +255,15 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         // Nenhuma aba com ESTE processo: guarda o envio, abre a pesquisa numa
         // aba nova e a extensão retoma sozinha quando o processo abrir. Nunca
         // cai para "qualquer aba do SEI" - ver acharAbaDoProcesso_.
-        const agendou = await agendarEnvioEAbrirPesquisa_(numero, message.documento);
+        const agendamento = await agendarEnvioEAbrirPesquisa_(numero, message.documento);
         sendResponse({
           ok: false,
           processoNaoAberto: true,
-          envioAgendado: agendou,
-          erro: agendou
-            ? "O processo " + numero + " não estava aberto. Abri a pesquisa dele no SEI - é só abrir o processo que o documento é criado automaticamente."
+          envioAgendado: !!agendamento.ok,
+          erro: agendamento.ok
+            ? "O processo " + numero + " não estava aberto. Pesquisei ele no SEI"
+              + (agendamento.modo === "aba_nova" ? " numa aba nova" : "")
+              + " - é só abrir o processo que o documento é criado automaticamente."
             : "O processo " + numero + " não está aberto em nenhuma aba do SEI. Abra o processo e tente de novo."
         });
         return;

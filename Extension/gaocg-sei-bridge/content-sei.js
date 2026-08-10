@@ -546,13 +546,50 @@ function conferirProcesso_(numeroEsperado) {
  * degrada: se nenhum casar, mostra o número na tela para o usuário colar à mão,
  * em vez de falhar em silêncio.
  */
+/**
+ * Campo "Pesquisar..." da barra superior do SEI - existe em QUALQUER tela dele
+ * (inclusive "Controle de Processos"), por isso não é preciso abrir uma aba
+ * nova só para pesquisar.
+ *
+ * O seletor por `placeholder` veio da tela real enviada pelo usuário (7º teste)
+ * e é o mais confiável da lista; os ids continuam como alternativa para outras
+ * versões/temas do SEI.
+ */
 const SELETORES_PESQUISA_SEI_ = [
+  'input[placeholder*="Pesquisar" i]',
   "#txtPesquisaRapida",
   'input[name="txtPesquisaRapida"]',
   "#txtInfraPesquisar",
   'input[type="search"]'
 ];
 
+/** Preenche a busca do SEI e submete. Devolve false se não achar o campo. */
+async function pesquisarProcesso_(numero) {
+  const campo = await aguardarCondicao_(() => {
+    for (const seletor of SELETORES_PESQUISA_SEI_) {
+      const el = acharEm_(seletor);
+      if (el && el.offsetParent !== null) return el;
+    }
+    return null;
+  }, 10000, 400);
+
+  if (!campo) {
+    avisarNaTela_("GAOCG: não encontrei a pesquisa do SEI. Abra o processo " + numero + " manualmente - o documento é criado sozinho quando ele abrir.");
+    return false;
+  }
+
+  campo.focus();
+  campo.value = numero;
+  campo.dispatchEvent(new Event("input", { bubbles: true }));
+  dispararChange_(campo);
+  teclar_(campo, "Enter", 13);
+  if (campo.form) campo.form.submit();
+
+  avisarNaTela_("GAOCG: pesquisando o processo " + numero + " no SEI. Abra o processo - o documento é criado sozinho.");
+  return true;
+}
+
+/** Pesquisa agendada para a PRÓXIMA carga de página (fluxo da aba nova). */
 async function tentarPesquisarProcesso_() {
   let alvo = null;
   try {
@@ -562,31 +599,10 @@ async function tentarPesquisarProcesso_() {
     return;
   }
   if (!alvo || !alvo.numero) return;
-  // Consome logo: a pesquisa só deve ser tentada uma vez, senão qualquer
-  // navegação seguinte no SEI voltaria a pesquisar sozinha.
+  // Consome ANTES de pesquisar: submeter o formulário recarrega a página e o
+  // content script roda de novo - sem isso, entraria em laço de pesquisa.
   await chrome.storage.local.remove(CHAVE_PROCESSO_ABRIR_).catch(() => {});
-
-  const campo = await aguardarCondicao_(() => {
-    for (const seletor of SELETORES_PESQUISA_SEI_) {
-      const el = acharEm_(seletor);
-      if (el) return el;
-    }
-    return null;
-  }, 10000, 400);
-
-  if (!campo) {
-    avisarNaTela_("GAOCG: não encontrei a pesquisa do SEI. Abra o processo " + alvo.numero + " manualmente e clique em enviar de novo.");
-    return;
-  }
-
-  campo.focus();
-  campo.value = alvo.numero;
-  campo.dispatchEvent(new Event("input", { bubbles: true }));
-  campo.dispatchEvent(new Event("change", { bubbles: true }));
-  const form = campo.form;
-  if (form) form.submit();
-  else campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
-  avisarNaTela_("GAOCG: pesquisando o processo " + alvo.numero + " no SEI. Abra-o e clique em enviar de novo.");
+  await pesquisarProcesso_(alvo.numero);
 }
 
 /* ===================== retomada automática do envio ===================== */
@@ -912,6 +928,14 @@ if (window.top === window) {
     if (message.type === "CONFERIR_PROCESSO") {
       sendResponse(conferirProcesso_(message.numero));
       return false;
+    }
+
+    // Pesquisar AGORA, nesta aba - sem abrir aba nova nem recarregar nada.
+    if (message.type === "PESQUISAR_PROCESSO") {
+      pesquisarProcesso_(message.numero)
+        .then(ok => sendResponse({ ok: ok }))
+        .catch(() => sendResponse({ ok: false }));
+      return true; // resposta assíncrona
     }
 
     if (message.type !== "PREENCHER_DOCUMENTO") return false;
