@@ -57,35 +57,18 @@ const CHAVE_PENDENTE_ = "documentoPendente";
 /** Depois disso o pendente é descartado, pra não injetar num documento aberto muito tempo depois. */
 const VALIDADE_PENDENTE_MS_ = 15 * 60 * 1000;
 
-// Só o documento do topo age. Com todos os frames agindo, vários responderiam à
-// mesma mensagem (o primeiro sendResponse vence) e o conteúdo seria injetado
-// mais de uma vez.
-if (window.top === window) {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.type !== "PREENCHER_DOCUMENTO") return false;
-    preencherDocumento(message.documento)
-      .then(resultado => sendResponse(resultado))
-      .catch(erro => sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }));
-    return true; // resposta assíncrona
-  });
-
-  // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
-  // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.
-  iniciarVigilancia_();
-
-  /**
-   * Rede de segurança para o caso em que o editor abre SEM recarregar o
-   * documento do topo (o SEI navega dentro de iframes). Nesse cenário o
-   * content script não roda de novo, então a vigilância precisa ser (re)ligada
-   * pelo próprio evento de gravação do pendente - inclusive quando o pendente
-   * foi criado por OUTRA aba.
-   */
-  chrome.storage.onChanged.addListener((mudancas, area) => {
-    if (area === "local" && mudancas[CHAVE_PENDENTE_] && mudancas[CHAVE_PENDENTE_].newValue) {
-      iniciarVigilancia_();
-    }
-  });
-}
+/**
+ * ATENÇÃO À ORDEM: esta declaração precisa vir ANTES do bloco `if (window.top
+ * === window)` abaixo, que chama iniciarVigilancia_() na hora.
+ *
+ * Bug real da v0.5.0 ("Cannot access 'vigilanciaAtiva_' before initialization"):
+ * a flag estava declarada mais abaixo no arquivo, junto de iniciarVigilancia_.
+ * `function` é içada e pode ser chamada antes da sua posição no arquivo, mas
+ * `let`/`const` ficam na Temporal Dead Zone até a linha da declaração executar -
+ * então a chamada estourava e o content script inteiro morria antes de
+ * registrar qualquer listener. Nada funcionava, nem a etapa 1.
+ */
+let vigilanciaAtiva_ = false;
 
 /**
  * BUG CORRIGIDO (3º teste real, 2026-08-10): a vigilância era disparada UMA vez,
@@ -100,8 +83,10 @@ if (window.top === window) {
  * Agora a vigilância é (re)ligada em três momentos - carregamento, gravação do
  * pendente (storage.onChanged) e logo depois de agendar - e é idempotente, pra
  * os três gatilhos não criarem três laços concorrentes.
+ *
+ * A flag `vigilanciaAtiva_` é declarada lá em cima, junto das constantes - ver
+ * o comentário sobre Temporal Dead Zone lá.
  */
-let vigilanciaAtiva_ = false;
 function iniciarVigilancia_() {
   if (vigilanciaAtiva_) return;
   vigilanciaAtiva_ = true;
@@ -464,4 +449,46 @@ function avisarNaTela_(texto) {
   ].join(";");
   document.body.appendChild(aviso);
   setTimeout(() => aviso.remove(), 8000);
+}
+
+/* ===================== inicialização (sempre por último) =====================
+ *
+ * TODO o código que executa na carga do script fica AQUI, depois de todas as
+ * declarações. Convenção adotada depois do bug real da v0.5.0
+ * ("Cannot access 'vigilanciaAtiva_' before initialization"): `function` é içada
+ * e pode ser chamada de qualquer lugar, mas `let`/`const` ficam na Temporal Dead
+ * Zone até a linha da declaração executar. Com a inicialização no meio do
+ * arquivo, bastava alguém declarar uma constante abaixo dela para o content
+ * script inteiro morrer antes de registrar qualquer listener - e o sintoma era
+ * "nada acontece", sem pista nenhuma na tela do SEI.
+ *
+ * Mantendo este bloco no fim, nenhuma ordem de declaração acima pode quebrá-lo.
+ */
+
+// Só o documento do topo age. Com todos os frames agindo, vários responderiam à
+// mesma mensagem (o primeiro sendResponse vence) e o conteúdo seria injetado
+// mais de uma vez.
+if (window.top === window) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || message.type !== "PREENCHER_DOCUMENTO") return false;
+    preencherDocumento(message.documento)
+      .then(resultado => sendResponse(resultado))
+      .catch(erro => sendResponse({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }));
+    return true; // resposta assíncrona
+  });
+
+  // Etapa 2: vale para QUALQUER página do SEI, inclusive a janela do editor que
+  // o SEI abre depois de "Confirmar Dados" - é ali que o conteúdo finalmente entra.
+  iniciarVigilancia_();
+
+  // Rede de segurança para o caso em que o editor abre SEM recarregar o
+  // documento do topo (o SEI navega dentro de iframes). Nesse cenário o content
+  // script não roda de novo, então a vigilância precisa ser (re)ligada pelo
+  // próprio evento de gravação do pendente - inclusive quando o pendente foi
+  // criado por OUTRA aba.
+  chrome.storage.onChanged.addListener((mudancas, area) => {
+    if (area === "local" && mudancas[CHAVE_PENDENTE_] && mudancas[CHAVE_PENDENTE_].newValue) {
+      iniciarVigilancia_();
+    }
+  });
 }
