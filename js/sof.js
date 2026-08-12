@@ -719,12 +719,20 @@ const TelaSof = (function () {
     });
 
     if (!editando) {
+      // Autopreenchimento pelo último SOF do mesmo tipo.
+      //
+      // Usava `listarSof({ tipo, page: 1, pageSize: 1 })`: pedia 1 linha, mas o
+      // backend calculava fontes/atendido/destaque de TODAS as SOFs antes de
+      // paginar - 20 a 45 segundos na medição do usuário. `obterTemplateSof`
+      // (Sof.gs) faz só o necessário. `cache: true` deixa instantânea a troca
+      // repetida de tipo; salvarSof invalida esse cache, porque o "último SOF
+      // do tipo" muda quando um novo é criado.
       document.getElementById('sofTipoSof').addEventListener('change', async function () {
         const tipo = this.value;
         if (!tipo) return;
         try {
-          const resposta = await Api.chamar('listarSof', { tipo: [tipo], page: 1, pageSize: 1 });
-          if (resposta.items && resposta.items.length) aplicarTemplateSof_(resposta.items[0]);
+          const template = await Api.chamar('obterTemplateSof', { tipo }, { cache: true });
+          if (template) aplicarTemplateSof_(template);
         } catch (err) {
           // Autopreenchimento é conveniência, não deve travar o cadastro - falha silenciosa, usuário preenche na mão.
         }
@@ -887,7 +895,7 @@ const TelaSof = (function () {
           ${temAtendido ? `<div class="campo"><label>Total Atendido</label><strong class="linha-fonte-total-atendido-exibicao">${UI.formatarMoeda(item.total_atendido)}</strong></div>` : ''}
         </div>
         <div class="linha-fonte-meses">${mesesHtml}</div>
-        ${temAtendido ? '<p class="ajuda linha-fonte-legenda">🟩 mês já coberto pelo total atendido (empenhado) · 🟥 ainda não atendido</p>' : ''}
+        ${temAtendido ? '<p class="ajuda linha-fonte-legenda">🟩 Atendido · 🟥 Falta atender</p>' : ''}
       </div>`;
   }
 
@@ -1166,6 +1174,8 @@ const TelaSof = (function () {
       }
 
       CacheAbas.invalidar('sof');
+      // O "último SOF do tipo" acabou de mudar - ver o change de sofTipoSof.
+      Api.invalidarCache('obterTemplateSof');
       if (dadosNe) CacheAbas.invalidar('notasEmpenho');
       UI.toast(
         opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.'
