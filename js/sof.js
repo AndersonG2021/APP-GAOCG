@@ -1618,6 +1618,7 @@ const TelaSof = (function () {
         travar(resultado);
       } catch (err) {
         inputEl.value = '';
+        mostrarDiagnosticoOcr_(err.dados && err.dados.texto_ocr_debug);
         UI.toast(err.message, 'erro');
       }
     });

@@ -65,7 +65,14 @@ const Api = (function () {
           Auth.encerrarSessaoLocal();
           App.mostrarTelaLogin();
         }
-        throw new Error(json.error || 'Erro desconhecido retornado pelo servidor.');
+        const erro = new Error(json.error || 'Erro desconhecido retornado pelo servidor.');
+        // dados (sessão 2026-08-12): payload extra que o backend às vezes manda
+        // junto com o erro (ver fail_ em Utils.gs) - hoje só texto_ocr_debug em
+        // lerAnexoNotaEmpenho, pra diagnosticar leituras que falharam (antes
+        // esse texto só vinha em respostas de sucesso, exatamente o oposto de
+        // quando faz falta). undefined pra qualquer chamada que não manda nada.
+        erro.dados = json.data;
+        throw erro;
       }
       if (usarCache) cache.set(chave, json.data);
       return json.data;

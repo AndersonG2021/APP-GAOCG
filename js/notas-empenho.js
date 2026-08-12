@@ -590,6 +590,11 @@ const TelaNotasEmpenho = (function () {
         numeroNeReforcoDetectado = null;
         statusEl.classList.add('oculto');
         camposManuais.classList.remove('oculto');
+        // texto_ocr_debug (sessão 2026-08-12): vem junto do erro (ver fail_ em
+        // Utils.gs/erro.dados em api.js) justamente nas falhas de leitura -
+        // antes só aparecia quando a leitura dava certo, o caso que menos
+        // precisa de diagnóstico.
+        mostrarDiagnosticoOcr_('reforcoDiagnostico', err.dados && err.dados.texto_ocr_debug);
         UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
       }
     });
@@ -827,6 +832,7 @@ const TelaNotasEmpenho = (function () {
         inputEl.value = '';
         leituraOcr = null;
         statusEl.classList.add('oculto');
+        mostrarDiagnosticoOcr_('novaNeDiagnostico', err.dados && err.dados.texto_ocr_debug);
         UI.toast(err.message, 'erro');
       }
     });
@@ -898,6 +904,7 @@ const TelaNotasEmpenho = (function () {
         numeroNeReforcoDetectado = null;
         statusEl.classList.add('oculto');
         camposManuais.classList.remove('oculto');
+        mostrarDiagnosticoOcr_('novaNeReforcoDiagnostico', err.dados && err.dados.texto_ocr_debug);
         UI.toast('Não foi possível ler o documento automaticamente - preencha manualmente. ' + err.message, 'erro');
       }
     });
