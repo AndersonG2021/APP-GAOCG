@@ -83,6 +83,7 @@ function handleRequest_(params) {
       case 'listarObjetosSofPorUnidade': return jsonOut_(listarObjetosSofPorUnidade(session, params.unidadeId));
       case 'listarNotasEmpenho': return jsonOut_(listarNotasEmpenho(session, params));
       case 'lerAnexoNotaEmpenho': return jsonOut_(lerAnexoNotaEmpenho(session, params));
+      case 'descartarArquivoNaoSalvoNotaEmpenho': return jsonOut_(descartarArquivoNaoSalvoNotaEmpenho(session, params.arquivoId));
       case 'criarNotaEmpenho': return jsonOut_(criarNotaEmpenho(session, params.data));
       case 'criarReforcosEmLote': return jsonOut_(criarReforcosEmLote(session, params.data));
       case 'excluirNotaEmpenho': return jsonOut_(excluirNotaEmpenho(session, params.id));

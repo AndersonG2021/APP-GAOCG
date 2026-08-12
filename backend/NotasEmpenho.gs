@@ -281,6 +281,15 @@ function classificarFonteDoCodigoOrcamentario_(codigo) {
 }
 
 /**
+ * Pasta do Drive onde ficam os anexos de Nota de Empenho (original e
+ * reforço) - extraída pra constante (sessão 2026-08-12) porque passou a ser
+ * usada em 3 pontos (lerAnexoNotaEmpenho, criarNotaEmpenho,
+ * criarReforcosEmLote) desde que o upload definitivo passou a poder
+ * acontecer já na leitura - ver comentário de lerAnexoNotaEmpenho abaixo.
+ */
+var PASTA_ANEXOS_NOTAS_EMPENHO_ = '1f10o-GB3hFQsWXqes2kPZymhuDCeMY2c';
+
+/**
  * Lê (via OCR) o documento de uma Nota de Empenho ainda não cadastrada e
  * extrai Número, Fonte (classificada do código orçamentário), Preço Total e
  * Cronograma de Desembolso - usado tanto pelo botão "Nova Nota de Empenho"
@@ -290,6 +299,25 @@ function classificarFonteDoCodigoOrcamentario_(codigo) {
  * únicos campos que fazem a leitura falhar se não encontrados.
  * REGEX_NUMERO_NE_DOCUMENTO é a mesma de Recibos.gs (mesmo formato de número
  * em qualquer documento do e-fisco/PE).
+ *
+ * Upload definitivo já aqui (sessão 2026-08-12, pedido do usuário: "leitura"
+ * + "salvamento" do reforço levavam mais de 30s somados) - achado real: o
+ * MESMO arquivo subia pro Drive duas vezes, em duas chamadas HTTP separadas
+ * - uma vez (temporária, dentro de extrairTextoOcr_, Utils.gs) só pra rodar
+ * o OCR, e outra vez (definitiva) só no salvamento
+ * (criarNotaEmpenho/criarReforcosEmLote), cada uma reenviando o base64
+ * inteiro de novo. Agora o upload definitivo acontece já aqui, só depois de
+ * Número e Preço Total confirmados (uma leitura que falha não sobe nada) -
+ * criarNotaEmpenho/criarReforcosEmLote passam a aceitar arquivo_drive_id/
+ * arquivo_url prontos (ver lá) em vez de receber o base64 de novo, então o
+ * salvamento não faz nenhum upload, só grava a linha na planilha.
+ * extrairTextoOcr_ (Utils.gs) continua INTACTA - Recibos.gs e a rotina
+ * migrarCronogramaNotasEmpenhoExistentes (acima) continuam usando o caminho
+ * antigo (só base64, sem upload definitivo), nada mudou pra elas.
+ *
+ * Se o analista cancelar/trocar de anexo sem salvar, esse arquivo definitivo
+ * fica órfão até o frontend chamar descartarArquivoNaoSalvoNotaEmpenho (ver
+ * abaixo) - chamada em segundo plano, sem o analista perceber.
  */
 function lerAnexoNotaEmpenho(session, params) {
   params = params || {};
@@ -318,6 +346,10 @@ function lerAnexoNotaEmpenho(session, params) {
   var precoTotal = extrairPrecoTotal_(texto);
   if (precoTotal === null) return fail_('Não foi possível identificar o Preço Total no documento anexado.', debugParcial);
 
+  var pasta = DriveApp.getFolderById(PASTA_ANEXOS_NOTAS_EMPENHO_);
+  var blob = Utilities.newBlob(Utilities.base64Decode(params.arquivoBase64), params.arquivoTipo || 'application/pdf', params.arquivoNome);
+  var arquivo = pasta.createFile(blob);
+
   var cronograma = extrairCronogramaDesembolso_(texto);
   var somaCronograma = cronograma.reduce(function (s, m) { return s + m.valor; }, 0);
 
@@ -340,6 +372,12 @@ function lerAnexoNotaEmpenho(session, params) {
     cronograma_diverge_do_total: cronograma.length === 12 && Math.abs(precoTotal - somaCronograma) > 0.01,
     fonte: fonteCodigo ? classificarFonteDoCodigoOrcamentario_(fonteCodigo) : null,
     fonte_codigo: fonteCodigo,
+    // arquivo_drive_id/arquivo_url (sessão 2026-08-12): arquivo já enviado
+    // definitivamente pro Drive (ver acima) - o frontend guarda os dois e
+    // manda pra criarNotaEmpenho/criarReforcosEmLote em vez do base64, pra
+    // não subir o mesmo arquivo de novo no salvamento.
+    arquivo_drive_id: arquivo.getId(),
+    arquivo_url: arquivo.getUrl(),
     // texto_ocr_debug (sessão 2026-07-30): texto bruto lido por OCR do
     // documento, truncado - só pra diagnóstico quando algum campo não é
     // identificado corretamente (frontend mostra num <details> recolhido,
@@ -349,6 +387,27 @@ function lerAnexoNotaEmpenho(session, params) {
     // necessariamente a ordem/formatação que o OCR devolve como texto plano.
     texto_ocr_debug: texto.slice(0, 6000)
   });
+}
+
+/**
+ * Apaga (joga na lixeira do Drive) um arquivo de Nota de Empenho que
+ * lerAnexoNotaEmpenho já subiu definitivamente mas nunca chegou a ser salvo
+ * (sessão 2026-08-12) - o analista cancelou o modal, removeu o anexo, ou
+ * trocou de arquivo antes de clicar Salvar. Chamada pelo frontend em modo
+ * silencioso (Api.chamar(..., {silencioso: true})), sem spinner, sem
+ * bloquear nada - é limpeza de segundo plano, então qualquer erro aqui
+ * (arquivo já removido, id inválido) é apenas ignorado, nunca repassado como
+ * falha pro analista.
+ */
+function descartarArquivoNaoSalvoNotaEmpenho(session, arquivoId) {
+  if (arquivoId) {
+    try {
+      DriveApp.getFileById(arquivoId).setTrashed(true);
+    } catch (e) {
+      // Limpeza best-effort - não é requisito, não interrompe nada.
+    }
+  }
+  return ok_({});
 }
 
 function listarNotasEmpenhoPorSof(session, sofId) {
@@ -508,13 +567,27 @@ function criarNotaEmpenho(session, dados) {
 
   var valor = toNumber_(dados.valor);
   if (valor <= 0) return fail_('Informe um valor válido para a Nota de Empenho.');
-  if (!dados.arquivoBase64 || !dados.arquivoNome) {
+
+  // arquivo_drive_id/arquivo_url (sessão 2026-08-12): quando o anexo já foi
+  // lido com sucesso por lerAnexoNotaEmpenho, o arquivo JÁ está no Drive (ver
+  // lá) - o frontend manda esses dois campos prontos, e nenhum upload novo
+  // acontece aqui. arquivoBase64 continua aceito como alternativa (ex.:
+  // mini-formulário de NE do SOF permite salvar com o arquivo mesmo quando a
+  // leitura por OCR falha - ver lerMiniFormularioNe_, js/sof.js) - só faz
+  // upload nesse caso.
+  var arquivoId, arquivoUrl;
+  if (dados.arquivo_drive_id) {
+    arquivoId = dados.arquivo_drive_id;
+    arquivoUrl = dados.arquivo_url;
+  } else if (dados.arquivoBase64 && dados.arquivoNome) {
+    var pasta = DriveApp.getFolderById(PASTA_ANEXOS_NOTAS_EMPENHO_);
+    var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
+    var arquivo = pasta.createFile(blob);
+    arquivoId = arquivo.getId();
+    arquivoUrl = arquivo.getUrl();
+  } else {
     return fail_('Anexe o arquivo da Nota de Empenho.');
   }
-
-  var pasta = DriveApp.getFolderById('1f10o-GB3hFQsWXqes2kPZymhuDCeMY2c');
-  var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
-  var arquivo = pasta.createFile(blob);
 
   var neSheet = getSheet_(SHEETS.NOTAS_EMPENHO);
   var id = proximoId_('NotasEmpenho');
@@ -533,8 +606,8 @@ function criarNotaEmpenho(session, dados) {
     valor: valor,
     periodo: sanitizeString_(dados.periodo, 100),
     mes_referencia: mesReferencia,
-    arquivo_drive_id: arquivo.getId(),
-    arquivo_url: arquivo.getUrl(),
+    arquivo_drive_id: arquivoId,
+    arquivo_url: arquivoUrl,
     criado_por: session.id,
     data_criacao: nowIso_()
   };
@@ -643,11 +716,22 @@ function criarReforcosEmLote(session, dados) {
     .filter(function (item) { return item.mes >= 1 && item.mes <= 12 && item.valor > 0; });
   if (!itens.length) return fail_('Informe ao menos um mês/valor válido para o reforço.');
 
-  if (!dados.arquivoBase64 || !dados.arquivoNome) return fail_('Anexe o arquivo do reforço.');
-
-  var pasta = DriveApp.getFolderById('1f10o-GB3hFQsWXqes2kPZymhuDCeMY2c');
-  var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
-  var arquivo = pasta.createFile(blob);
+  // arquivo_drive_id/arquivo_url: mesmo padrão de criarNotaEmpenho (ver lá) -
+  // se o anexo já foi lido com sucesso por lerAnexoNotaEmpenho, reaproveita o
+  // arquivo já enviado ao Drive em vez de subir de novo.
+  var arquivoId, arquivoUrl;
+  if (dados.arquivo_drive_id) {
+    arquivoId = dados.arquivo_drive_id;
+    arquivoUrl = dados.arquivo_url;
+  } else if (dados.arquivoBase64 && dados.arquivoNome) {
+    var pasta = DriveApp.getFolderById(PASTA_ANEXOS_NOTAS_EMPENHO_);
+    var blob = Utilities.newBlob(Utilities.base64Decode(dados.arquivoBase64), dados.arquivoTipo || 'application/pdf', dados.arquivoNome);
+    var arquivo = pasta.createFile(blob);
+    arquivoId = arquivo.getId();
+    arquivoUrl = arquivo.getUrl();
+  } else {
+    return fail_('Anexe o arquivo do reforço.');
+  }
 
   var numeroNeReforco = sanitizeString_(dados.numero_ne_reforco, 50);
 
@@ -666,8 +750,8 @@ function criarReforcosEmLote(session, dados) {
       valor: item.valor,
       periodo: '',
       mes_referencia: item.mes,
-      arquivo_drive_id: arquivo.getId(),
-      arquivo_url: arquivo.getUrl(),
+      arquivo_drive_id: arquivoId,
+      arquivo_url: arquivoUrl,
       criado_por: session.id,
       data_criacao: agora
     };

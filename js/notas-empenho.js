@@ -485,6 +485,21 @@ const TelaNotasEmpenho = (function () {
     }
   }
 
+  /**
+   * Apaga em segundo plano (sessão 2026-08-12) um arquivo que
+   * lerAnexoNotaEmpenho já subiu definitivamente pro Drive (ver otimização
+   * lá: o upload passou a acontecer na leitura, não mais no salvamento) mas
+   * que acabou não sendo salvo - reselecionar outro arquivo, "Remover
+   * anexo", ou fechar o modal sem salvar. {silencioso: true} evita o
+   * spinner global (Api.chamar, js/api.js) - é limpeza que o analista nem
+   * precisa perceber, não uma ação que ele pediu ou precisa esperar; erro
+   * aqui (rede, arquivo já removido) é apenas ignorado.
+   */
+  function descartarArquivoNaoSalvo_(arquivoDriveId) {
+    if (!arquivoDriveId) return;
+    Api.chamar('descartarArquivoNaoSalvoNotaEmpenho', { arquivoId: arquivoDriveId }, { silencioso: true }).catch(() => {});
+  }
+
   function abrirModalReforco(grupo) {
     const corpo = `
       <form id="formReforcoNe">
@@ -512,8 +527,15 @@ const TelaNotasEmpenho = (function () {
     UI.tornarPesquisavel('reforcoMes');
 
     let itensDetectados = null; // [{mes_referencia, valor}, ...] quando o OCR acha 1+ meses no cronograma do documento
-    let arquivoLido = null; // {arquivoBase64, arquivoNome, arquivoTipo}
+    let arquivoLido = null; // {arquivo_drive_id, arquivo_url} - arquivo já enviado ao Drive por uma leitura bem-sucedida (ver lerAnexoNotaEmpenho, NotasEmpenho.gs)
     let numeroNeReforcoDetectado = null; // número da própria NE de reforço (lido do documento), usado para agrupar no card
+
+    // Fecha o modal por qualquer caminho (Cancelar, X, clique fora, ou
+    // fechamento programático após salvar) - se sobrar um arquivo já
+    // enviado ao Drive mas não salvo, descarta em segundo plano (sessão
+    // 2026-08-12). Depois de um salvamento bem-sucedido, arquivoLido já foi
+    // zerado antes do fecharModal() correspondente, então isto vira no-op.
+    UI.aoFecharModal(() => descartarArquivoNaoSalvo_(arquivoLido && arquivoLido.arquivo_drive_id));
 
     function mostrarMesesDetectados_(itens) {
       const alvo = document.getElementById('reforcoMesesDetectados');
@@ -530,6 +552,10 @@ const TelaNotasEmpenho = (function () {
       const erroEl = document.getElementById('reforcoErro');
       const camposManuais = document.getElementById('reforcoManualCampos');
       erroEl.classList.add('oculto');
+      // Trocar de arquivo sem clicar "Remover anexo" primeiro abandona
+      // qualquer upload já feito por uma leitura anterior - descarta em
+      // segundo plano antes de zerar o estado (sessão 2026-08-12).
+      descartarArquivoNaoSalvo_(arquivoLido && arquivoLido.arquivo_drive_id);
       itensDetectados = null;
       arquivoLido = null;
       numeroNeReforcoDetectado = null;
@@ -542,8 +568,12 @@ const TelaNotasEmpenho = (function () {
       statusEl.textContent = 'Lendo documento...';
       try {
         const base64 = await UI.lerArquivoBase64(arquivo);
-        arquivoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
+        // arquivo_drive_id/arquivo_url (sessão 2026-08-12): a leitura já subiu
+        // o arquivo definitivamente pro Drive - salvar não precisa reenviar
+        // o base64, só referenciar esses dois campos (ver criarReforcosEmLote/
+        // criarNotaEmpenho, NotasEmpenho.gs).
+        arquivoLido = { arquivo_drive_id: resultado.arquivo_drive_id, arquivo_url: resultado.arquivo_url };
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
         numeroNeReforcoDetectado = resultado.numero_ne || null;
         conferirNeReferencia_('reforcoAvisoReferencia', resultado.numero_ne_referencia, grupo.numero_ne);
@@ -570,6 +600,7 @@ const TelaNotasEmpenho = (function () {
         statusEl.innerHTML = mensagemStatus + ' <a href="#" id="reforcoRemoverAnexo">Remover anexo' + (itensDetectados ? '' : ' / preencher manualmente') + '</a>';
         document.getElementById('reforcoRemoverAnexo').addEventListener('click', e => {
           e.preventDefault();
+          descartarArquivoNaoSalvo_(arquivoLido && arquivoLido.arquivo_drive_id);
           itensDetectados = null;
           arquivoLido = null;
           numeroNeReforcoDetectado = null;
@@ -628,6 +659,10 @@ const TelaNotasEmpenho = (function () {
         // vez que for aberta, não só a tela de NE.
         CacheAbas.invalidar('sof');
         UI.toast('Reforço adicionado.', 'sucesso');
+        // Zera ANTES do fecharModal() - o arquivo acabou de ser vinculado à
+        // NE salva, não é mais "não salvo" (ver aoFecharModal registrado
+        // acima, senão o próprio arquivo que acabou de ser salvo seria apagado).
+        arquivoLido = null;
         UI.fecharModal();
         await carregar();
       } catch (err) {
@@ -725,13 +760,26 @@ const TelaNotasEmpenho = (function () {
       `<button class="botao" id="btnCancelarNovaNe">Cancelar</button><button class="botao primario" id="btnSalvarNovaNe">Salvar</button>`);
 
     let sofsDaUnidade = [];
-    let leituraOcr = null;
+    let leituraOcr = null; // {numero_ne, cronograma, preco_total, arquivo_drive_id, arquivo_url} - original
     let fontesDoSofAtual = [];
     // Reforço lido por OCR (sessão 2026-07-29) - ver abrirModalReforco (mesma
     // lógica, duplicada aqui porque este modal tem seu próprio DOM/estado).
     let itensReforcoDetectados = null;
-    let arquivoReforcoLido = null;
+    let arquivoReforcoLido = null; // {arquivo_drive_id, arquivo_url}
     let numeroNeReforcoDetectado = null; // número da própria NE de reforço (lido do documento), usado para agrupar no card
+
+    // Este modal tem DOIS sub-fluxos independentes (original/reforço,
+    // alternados pelo select "Tipo") - trocar de tipo não limpa o anexo já
+    // lido do outro (ver novaNeTipo abaixo), então os dois podem ter um
+    // arquivo pendente ao mesmo tempo; descarta em segundo plano qualquer um
+    // que ainda esteja com upload feito mas não salvo, por qualquer caminho
+    // de fechamento do modal (sessão 2026-08-12). Depois de um salvamento
+    // bem-sucedido, a variável correspondente já foi zerada antes do
+    // fecharModal(), então vira no-op pra aquele arquivo específico.
+    UI.aoFecharModal(() => {
+      descartarArquivoNaoSalvo_(leituraOcr && leituraOcr.arquivo_drive_id);
+      descartarArquivoNaoSalvo_(arquivoReforcoLido && arquivoReforcoLido.arquivo_drive_id);
+    });
 
     function mostrarMesesReforcoDetectados_(itens) {
       const alvo = document.getElementById('novaNeReforcoMesesDetectados');
@@ -804,13 +852,20 @@ const TelaNotasEmpenho = (function () {
       const erroEl = document.getElementById('novaNeErro');
       erroEl.classList.add('oculto');
       if (!arquivo) return;
+      // Trocar de arquivo sem clicar "Remover anexo" primeiro abandona
+      // qualquer upload já feito por uma leitura anterior (sessão 2026-08-12).
+      descartarArquivoNaoSalvo_(leituraOcr && leituraOcr.arquivo_drive_id);
+      leituraOcr = null;
       if (arquivo.size > 8 * 1024 * 1024) { UI.toast('Arquivo muito grande (máximo 8MB).', 'erro'); inputEl.value = ''; return; }
       statusEl.classList.remove('oculto');
       statusEl.textContent = 'Lendo documento...';
       try {
         const base64 = await UI.lerArquivoBase64(arquivo);
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
-        leituraOcr = { numero_ne: resultado.numero_ne, cronograma: resultado.cronograma, preco_total: resultado.preco_total, arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
+        // arquivo_drive_id/arquivo_url (sessão 2026-08-12): a leitura já subiu
+        // o arquivo definitivamente pro Drive - salvar só referencia esses
+        // dois campos, sem reenviar o base64 (ver criarNotaEmpenho, NotasEmpenho.gs).
+        leituraOcr = { numero_ne: resultado.numero_ne, cronograma: resultado.cronograma, preco_total: resultado.preco_total, arquivo_drive_id: resultado.arquivo_drive_id, arquivo_url: resultado.arquivo_url };
         document.getElementById('novaNeNumero').value = resultado.numero_ne;
         document.getElementById('novaNePrecoTotal').value = resultado.preco_total;
         renderCronogramaPreview_(resultado.cronograma);
@@ -819,6 +874,7 @@ const TelaNotasEmpenho = (function () {
         statusEl.innerHTML = '🔒 Dados lidos do documento. <a href="#" id="novaNeRemoverAnexo">Remover anexo</a>';
         document.getElementById('novaNeRemoverAnexo').addEventListener('click', function (e) {
           e.preventDefault();
+          descartarArquivoNaoSalvo_(leituraOcr && leituraOcr.arquivo_drive_id);
           leituraOcr = null;
           inputEl.value = '';
           document.getElementById('novaNeNumero').value = '';
@@ -844,6 +900,9 @@ const TelaNotasEmpenho = (function () {
       const erroEl = document.getElementById('novaNeErro');
       const camposManuais = document.getElementById('novaNeReforcoManualCampos');
       erroEl.classList.add('oculto');
+      // Trocar de arquivo sem clicar "Remover anexo" primeiro abandona
+      // qualquer upload já feito por uma leitura anterior (sessão 2026-08-12).
+      descartarArquivoNaoSalvo_(arquivoReforcoLido && arquivoReforcoLido.arquivo_drive_id);
       itensReforcoDetectados = null;
       arquivoReforcoLido = null;
       numeroNeReforcoDetectado = null;
@@ -856,8 +915,10 @@ const TelaNotasEmpenho = (function () {
       statusEl.textContent = 'Lendo documento...';
       try {
         const base64 = await UI.lerArquivoBase64(arquivo);
-        arquivoReforcoLido = { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type };
         const resultado = await Api.chamar('lerAnexoNotaEmpenho', { arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type });
+        // arquivo_drive_id/arquivo_url (sessão 2026-08-12): ver comentário
+        // equivalente no handler de novaNeArquivo, acima.
+        arquivoReforcoLido = { arquivo_drive_id: resultado.arquivo_drive_id, arquivo_url: resultado.arquivo_url };
         const mesesComValor = (resultado.cronograma || []).filter(c => Number(c.valor) > 0);
         numeroNeReforcoDetectado = resultado.numero_ne || null;
         conferirNeReferencia_('novaNeReforcoAvisoReferencia', resultado.numero_ne_referencia, document.getElementById('novaNeReforcoAlvo').value);
@@ -884,6 +945,7 @@ const TelaNotasEmpenho = (function () {
         statusEl.innerHTML = mensagemStatus + ' <a href="#" id="novaNeReforcoRemoverAnexo">Remover anexo' + (itensReforcoDetectados ? '' : ' / preencher manualmente') + '</a>';
         document.getElementById('novaNeReforcoRemoverAnexo').addEventListener('click', e => {
           e.preventDefault();
+          descartarArquivoNaoSalvo_(arquivoReforcoLido && arquivoReforcoLido.arquivo_drive_id);
           itensReforcoDetectados = null;
           arquivoReforcoLido = null;
           numeroNeReforcoDetectado = null;
@@ -937,6 +999,10 @@ const TelaNotasEmpenho = (function () {
           CacheAbas.invalidar('notasEmpenho');
           CacheAbas.invalidar('sof');
           UI.toast('Reforço adicionado.', 'sucesso');
+          // Zera ANTES do fecharModal() - o arquivo acabou de ser vinculado à
+          // NE salva (ver aoFecharModal registrado acima), senão o próprio
+          // arquivo que acabou de ser salvo seria apagado.
+          arquivoReforcoLido = null;
           UI.fecharModal();
           await carregar();
         } catch (err) {
@@ -957,12 +1023,14 @@ const TelaNotasEmpenho = (function () {
           data: {
             sof_id: sofId, tipo: 'original', numero_ne: leituraOcr.numero_ne, fonte, objeto, valor: leituraOcr.preco_total,
             cronograma: leituraOcr.cronograma,
-            arquivoBase64: leituraOcr.arquivoBase64, arquivoNome: leituraOcr.arquivoNome, arquivoTipo: leituraOcr.arquivoTipo
+            arquivo_drive_id: leituraOcr.arquivo_drive_id, arquivo_url: leituraOcr.arquivo_url
           }
         });
         CacheAbas.invalidar('notasEmpenho');
         CacheAbas.invalidar('sof');
         UI.toast('Nota de Empenho criada.', 'sucesso');
+        // Zera ANTES do fecharModal() - mesmo motivo do reforço acima.
+        leituraOcr = null;
         UI.fecharModal();
         await carregar();
       } catch (err) {
