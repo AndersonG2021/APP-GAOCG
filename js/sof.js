@@ -206,7 +206,7 @@ const TelaSof = (function () {
 
   /** id do widget -> dimensão no mapa de facetas (ver UI.aplicarFacetas). */
   const FACETAS_SOF_ = {
-    sofFiltroUnidade: { chave: 'unidade_id', rotulo: id => (unidadesTodas.find(u => String(u.id) === String(id)) || {}).nome || id },
+    sofFiltroUnidade: { chave: 'unidade_id', rotulo: id => (unidades.find(u => String(u.id) === String(id)) || {}).nome || id },
     sofFiltroOss: { chave: 'oss' },
     sofFiltroObjeto: { chave: 'objeto' },
     sofFiltroTipoUnidade: { chave: 'tipo_unidade' },
