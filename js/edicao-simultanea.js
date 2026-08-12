@@ -25,13 +25,24 @@ const EdicaoSimultanea = (function () {
   /**
    * Chamar logo depois de abrir o formulário. Se a checagem em segundo plano
    * voltar com conflito, injeta um aviso no topo do formulário já aberto.
+   *
+   * Captura #modalCorpo JÁ (antes do await abaixo) - é o modal recém-aberto
+   * por quem chamou. Depois de aguardar a checagem, compara com quem estiver
+   * ativo NA HORA: só injeta o aviso se ainda for o MESMO elemento. Virou
+   * necessário na sessão 2026-08-12 (minimizar/restaurar modais, ver
+   * UI.abrirModal/js/app.js) - antes só existia "o" modal (fechado ou
+   * aberto), então um #modalCorpo achado significava, sem ambiguidade, que
+   * ainda era este. Agora um modal pode ter sido minimizado (segue existindo,
+   * mas sem o id modalCorpo) enquanto OUTRO fica ativo com esse id - sem essa
+   * comparação, o aviso de conflito deste processo poderia entrar no modal
+   * errado (o que estiver ativo por acaso).
    */
   async function tratarConflito(promiseEdicao, tipoProcesso, processoId) {
+    const modalCorpoNaAbertura = document.getElementById('modalCorpo');
     const resposta = await promiseEdicao;
     if (!resposta || !resposta.emEdicaoPorOutro) return;
-
-    const modalCorpo = document.getElementById('modalCorpo');
-    if (!modalCorpo) return; // o modal já foi fechado antes da checagem responder
+    if (!modalCorpoNaAbertura || document.getElementById('modalCorpo') !== modalCorpoNaAbertura) return; // fechado, minimizado, ou outro modal assumiu o lugar
+    const modalCorpo = modalCorpoNaAbertura;
 
     const aviso = document.createElement('div');
     aviso.className = 'aviso-edicao-simultanea';

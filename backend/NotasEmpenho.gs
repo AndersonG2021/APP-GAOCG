@@ -521,6 +521,21 @@ function buscarNotaEmpenhoOriginal_(sofId, numeroNe) {
   })[0] || null;
 }
 
+/**
+ * Já existe algum reforço desta MESMA NE (sof_id + numero_ne) com este
+ * numero_ne_reforco (sessão 2026-08-12, pedido do usuário)? Evita anexar o
+ * mesmo documento de reforço duas vezes à mesma Nota de Empenho. Números
+ * vazios (OCR não leu o número do documento) nunca contam como duplicata -
+ * não dá pra saber se são o mesmo documento ou dois diferentes sem número
+ * legível, então lançamento manual sem OCR nunca é bloqueado por isto.
+ */
+function existeReforcoComNumero_(sofId, numeroNe, numeroNeReforco) {
+  if (!numeroNeReforco) return false;
+  return todasNotasEmpenhoComCache_().some(function (n) {
+    return String(n.sof_id) === String(sofId) && n.numero_ne === numeroNe && n.tipo === 'reforco' && n.numero_ne_reforco === numeroNeReforco;
+  });
+}
+
 function criarNotaEmpenho(session, dados) {
   dados = dados || {};
   var sofSheet = getSheet_(SHEETS.SOF);
@@ -542,6 +557,14 @@ function criarNotaEmpenho(session, dados) {
     if (!original) return fail_('Nota de Empenho original com esse número não encontrada para este SOF.');
     fonteFinal = original.fonte;
     objetoFinal = original.objeto;
+
+    // Duplicidade (sessão 2026-08-12, pedido do usuário): mesmo documento de
+    // reforço (mesmo numero_ne_reforco lido por OCR) anexado duas vezes a
+    // esta mesma NE.
+    var numeroReforcoCandidato = sanitizeString_(dados.numero_ne_reforco, 50);
+    if (existeReforcoComNumero_(dados.sof_id, numeroNe, numeroReforcoCandidato)) {
+      return fail_('Este documento de reforço (nº ' + numeroReforcoCandidato + ') já foi anexado a esta Nota de Empenho.');
+    }
   } else {
     if (!isNonEmpty_(dados.fonte)) return fail_('Selecione a fonte da Nota de Empenho.');
     if (!isNonEmpty_(dados.objeto)) return fail_('Selecione o objeto da Nota de Empenho.');
@@ -716,6 +739,15 @@ function criarReforcosEmLote(session, dados) {
     .filter(function (item) { return item.mes >= 1 && item.mes <= 12 && item.valor > 0; });
   if (!itens.length) return fail_('Informe ao menos um mês/valor válido para o reforço.');
 
+  var numeroNeReforco = sanitizeString_(dados.numero_ne_reforco, 50);
+
+  // Duplicidade (sessão 2026-08-12, pedido do usuário) - checado ANTES do
+  // upload (abaixo), pra não subir o arquivo à toa numa tentativa que vai
+  // falhar mesmo.
+  if (existeReforcoComNumero_(dados.sof_id, numeroNe, numeroNeReforco)) {
+    return fail_('Este documento de reforço (nº ' + numeroNeReforco + ') já foi anexado a esta Nota de Empenho.');
+  }
+
   // arquivo_drive_id/arquivo_url: mesmo padrão de criarNotaEmpenho (ver lá) -
   // se o anexo já foi lido com sucesso por lerAnexoNotaEmpenho, reaproveita o
   // arquivo já enviado ao Drive em vez de subir de novo.
@@ -732,8 +764,6 @@ function criarReforcosEmLote(session, dados) {
   } else {
     return fail_('Anexe o arquivo do reforço.');
   }
-
-  var numeroNeReforco = sanitizeString_(dados.numero_ne_reforco, 50);
 
   var neSheet = getSheet_(SHEETS.NOTAS_EMPENHO);
   var idsNe = proximosIds_('NotasEmpenho', itens.length);

@@ -191,6 +191,26 @@ function somaOrdensBancarias_(itens) {
 }
 
 /**
+ * Número de OB repetido DENTRO da lista de uma mesma parcela (sessão
+ * 2026-08-12, pedido do usuário) - evita anexar a mesma Ordem Bancária duas
+ * vezes ao mesmo Recibo (ex.: o analista clicou "+ Adicionar OB" e escolheu
+ * por engano o mesmo arquivo de novo). Números vazios (OCR não leu o número
+ * do documento) nunca contam como duplicata entre si - não dá pra saber se
+ * são o mesmo documento ou dois diferentes sem número legível. Devolve o
+ * número duplicado encontrado, ou null se não achou nenhum.
+ */
+function numeroObDuplicadoNaLista_(itens) {
+  var vistos = {};
+  for (var i = 0; i < (itens || []).length; i++) {
+    var numero = sanitizeString_(itens[i].numero_ob, 50);
+    if (!numero) continue;
+    if (vistos[numero]) return numero;
+    vistos[numero] = true;
+  }
+  return null;
+}
+
+/**
  * Substitui (apaga e recria) as Ordens Bancárias de UMA parcela de Recibo -
  * mesmo padrão "apagar-e-recriar" de substituirFontesDoSof_ (Sof.gs). Cada
  * item pode trazer um arquivo novo (arquivoBase64/arquivoNome/arquivoTipo -
@@ -311,6 +331,13 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   var unidade = buscarUnidadePorId_(dadosBase.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
+  // Duplicidade de OB (sessão 2026-08-12) - falha rápido, antes de qualquer
+  // escrita/upload, se alguma parcela trouxer o mesmo número de OB duas vezes.
+  for (var iParcela = 0; iParcela < parcelas.length; iParcela++) {
+    var obDuplicada = numeroObDuplicadoNaLista_(parcelas[iParcela].ordens_bancarias);
+    if (obDuplicada) return fail_('A Ordem Bancária nº ' + obDuplicada + ' já foi anexada a este Recibo.');
+  }
+
   var parcelaDivididaGrupoId = proximoId_('Recibos') + '-PD';
   var criados = [];
   var sheet = getSheet_(SHEETS.RECIBOS);
@@ -412,6 +439,13 @@ function listarRecibosPorGrupo(session, grupoId) {
 function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
   dadosBase = dadosBase || {};
   if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas.');
+
+  // Duplicidade de OB (sessão 2026-08-12) - mesma checagem de
+  // criarGrupoParcelaDivididaRecibo, ver lá.
+  for (var iParcela = 0; iParcela < parcelas.length; iParcela++) {
+    var obDuplicada = numeroObDuplicadoNaLista_(parcelas[iParcela].ordens_bancarias);
+    if (obDuplicada) return fail_('A Ordem Bancária nº ' + obDuplicada + ' já foi anexada a este Recibo.');
+  }
 
   var sheet = getSheet_(SHEETS.RECIBOS);
   var existente = findById_(sheet, id);

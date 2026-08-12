@@ -557,10 +557,11 @@ const TelaSof = (function () {
     const corpo = `
       <form id="formSof">
         <div class="campo"><label>Unidade *</label>
-          <select id="sofUnidade" required ${editando ? 'disabled' : ''}>
+          <select id="sofUnidade" required>
             <option value="">Selecione...</option>
             ${unidades.map(u => `<option value="${u.id}" ${sof && sof.unidade_id === u.id ? 'selected' : ''}>${UI.escaparHtml(u.nome)}</option>`).join('')}
           </select>
+          ${editando ? '<p class="ajuda">Trocar a unidade atualiza automaticamente OSS/CNPJ/Contrato/Ação/Subação/GD sugeridos - revise antes de salvar (sessão 2026-08-12, pedido do usuário).</p>' : ''}
         </div>
         <div class="campo"><label>Tipo de SOF *</label>
           <select id="sofTipoSof">
@@ -709,6 +710,13 @@ const TelaSof = (function () {
     if (editando) UI.aoFecharModal(() => { EdicaoSimultanea.sairDaEdicao('SOF', sof.id); descartarArquivoNeNaoSalvo_(); });
 
     renderFontesFormulario();
+    // Preenchimento proporcional do cronograma (sessão 2026-08-12, pedido do
+    // usuário) - dispara ao mudar Período-início/fim; a Parcela Mensal de
+    // cada fonte tem o gatilho equivalente dentro de renderFontesFormulario
+    // (uma linha nova ainda não tem período nem parcela pra prorratear, então
+    // não precisa disparar aqui de novo).
+    document.getElementById('sofPeriodoInicio').addEventListener('change', aplicarCronogramaProporcionalTodasFontes_);
+    document.getElementById('sofPeriodoFim').addEventListener('change', aplicarCronogramaProporcionalTodasFontes_);
     document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
       linhasFontes = lerLinhasFontesDoDom_();
       linhasFontes.push({ fonte: '', objeto: '', codigo_poas: '', parcela_mensal: '', cronograma: [] });
@@ -849,6 +857,73 @@ const TelaSof = (function () {
 
   const NOMES_MESES_ABREV_FONTE_ = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
+  /**
+   * Preenchimento automático e proporcional do cronograma de cada fonte, a
+   * partir do Período (início/fim) do SOF (sessão 2026-08-12, pedido do
+   * usuário) - dispara ao mudar Período-início/fim OU a Parcela Mensal de
+   * qualquer fonte (ver aplicarCronogramaProporcionalTodasFontes_ abaixo).
+   *
+   * Regra dada pelo usuário: meses inteiramente dentro do período recebem a
+   * Parcela Mensal cheia; o mês de início (se não começar no dia 1) e o mês
+   * de fim (se não terminar no fim do mês) recebem só a fração proporcional
+   * aos dias do período dentro daquele mês, sobre um padrão FIXO de 30 dias
+   * por mês (28 pra fevereiro, sempre - não é o calendário real, é a regra
+   * que o usuário pediu). Ex.: parcela 100, período 01/01 a 15/03 -> Jan=100,
+   * Fev=100, Mar=(100/30)*15=50.
+   *
+   * "SEMPRE recalcular tudo" foi escolha explícita do usuário (sessão
+   * 2026-08-12, ver PROGRESS.md) - substitui qualquer valor já digitado nos
+   * meses do intervalo, mesmo que o analista tenha ajustado à mão antes.
+   * Meses fora do intervalo [início, fim] não são tocados (nem zerados).
+   */
+  // 30 dias fixos pra TODO mês, 28 só pra fevereiro - NÃO é o calendário real
+  // (março/maio/etc. têm 31 de verdade). Regra explícita do usuário (padrão
+  // de contagem "comercial", comum em cálculo financeiro por parcela mensal).
+  var DIAS_PADRAO_MES_ = [30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30];
+
+  function calcularCronogramaProporcional_(periodoInicioIso, periodoFimIso, parcelaMensal) {
+    if (!periodoInicioIso || !periodoFimIso || !parcelaMensal) return null;
+    const inicio = new Date(periodoInicioIso + 'T00:00:00');
+    const fim = new Date(periodoFimIso + 'T00:00:00');
+    if (isNaN(inicio.getTime()) || isNaN(fim.getTime()) || fim < inicio) return null;
+
+    const cronograma = {};
+    let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+    const cursorFim = new Date(fim.getFullYear(), fim.getMonth(), 1);
+    // Limite de segurança (10 anos) - período com data absurda/invertida não
+    // trava o navegador num loop enorme.
+    for (let seguranca = 0; cursor <= cursorFim && seguranca < 120; seguranca++) {
+      const mesNumero = cursor.getMonth() + 1;
+      const diasNoMes = DIAS_PADRAO_MES_[cursor.getMonth()];
+      const ehMesInicio = cursor.getFullYear() === inicio.getFullYear() && cursor.getMonth() === inicio.getMonth();
+      const ehMesFim = cursor.getFullYear() === fim.getFullYear() && cursor.getMonth() === fim.getMonth();
+      const diaInicioEfetivo = ehMesInicio ? inicio.getDate() : 1;
+      const diaFimEfetivo = ehMesFim ? Math.min(fim.getDate(), diasNoMes) : diasNoMes;
+      const diasUsados = Math.max(0, diaFimEfetivo - diaInicioEfetivo + 1);
+      cronograma[mesNumero] = Math.round((parcelaMensal / diasNoMes) * diasUsados * 100) / 100;
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    }
+    return cronograma;
+  }
+
+  /** Aplica o cronograma proporcional em TODAS as linhas de fonte atualmente na tela, cada uma com sua própria Parcela Mensal. Sem período preenchido, não faz nada. */
+  function aplicarCronogramaProporcionalTodasFontes_() {
+    const periodoInicio = document.getElementById('sofPeriodoInicio').value;
+    const periodoFim = document.getElementById('sofPeriodoFim').value;
+    if (!periodoInicio || !periodoFim) return;
+    document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma').forEach(linha => {
+      const parcela = UI.parseValorBr(linha.querySelector('.linha-fonte-parcela').value);
+      const cronograma = calcularCronogramaProporcional_(periodoInicio, periodoFim, parcela);
+      if (!cronograma) return;
+      linha.querySelectorAll('.linha-fonte-mes').forEach(input => {
+        const mes = Number(input.dataset.mes);
+        if (cronograma.hasOwnProperty(mes)) input.value = cronograma[mes];
+      });
+      atualizarTotalLinhaFonte_(linha);
+    });
+    atualizarTotalGeralFormulario();
+  }
+
   /** Lê as linhas de fonte direto do DOM (fonte da verdade entre re-renders). */
   function lerLinhasFontesDoDom_() {
     return Array.from(document.querySelectorAll('#sofFontesContainer .linha-fonte-cronograma')).map(linha => {
@@ -970,6 +1045,13 @@ const TelaSof = (function () {
     });
     alvo.querySelectorAll('.linha-fonte-mes').forEach(input => {
       input.addEventListener('input', atualizarTotalGeralFormulario);
+    });
+    // Preenchimento proporcional do cronograma (sessão 2026-08-12): a Parcela
+    // Mensal é o outro gatilho, além do Período-início/fim (ver
+    // abrirFormulario) - dispara pra TODAS as fontes (não só esta linha),
+    // mesma função, é barata e idempotente.
+    alvo.querySelectorAll('.linha-fonte-parcela').forEach(input => {
+      input.addEventListener('change', aplicarCronogramaProporcionalTodasFontes_);
     });
     atualizarTotalGeralFormulario();
   }

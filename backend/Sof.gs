@@ -407,6 +407,13 @@ function atualizarSof(session, id, dados) {
     var erroFontes = validarFontes_(dados.fontes);
     if (erroFontes) return fail_(erroFontes);
   }
+  // unidade_id (sessão 2026-08-12, pedido do usuário): antes NUNCA era aceito
+  // aqui - o <select> "Unidade" ficava desabilitado no frontend na edição
+  // (ver js/sof.js), então nenhuma chamada real chegava a mandar um valor
+  // diferente. Mesma validação de criarSof (a unidade precisa existir).
+  if (dados.hasOwnProperty('unidade_id') && isNonEmpty_(dados.unidade_id) && !buscarUnidadePorId_(dados.unidade_id)) {
+    return fail_('Unidade não encontrada.');
+  }
 
   var antigo = Object.assign({}, existente);
   var atualizado = Object.assign({}, existente);
@@ -416,6 +423,12 @@ function atualizarSof(session, id, dados) {
     if (campo === 'completo') atualizado[campo] = toBool_(dados[campo]);
     else atualizado[campo] = sanitizeString_(dados[campo], 2000);
   });
+
+  // unidade_id não faz parte de CAMPOS_LIVRES_SOF_ (tem validação própria
+  // acima, diferente dos campos "livres" de texto simples).
+  if (dados.hasOwnProperty('unidade_id') && isNonEmpty_(dados.unidade_id)) {
+    atualizado.unidade_id = dados.unidade_id;
+  }
 
   if (atualizado.andamento !== existente.andamento) {
     atualizado.data_ultima_alteracao_andamento = nowIso_();

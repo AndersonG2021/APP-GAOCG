@@ -361,6 +361,22 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .modal-corpo { padding: 20px; }
 .modal-rodape { padding: 14px 20px; border-top: 1px solid var(--cinza-200); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
+/* ===== Dock de modais minimizados (sessão 2026-08-12) ===== */
+.dock-modais {
+  position: fixed; left: 16px; bottom: 16px; z-index: 45;
+  display: flex; flex-direction: column-reverse; gap: 8px;
+  max-width: min(280px, calc(100vw - 32px));
+}
+.dock-modal-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--branco); border: 1px solid var(--cinza-300); border-radius: 8px;
+  box-shadow: var(--sombra-forte); padding: 8px 10px; cursor: pointer;
+}
+.dock-modal-card:hover { border-color: var(--azul); background: var(--azul-claro); }
+.dock-modal-card-titulo { font-size: 12.5px; font-weight: 600; color: var(--cinza-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-modal-card-fechar { flex-shrink: 0; background: none; border: none; font-size: 18px; line-height: 1; color: var(--cinza-500); cursor: pointer; padding: 0 2px; }
+.dock-modal-card-fechar:hover { color: var(--vermelho); }
+
 /* ===== Toast / spinner ===== */
 #containerToasts { position: fixed; top: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 32px)); }
 .toast { color: var(--branco); border-radius: 8px; padding: 10px 14px; font-size: 13px; box-shadow: var(--sombra); }

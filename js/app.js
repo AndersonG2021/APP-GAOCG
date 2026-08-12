@@ -36,36 +36,220 @@ const UI = (function () {
   }
 
   let callbackFecharModal = null;
+  // modalAtivoEl: nó .modal atualmente exibido dentro de #sobreposicaoModal
+  // (null quando nenhum modal está aberto). modalTituloAtivo_/modalSujo_
+  // acompanham esse mesmo modal - ver minimizarModalAtivo_/restaurarModalMinimizado_
+  // logo abaixo (sessão 2026-08-12, pedido do usuário - "minimizar" um card
+  // editado em vez de descartar ao clicar fora).
+  let modalAtivoEl = null;
+  let modalTituloAtivo_ = '';
+  let modalSujo_ = false;
+  let contadorModalMinimizado_ = 0;
+  const modaisMinimizados_ = []; // [{ id, elemento, titulo, callbackFechar }]
 
-  function abrirModal(titulo, corpoHtml, rodapeHtml, opcoes) {
-    callbackFecharModal = null;
-    document.getElementById('modalTitulo').textContent = titulo;
-    document.getElementById('modalCorpo').innerHTML = corpoHtml;
-    document.getElementById('modalRodape').innerHTML = rodapeHtml || '';
-    const modalEl = document.getElementById('modal');
-    modalEl.classList.toggle('pequeno', !!(opcoes && opcoes.pequeno));
-    modalEl.classList.toggle('grande', !!(opcoes && opcoes.grande));
-    document.getElementById('sobreposicaoModal').classList.remove('oculto');
+  /**
+   * Monta o esqueleto de UM modal (título/corpo/rodapé) - antes disto era um
+   * único <div id="modal"> fixo no index.html, reaproveitado (innerHTML
+   * sobrescrito) a cada abrirModal(). Virou criação por JS (sessão
+   * 2026-08-12) porque minimizar um card precisa preservar o DOM/estado
+   * daquele modal específico enquanto OUTRO é aberto por cima - com um único
+   * nó fixo isso é impossível (só existe "o" modal).
+   */
+  function construirModalDom_() {
+    const el = document.createElement('div');
+    el.className = 'modal';
+    el.innerHTML = `
+      <div class="modal-cabecalho">
+        <h3 class="modal-titulo"></h3>
+        <button type="button" class="fechar botao-fechar-modal" title="Fechar">&times;</button>
+      </div>
+      <div class="modal-corpo"></div>
+      <div class="modal-rodape"></div>`;
+    return el;
   }
 
   /**
-   * Registra uma função a ser chamada sempre que o modal atual fechar, seja
-   * por qual caminho for (botão Cancelar, X, clique fora, ou fechamento
-   * programático após salvar) - garante que uma limpeza (ex.: liberar a trava
-   * de edição simultânea) aconteça em qualquer um desses casos, não só num
-   * botão específico. É zerado a cada abrirModal() e após disparar uma vez.
+   * Só o modal ATIVO (visível dentro de #sobreposicaoModal) pode ter ids -
+   * minimizado, TODOS os ids de dentro dele (não só modalTitulo/modalCorpo/
+   * modalRodape/botaoFecharModal - cada campo de formulário também: sofUnidade,
+   * secaoNotasEmpenho, etc., o app inteiro é cheio de document.getElementById
+   * por id fixo) somem (desmarcarComoAtivo_), guardados em data-id-original.
+   *
+   * Achado real (sessão 2026-08-12): sem isso, minimizar duas edições da
+   * MESMA tela (ex.: duas SOFs) faria o documento ter dois elementos com
+   * id="sofUnidade" ao mesmo tempo - um no modal ativo, outro (oculto) em
+   * #areaModaisMinimizados. getElementById devolve só um dos dois (o que
+   * vier primeiro na ordem do documento - por sorte de posicionamento, hoje
+   * seria sempre o ativo), então não quebra NA HORA - mas um callback
+   * assíncrono ainda em voo de dentro do modal MINIMIZADO (ex.: uma leitura
+   * de OCR que só termina depois de já ter minimizado) continuaria rodando
+   * document.getElementById('sofUnidade') esperando achar o SEU campo, e
+   * escreveria por engano no campo do modal ATIVO - corrupção silenciosa de
+   * dado do processo errado. Tirar o id por completo enquanto minimizado
+   * fecha essa brecha: nenhum getElementById alcança um modal escondido.
+   */
+  function marcarComoAtivo_(el) {
+    // Devolve os ids originais de tudo que passou por desmarcarComoAtivo_ -
+    // não faz nada num modal recém-criado (nunca passou por lá).
+    el.querySelectorAll('[data-id-original]').forEach(campo => {
+      campo.id = campo.dataset.idOriginal;
+      delete campo.dataset.idOriginal;
+    });
+    el.querySelector('.modal-titulo').id = 'modalTitulo';
+    el.querySelector('.modal-corpo').id = 'modalCorpo';
+    el.querySelector('.modal-rodape').id = 'modalRodape';
+    el.querySelector('.botao-fechar-modal').id = 'botaoFecharModal';
+  }
+  function desmarcarComoAtivo_(el) {
+    el.querySelectorAll('[id]').forEach(campo => {
+      campo.dataset.idOriginal = campo.id;
+      campo.removeAttribute('id');
+    });
+  }
+
+  function abrirModal(titulo, corpoHtml, rodapeHtml, opcoes) {
+    // Nunca deveria haver um modal ativo ao abrir outro (cada tela abre um
+    // por vez), mas por segurança abrirModal sempre substitui o que houver -
+    // nunca empilha nem pergunta.
+    if (modalAtivoEl) { modalAtivoEl.remove(); modalAtivoEl = null; }
+    callbackFecharModal = null;
+    modalSujo_ = false;
+
+    const el = construirModalDom_();
+    marcarComoAtivo_(el);
+    el.querySelector('.modal-titulo').textContent = titulo;
+    el.querySelector('.modal-corpo').innerHTML = corpoHtml;
+    el.querySelector('.modal-rodape').innerHTML = rodapeHtml || '';
+    el.classList.toggle('pequeno', !!(opcoes && opcoes.pequeno));
+    el.classList.toggle('grande', !!(opcoes && opcoes.grande));
+    el.querySelector('.botao-fechar-modal').addEventListener('click', fecharModal);
+
+    // Dirty-tracking genérico (sessão 2026-08-12): a PRIMEIRA interação com
+    // qualquer campo do corpo (não importa a tela) marca o modal como
+    // "editado" - é só isso que decide se um clique fora minimiza (editado)
+    // ou fecha de vez (nada mexido ainda), sem precisar de nenhuma tela
+    // rastrear isso por conta própria.
+    const corpoEl = el.querySelector('.modal-corpo');
+    corpoEl.addEventListener('input', () => { modalSujo_ = true; }, { once: true });
+    corpoEl.addEventListener('change', () => { modalSujo_ = true; }, { once: true });
+
+    modalTituloAtivo_ = titulo;
+    const overlay = document.getElementById('sobreposicaoModal');
+    overlay.innerHTML = '';
+    overlay.appendChild(el);
+    overlay.classList.remove('oculto');
+    modalAtivoEl = el;
+  }
+
+  /**
+   * Registra uma função a ser chamada sempre que o modal atual fechar DE
+   * VERDADE (botão Cancelar, X, clique fora sem ter editado nada, ou
+   * fechamento programático após salvar) - NÃO dispara ao minimizar (o
+   * processo continua "em edição" enquanto o card só está no dock, ver
+   * minimizarModalAtivo_) - só quando o analista efetivamente desiste dele
+   * (fecharModal) ou descarta o card minimizado pelo "x" do dock
+   * (descartarModalMinimizado_). Garante que uma limpeza (ex.: liberar a
+   * trava de edição simultânea) aconteça em qualquer desses casos, não só
+   * num botão específico. É zerado a cada abrirModal() e após disparar uma vez.
    */
   function aoFecharModal(callback) {
     callbackFecharModal = callback;
   }
 
   function fecharModal() {
+    if (modalAtivoEl) { modalAtivoEl.remove(); modalAtivoEl = null; }
+    document.getElementById('sobreposicaoModal').innerHTML = '';
     document.getElementById('sobreposicaoModal').classList.add('oculto');
     if (callbackFecharModal) {
       const callback = callbackFecharModal;
       callbackFecharModal = null;
       callback();
     }
+  }
+
+  /**
+   * "Clicar fora" com o card editado (sessão 2026-08-12, pedido do usuário)
+   * - em vez de descartar o que estava sendo digitado, tira o modal de
+   * #sobreposicaoModal (sem remover do documento - todo o DOM/estado/
+   * listeners continuam vivos, só ficam ocultos em #areaModaisMinimizados) e
+   * adiciona um card no dock (renderDockModais_) pra reabrir depois. NÃO
+   * chama callbackFecharModal aqui - ver aoFecharModal acima.
+   */
+  function minimizarModalAtivo_() {
+    if (!modalAtivoEl) return;
+    const elemento = modalAtivoEl;
+    const titulo = modalTituloAtivo_;
+    const callback = callbackFecharModal;
+    desmarcarComoAtivo_(elemento);
+    document.getElementById('areaModaisMinimizados').appendChild(elemento);
+    document.getElementById('sobreposicaoModal').innerHTML = '';
+    document.getElementById('sobreposicaoModal').classList.add('oculto');
+    modalAtivoEl = null;
+    callbackFecharModal = null;
+
+    contadorModalMinimizado_++;
+    modaisMinimizados_.push({ id: contadorModalMinimizado_, elemento, titulo, callbackFechar: callback });
+    renderDockModais_();
+  }
+
+  /**
+   * Reabre um card do dock. Se já houver outro modal ativo na tela nesse
+   * momento, ele sai do caminho primeiro pela MESMA regra do clique fora
+   * (minimiza se editado, fecha se não) - só um modal fica visível por vez.
+   */
+  function restaurarModalMinimizado_(id) {
+    const indice = modaisMinimizados_.findIndex(m => m.id === id);
+    if (indice === -1) return;
+    const item = modaisMinimizados_[indice];
+    modaisMinimizados_.splice(indice, 1);
+    renderDockModais_();
+
+    if (modalAtivoEl) {
+      if (modalSujo_) minimizarModalAtivo_();
+      else fecharModal();
+    }
+
+    marcarComoAtivo_(item.elemento);
+    const overlay = document.getElementById('sobreposicaoModal');
+    overlay.innerHTML = '';
+    overlay.appendChild(item.elemento);
+    overlay.classList.remove('oculto');
+    modalAtivoEl = item.elemento;
+    modalTituloAtivo_ = item.titulo;
+    callbackFecharModal = item.callbackFechar;
+    // Um card só chega ao dock por já ter sido editado (minimizarModalAtivo_
+    // só roda quando modalSujo_ já era true) - continua valendo depois de
+    // restaurado, então um novo clique fora minimiza de novo, não descarta.
+    modalSujo_ = true;
+  }
+
+  /** "x" do card no dock - descarta de vez (chama callbackFechar, ex. liberar a trava de edição simultânea, já que o analista está desistindo do processo). */
+  function descartarModalMinimizado_(id) {
+    const indice = modaisMinimizados_.findIndex(m => m.id === id);
+    if (indice === -1) return;
+    const item = modaisMinimizados_[indice];
+    modaisMinimizados_.splice(indice, 1);
+    item.elemento.remove();
+    renderDockModais_();
+    if (item.callbackFechar) item.callbackFechar();
+  }
+
+  function renderDockModais_() {
+    const dock = document.getElementById('dockModais');
+    dock.innerHTML = modaisMinimizados_.map(m => `
+      <div class="dock-modal-card" data-id="${m.id}" title="Reabrir">
+        <span class="dock-modal-card-titulo">${escaparHtml(m.titulo)}</span>
+        <button type="button" class="dock-modal-card-fechar" data-id="${m.id}" title="Descartar">&times;</button>
+      </div>`).join('');
+    dock.querySelectorAll('.dock-modal-card').forEach(card => {
+      card.addEventListener('click', () => restaurarModalMinimizado_(Number(card.dataset.id)));
+    });
+    dock.querySelectorAll('.dock-modal-card-fechar').forEach(botao => {
+      botao.addEventListener('click', e => {
+        e.stopPropagation();
+        descartarModalMinimizado_(Number(botao.dataset.id));
+      });
+    });
   }
 
   /**
@@ -288,9 +472,15 @@ const UI = (function () {
     return opcaoInicial + lista.map(c => `<option ${c === valorSelecionado ? 'selected' : ''}>${c}</option>`).join('');
   }
 
-  document.getElementById('botaoFecharModal').addEventListener('click', fecharModal);
+  // botaoFecharModal não é mais um elemento fixo (sessão 2026-08-12 - ver
+  // construirModalDom_/abrirModal acima) - o listener do X é registrado ali,
+  // um por modal criado, não aqui uma vez só no carregamento da página.
   document.getElementById('sobreposicaoModal').addEventListener('click', function (e) {
-    if (e.target === this) fecharModal();
+    if (e.target !== this) return;
+    // Clique fora (sessão 2026-08-12, pedido do usuário): minimiza pro dock
+    // se o card já foi editado, fecha normalmente (descarta) se não.
+    if (modalSujo_) minimizarModalAtivo_();
+    else fecharModal();
   });
 
   const REGEX_MARCAS_DIACRITICAS = new RegExp('[̀-ͯ]', 'g');
