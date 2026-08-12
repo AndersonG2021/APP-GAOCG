@@ -1081,9 +1081,32 @@ function filtrarGruposNotasEmpenho_(resultado, params) {
   return resultado;
 }
 
+/**
+ * Dimensões facetáveis da tela de Notas de Empenho - espelha o que
+ * filtrarGruposNotasEmpenho_ lê. `competencia` devolve um ARRAY: uma NE cobre
+ * várias competências (uma por mês do cronograma de desembolso), então ela
+ * precisa aparecer como opção em todas elas.
+ */
+function dimensoesFacetaNotasEmpenho_() {
+  return {
+    unidade_id: function (g) { return g.sof_unidade_id; },
+    fonte: function (g) { return g.fonte; },
+    oss: function (g) { return g.sof_oss; },
+    objeto: function (g) { return g.sof_objeto; },
+    tipo_unidade: function (g) { return g.sof_tipo_unidade; },
+    dea: function (g) { return g.sof_dea; },
+    ano: function (g) { return String(g.ano || ''); },
+    competencia: function (g) {
+      return (g.cronograma || []).map(function (c) { return competenciaDoMes_(c.mes, g.ano); });
+    }
+  };
+}
+
 function listarNotasEmpenho(session, params) {
   params = params || {};
-  var resultado = filtrarGruposNotasEmpenho_(montarGruposNotasEmpenho_(session), params);
+  var grupos = montarGruposNotasEmpenho_(session);
+  var resultado = filtrarGruposNotasEmpenho_(grupos, params);
+  var facetas = calcularFacetas_(grupos, params, dimensoesFacetaNotasEmpenho_(), filtrarGruposNotasEmpenho_);
 
   resultado.sort(function (a, b) {
     if (a.alerta !== b.alerta) return a.alerta ? -1 : 1;
@@ -1096,7 +1119,7 @@ function listarNotasEmpenho(session, params) {
   var start = (page - 1) * pageSize;
   var pageRows = resultado.slice(start, start + pageSize);
 
-  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, facetas: facetas });
 }
 
 function totalEmpenhadoSof_(sofId) {

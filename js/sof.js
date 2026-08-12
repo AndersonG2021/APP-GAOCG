@@ -121,16 +121,16 @@ const TelaSof = (function () {
     });
     document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
     document.getElementById('sofFiltroSemNe').addEventListener('change', () => { paginaAtual = 1; carregar(); });
-    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
-    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
-    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
-      idUnidade: 'sofFiltroUnidade', idTipo: 'sofFiltroTipoUnidade', idOss: 'sofFiltroOss',
-      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
-    });
-    UI.criarFiltroMultiplo('sofFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
-    UI.criarFiltroMultiplo('sofFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
+    // Estas são as opções INICIAIS. A partir da primeira carga, todas as listas
+    // passam a vir das facetas do backend (ver FACETAS_SOF_/aplicarResposta_):
+    // cada filtro só mostra valores que ainda levam a algum resultado, dado o
+    // que está marcado nos outros. O estreitamento antigo, que valia só para
+    // Unidade/Tipo/OSS e rodava no clique do checkbox, foi substituído por isso
+    // - dois mecanismos disputando a mesma lista se anulariam.
+    UI.criarFiltroMultiplo('sofFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('sofFiltroOss', opcoesOss.map(o => o.valor));
     UI.criarFiltroMultiplo('sofFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade);
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
     UI.criarFiltroMultiplo('sofFiltroAno', UI.listaAnos());
@@ -204,9 +204,21 @@ const TelaSof = (function () {
     aplicarResposta_(resposta);
   }
 
+  /** id do widget -> dimensão no mapa de facetas (ver UI.aplicarFacetas). */
+  const FACETAS_SOF_ = {
+    sofFiltroUnidade: { chave: 'unidade_id', rotulo: id => (unidadesTodas.find(u => String(u.id) === String(id)) || {}).nome || id },
+    sofFiltroOss: { chave: 'oss' },
+    sofFiltroObjeto: { chave: 'objeto' },
+    sofFiltroTipoUnidade: { chave: 'tipo_unidade' },
+    sofFiltroDea: { chave: 'dea' },
+    sofFiltroFonte: { chave: 'fonte' },
+    sofFiltroAno: { chave: 'ano' }
+  };
+
   function aplicarResposta_(resposta) {
     itens = resposta.items;
     totalRegistros = resposta.total;
+    UI.aplicarFacetas(resposta.facetas, FACETAS_SOF_);
     renderCards();
     renderPaginacao();
   }

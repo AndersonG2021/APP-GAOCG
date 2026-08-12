@@ -519,6 +519,45 @@ function paraArrayFiltro_(valor) {
     .map(function (v) { return String(v); });
 }
 
+/**
+ * Facetas: para CADA dimensão de filtro, os valores que ainda existem depois de
+ * aplicar todos os OUTROS filtros. É o que permite a tela mostrar só opções que
+ * levam a algum resultado (sessão 2026-08-12, pedido do usuário: "quando eu
+ * escolher um filtro, os outros só devem mostrar opções que caibam nele").
+ *
+ * O detalhe que faz isso funcionar é excluir a PRÓPRIA dimensão ao calcular a
+ * faceta dela. Se a dimensão entrasse no cálculo, escolher "TESOURO" em Fonte
+ * faria a lista de Fonte ficar só com "TESOURO" - e não haveria como marcar uma
+ * segunda fonte. Por isso cada dimensão é calculada com o filtro dela removido.
+ *
+ * `filtrarFn(rows, params)` é a MESMA função de filtro que a listagem usa, para
+ * faceta e resultado nunca discordarem. `dimensoes` mapeia o nome do parâmetro
+ * para uma função que extrai o valor da linha (pode devolver array, no caso de
+ * um registro que pertence a vários valores - ex.: meses do cronograma).
+ *
+ * Custo: N passagens em memória sobre linhas que já estão carregadas (nenhuma
+ * leitura extra de planilha).
+ */
+function calcularFacetas_(rows, params, dimensoes, filtrarFn) {
+  var facetas = {};
+  Object.keys(dimensoes).forEach(function (dim) {
+    var paramsSemDim = {};
+    Object.keys(params || {}).forEach(function (k) { if (k !== dim) paramsSemDim[k] = params[k]; });
+
+    var vistos = {};
+    filtrarFn(rows, paramsSemDim).forEach(function (linha) {
+      var valor = dimensoes[dim](linha);
+      var lista = Array.isArray(valor) ? valor : [valor];
+      lista.forEach(function (v) {
+        if (v === '' || v === null || v === undefined) return;
+        vistos[String(v)] = true;
+      });
+    });
+    facetas[dim] = Object.keys(vistos).sort();
+  });
+  return facetas;
+}
+
 /** Valida CNPJ (formato + dígitos verificadores). Aceita com ou sem máscara. */
 function validarCnpj_(cnpjRaw) {
   var cnpj = String(cnpjRaw || '').replace(/[^\d]/g, '');

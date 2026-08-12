@@ -635,12 +635,24 @@ function marcarReciboVisualizado(session, id) {
   return ok_({ id: id });
 }
 
-/** Resolve o DEA de cada Nota de Empenho via o SOF de origem (sof_id -> dea), indexado por numero_ne. */
+/**
+ * Resolve o DEA de cada Nota de Empenho via o SOF de origem (sof_id -> dea),
+ * indexado por numero_ne.
+ *
+ * Memoizado por execução (sessão 2026-08-12): o cálculo de facetas roda o
+ * filtro uma vez por dimensão, e com o filtro de DEA ativo isto seria montado
+ * em quase todas as passagens - cada uma relendo e reparseando SOF + NE do
+ * CacheService. O memo dura só a requisição, mesmo princípio de _sheetsMemo_
+ * (Utils.gs).
+ */
+var _mapaDeaMemo_ = null;
 function mapaDeaPorNumeroNe_() {
+  if (_mapaDeaMemo_) return _mapaDeaMemo_;
   var sofsPorId = {};
   todosSofComCache_().forEach(function (s) { sofsPorId[s.id] = s.dea; });
   var mapa = {};
   todasNotasEmpenhoComCache_().forEach(function (n) { mapa[n.numero_ne] = sofsPorId[n.sof_id] || ''; });
+  _mapaDeaMemo_ = mapa;
   return mapa;
 }
 
@@ -738,9 +750,36 @@ function calcularIndicadoresRecibos_(rowsFiltradas) {
  * Recibos inteira) pra fazer só 1. `indicadoresRecibos` continua existindo
  * como ação separada por compatibilidade, caso algo mais precise só dele.
  */
+/**
+ * Dimensões facetáveis da tela de Recibos: nome do parâmetro -> como tirar o
+ * valor da linha. Precisa espelhar exatamente o que filtrarLinhasRecibos_ lê,
+ * senão a lista de opções sugere um filtro que não existe (ou esconde um que
+ * existe). Busca livre e os campos de texto (instrumento/nota_empenho/
+ * numero_processo) ficam de fora: são digitados, não escolhidos numa lista.
+ */
+function dimensoesFacetaRecibos_() {
+  var mapaDea = null;
+  return {
+    unidade_id: function (r) { return r.unidade_id; },
+    oss: function (r) { return r.oss_snapshot; },
+    status: function (r) { return r.status; },
+    competencia: function (r) { return r.competencia; },
+    ano: function (r) { return anoDaCompetencia_(r.competencia); },
+    fonte: function (r) { return r.fonte; },
+    tipo_unidade: function (r) { return r.tipo_unidade; },
+    objeto: function (r) { return r.objeto; },
+    dea: function (r) {
+      if (!mapaDea) mapaDea = mapaDeaPorNumeroNe_();
+      return mapaDea[r.nota_empenho] || '';
+    }
+  };
+}
+
 function listarRecibos(session, params) {
   params = params || {};
-  var rows = filtrarLinhasRecibos_(todasRecibosComCache_(), params);
+  var todas = todasRecibosComCache_();
+  var rows = filtrarLinhasRecibos_(todas, params);
+  var facetas = calcularFacetas_(todas, params, dimensoesFacetaRecibos_(), filtrarLinhasRecibos_);
 
   var indicadores = calcularIndicadoresRecibos_(rows);
 
@@ -757,7 +796,7 @@ function listarRecibos(session, params) {
   var listasCarregadas = todasOpcoesComCache_();
   pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas)); });
 
-  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, indicadores: indicadores });
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, indicadores: indicadores, facetas: facetas });
 }
 
 function indicadoresRecibos(session, params) {

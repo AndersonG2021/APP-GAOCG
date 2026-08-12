@@ -166,9 +166,14 @@ function buscarUnidadePorId_(id) {
   return null;
 }
 
-function listarUnidades(session, params) {
+/**
+ * Filtros da tela de Unidades. Extraída de dentro de listarUnidades (sessão
+ * 2026-08-12) para virar a única definição, compartilhada com o cálculo de
+ * facetas - a lista de opções tem que sair exatamente do mesmo critério que
+ * filtra as linhas.
+ */
+function filtrarLinhasUnidades_(rows, params) {
   params = params || {};
-  var rows = todasUnidadesComCache_();
   if (toBool_(params.somenteAtivas)) {
     rows = rows.filter(function (u) { return toBool_(u.ativo); });
   }
@@ -198,6 +203,24 @@ function listarUnidades(session, params) {
     });
   }
 
+  return rows;
+}
+
+/** Dimensões facetáveis da tela de Unidades - espelha filtrarLinhasUnidades_. */
+function dimensoesFacetaUnidades_() {
+  return {
+    unidade_id: function (u) { return u.id; },
+    tipo: function (u) { return u.tipo; },
+    oss: function (u) { return u.oss; }
+  };
+}
+
+function listarUnidades(session, params) {
+  params = params || {};
+  var todas = todasUnidadesComCache_();
+  var facetas = calcularFacetas_(todas, params, dimensoesFacetaUnidades_(), filtrarLinhasUnidades_);
+  var rows = filtrarLinhasUnidades_(todas, params);
+
   rows.sort(function (a, b) { return String(a.nome || '').localeCompare(String(b.nome || '')); });
 
   var pageSize = Number(params.pageSize) || 20;
@@ -214,7 +237,7 @@ function listarUnidades(session, params) {
     u.parcela_mensal_regular = parcelaMensalRegular_(u.valor_contrato_gestao, u.valor_contrato_gestao_sus, tas);
   });
 
-  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, facetas: facetas });
 }
 
 function criarUnidade(session, dados) {

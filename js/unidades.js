@@ -54,15 +54,12 @@ const TelaUnidades = (function () {
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
-    // Unidade/Tipo/OSS se estreitam entre si em tempo real (sessão
-    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
-    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
-      idUnidade: 'uniFiltroUnidade', idTipo: 'uniFiltroTipo', idOss: 'uniFiltroOss',
-      unidadesTodas: todasUnidades, opcoesTipoOriginais: OPCOES_TIPO, opcoesOssOriginais: opcoesOss.map(o => o.valor)
-    });
-    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
-    UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO, recalcularFiltrosCruzados_);
-    UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
+    // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
+    // backend (ver FACETAS_UNI_/aplicarResposta_). Substitui o estreitamento
+    // antigo, que rodava no clique do checkbox.
+    UI.criarFiltroMultiplo('uniFiltroUnidade', todasUnidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('uniFiltroTipo', OPCOES_TIPO);
+    UI.criarFiltroMultiplo('uniFiltroOss', opcoesOss.map(o => o.valor));
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosUni', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     }, aoLimparFiltroIndividual_);
@@ -115,9 +112,17 @@ const TelaUnidades = (function () {
     aplicarResposta_(resposta);
   }
 
+  /** id do widget -> dimensão no mapa de facetas (ver UI.aplicarFacetas). */
+  const FACETAS_UNI_ = {
+    uniFiltroUnidade: { chave: 'unidade_id', rotulo: id => (todasUnidades.find(u => String(u.id) === String(id)) || {}).nome || id },
+    uniFiltroTipo: { chave: 'tipo' },
+    uniFiltroOss: { chave: 'oss' }
+  };
+
   function aplicarResposta_(resposta) {
     unidades = resposta.items;
     totalRegistros = resposta.total;
+    UI.aplicarFacetas(resposta.facetas, FACETAS_UNI_);
     renderCards();
     renderPaginacao();
   }

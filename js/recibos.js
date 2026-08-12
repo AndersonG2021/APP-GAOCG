@@ -157,16 +157,13 @@ const TelaRecibos = (function () {
     });
     document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
     document.getElementById('btnGerarRelatorioRec').addEventListener('click', abrirGerarRelatorio);
-    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
-    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
-    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
-      idUnidade: 'recFiltroUnidade', idTipo: 'recFiltroTipoUnidade', idOss: 'recFiltroOss',
-      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
-    });
-    UI.criarFiltroMultiplo('recFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
-    UI.criarFiltroMultiplo('recFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
+    // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
+    // backend (ver FACETAS_REC_/aplicarResposta_). Substitui o estreitamento
+    // antigo, que valia só para Unidade/Tipo/OSS.
+    UI.criarFiltroMultiplo('recFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('recFiltroOss', opcoesOss.map(o => o.valor));
     UI.criarFiltroMultiplo('recFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade);
     UI.criarFiltroMultiplo('recFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('recFiltroCompetencia', UI.listaCompetencias());
     UI.criarFiltroMultiplo('recFiltroAno', UI.listaAnos());
@@ -252,9 +249,23 @@ const TelaRecibos = (function () {
     aplicarResposta_(resposta);
   }
 
+  /** id do widget -> dimensão no mapa de facetas (ver UI.aplicarFacetas). */
+  const FACETAS_REC_ = {
+    recFiltroUnidade: { chave: 'unidade_id', rotulo: id => (unidades.find(u => String(u.id) === String(id)) || {}).nome || id },
+    recFiltroOss: { chave: 'oss' },
+    recFiltroObjeto: { chave: 'objeto' },
+    recFiltroTipoUnidade: { chave: 'tipo_unidade' },
+    recFiltroDea: { chave: 'dea' },
+    recFiltroCompetencia: { chave: 'competencia' },
+    recFiltroAno: { chave: 'ano' },
+    recFiltroFonte: { chave: 'fonte' },
+    recFiltroStatus: { chave: 'status' }
+  };
+
   function aplicarResposta_(resposta) {
     itens = resposta.items;
     totalRegistros = resposta.total;
+    UI.aplicarFacetas(resposta.facetas, FACETAS_REC_);
     renderTabela();
     renderPaginacao();
     renderIndicadores(resposta.indicadores);

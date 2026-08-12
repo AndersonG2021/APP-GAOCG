@@ -562,24 +562,15 @@ function anoDoSof_(sof) {
   return String(sof.data_criacao || '').slice(0, 4);
 }
 
-/** Busca livre multi-campo (texto e numérico) + filtros combináveis (AND) + paginação. */
-function listarSof(session, params) {
+/**
+ * Filtros da tela de SOF, aplicados sobre linhas que JÁ tenham `fontes`
+ * anexadas (o filtro de Fonte depende disso). Extraída de dentro de listarSof
+ * (sessão 2026-08-12) para ser a única definição desses filtros, compartilhada
+ * com o cálculo de facetas - se divergissem, a lista de opções ofereceria um
+ * filtro que não existe, ou esconderia um que existe.
+ */
+function filtrarLinhasSof_(rows, params) {
   params = params || {};
-  var rows = todosSofComCache_().filter(function (r) { return !toBool_(r.excluido); });
-
-  var fontesPorSof = agruparFontesPorSof_();
-  // total_atendido por linha de fonte (sessão 2026-07-29, correção de bug):
-  // abrirSofExistente (js/sof.js) reaproveita a linha já carregada aqui por
-  // listarSof (nunca chama obterSof, por performance) - então esse campo
-  // precisa vir calculado também aqui, senão o destaque verde/vermelho do
-  // cronograma da SOF nunca aparece na prática. Mesmo helper de obterSof.
-  var mapaAtendido = agruparValorAtendidoPorSofFonteObjeto_();
-  rows.forEach(function (r) {
-    var fontes = fontesPorSof[r.id] || [];
-    fontes.forEach(function (f) { f.total_atendido = mapaAtendido[r.id + '|' + f.fonte + '|' + (f.objeto || '')] || 0; });
-    r.fontes = fontes;
-    r.total_solicitado = totalSolicitadoDeFontes_(fontes);
-  });
 
   var unidadeIds = paraArrayFiltro_(params.unidade_id);
   if (unidadeIds.length) rows = rows.filter(function (r) { return unidadeIds.indexOf(String(r.unidade_id)) !== -1; });
@@ -616,6 +607,7 @@ function listarSof(session, params) {
       .map(function (u) { return String(u.id); });
     rows = rows.filter(function (r) { return unidadesDosTipos.indexOf(String(r.unidade_id)) !== -1; });
   }
+
   if (params.andamento) rows = rows.filter(function (r) { return r.andamento === params.andamento; });
 
   // Usado só programaticamente pelo indicador "SOFs sem NE emitida" do
@@ -625,7 +617,7 @@ function listarSof(session, params) {
   var fonteValores = paraArrayFiltro_(params.fonte);
   if (fonteValores.length) {
     rows = rows.filter(function (r) {
-      return r.fontes.some(function (f) { return fonteValores.indexOf(f.fonte) !== -1; });
+      return (r.fontes || []).some(function (f) { return fonteValores.indexOf(f.fonte) !== -1; });
     });
   }
 
@@ -639,6 +631,52 @@ function listarSof(session, params) {
       });
     });
   }
+
+  return rows;
+}
+
+/** Dimensões facetáveis da tela de SOF - espelha filtrarLinhasSof_. */
+function dimensoesFacetaSof_() {
+  var tipoPorUnidade = null;
+  return {
+    unidade_id: function (r) { return r.unidade_id; },
+    oss: function (r) { return r.oss_snapshot; },
+    objeto: function (r) { return r.objeto; },
+    dea: function (r) { return r.dea; },
+    ano: function (r) { return anoDoSof_(r); },
+    tipo: function (r) { return r.tipo; },
+    tipo_unidade: function (r) {
+      if (!tipoPorUnidade) {
+        tipoPorUnidade = {};
+        todasUnidadesComCache_().forEach(function (u) { tipoPorUnidade[u.id] = u.tipo; });
+      }
+      return tipoPorUnidade[r.unidade_id] || '';
+    },
+    fonte: function (r) { return (r.fontes || []).map(function (f) { return f.fonte; }); }
+  };
+}
+
+/** Busca livre multi-campo (texto e numérico) + filtros combináveis (AND) + paginação. */
+function listarSof(session, params) {
+  params = params || {};
+  var rows = todosSofComCache_().filter(function (r) { return !toBool_(r.excluido); });
+
+  var fontesPorSof = agruparFontesPorSof_();
+  // total_atendido por linha de fonte (sessão 2026-07-29, correção de bug):
+  // abrirSofExistente (js/sof.js) reaproveita a linha já carregada aqui por
+  // listarSof (nunca chama obterSof, por performance) - então esse campo
+  // precisa vir calculado também aqui, senão o destaque verde/vermelho do
+  // cronograma da SOF nunca aparece na prática. Mesmo helper de obterSof.
+  var mapaAtendido = agruparValorAtendidoPorSofFonteObjeto_();
+  rows.forEach(function (r) {
+    var fontes = fontesPorSof[r.id] || [];
+    fontes.forEach(function (f) { f.total_atendido = mapaAtendido[r.id + '|' + f.fonte + '|' + (f.objeto || '')] || 0; });
+    r.fontes = fontes;
+    r.total_solicitado = totalSolicitadoDeFontes_(fontes);
+  });
+
+  var facetas = calcularFacetas_(rows, params, dimensoesFacetaSof_(), filtrarLinhasSof_);
+  rows = filtrarLinhasSof_(rows, params);
 
   rows.sort(function (a, b) { return b.data_criacao < a.data_criacao ? -1 : 1; });
 
@@ -665,5 +703,5 @@ function listarSof(session, params) {
     pageRows.forEach(function (r) { r.notas_empenho_numeros = numerosPorSof[r.id] || []; });
   }
 
-  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize });
+  return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, facetas: facetas });
 }
