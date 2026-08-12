@@ -2594,6 +2594,56 @@ acerto. A de 800ms dá tempo do CKEditor processar o `setData` antes do salvamen
 **Passo manual:** recarregar a extensão em `chrome://extensions` **e** F5 na aba
 do SEI. ID não muda, nenhum `.gs` alterado.
 
+## Legenda do cronograma + lentidão ao escolher o tipo de SOF (2026-08-12)
+
+### 1. Legenda (pedido do usuário)
+
+No card de NE, "CRONOGRAMA SOLICITADO (SOF)": verde passou a ser **"Atendido"** e
+vermelho **"Falta atender"** (antes: "já coberto pelo total atendido" / "ainda
+não atendido"). Mesma troca nos `title` de cada mês e na legenda equivalente
+dentro do formulário de SOF (`js/sof.js`), para as duas telas não divergirem.
+
+**Bug corrigido junto:** a legenda escrevia `R$ ${UI.formatarMoeda(...)}` e
+`formatarMoeda` já inclui o símbolo - saía **"R$ R$ 27.647.946,37"**, visível no
+print enviado.
+
+### 2. Escolher o tipo de SOF demorava 20 a 45 segundos
+
+**Causa raiz:** o autopreenchimento (`change` de `sofTipoSof`, js/sof.js) chamava
+`listarSof({ tipo: [tipo], page: 1, pageSize: 1 })`. Pedia UMA linha, mas
+`listarSof` calcula o universo inteiro antes de paginar:
+
+- anexa fontes + `total_solicitado` a **todas** as SOFs
+  (`agruparFontesPorSof_`, que lê SofFontes + SofFontesCronograma);
+- monta `agruparValorAtendidoPorSofFonteObjeto_`, lendo NotasEmpenho inteira;
+- lê ListasPersonalizadas para o destaque de "parado";
+- filtra, ordena e só então corta em 1 registro.
+
+4-5 leituras de aba e trabalho O(n) sobre todas as SOFs para devolver 1 linha.
+
+É a **mesma classe de problema** já corrigida em `listarNotasEmpenhoPorUnidade`
+(NotasEmpenho.gs), que reaproveitava `montarGruposNotasEmpenho_` para usar 4
+campos - o comentário de lá documenta o achado original.
+
+**Correção:** novo `obterTemplateSof(session, tipo)` (`Sof.gs`) - uma varredura
+da aba SOF (cacheada) pegando o mais recente do tipo, e as fontes só dessa
+linha. `total_atendido` não é calculado de propósito: o frontend descarta esse
+campo mesmo (é o empenhado da SOF de origem, não da nova).
+
+No frontend, a chamada usa `{ cache: true }` (trocar de tipo repetidamente vira
+instantâneo) e `salvarSof` faz `Api.invalidarCache('obterTemplateSof')`, porque
+o "último SOF do tipo" muda quando um novo é criado.
+
+**Se ainda estiver lento, verificar:** `cachePut_` (Utils.gs) ignora valores
+acima de ~90 mil caracteres. Com 60+ colunas, a aba SOF cruza isso por volta de
+100-150 linhas - a partir daí `todosSofComCache_` **nunca** cacheia e toda
+leitura vai à planilha. É degradação proposital (melhor lento que quebrado, ver
+sessão 2026-08-07), mas seria o próximo gargalo, e a solução seria projeção de
+colunas.
+
+**Passo manual:** colar `backend/Sof.gs` e `backend/Code.gs` no editor do Apps
+Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

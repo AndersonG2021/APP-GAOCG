@@ -222,12 +222,12 @@ const TelaNotasEmpenho = (function () {
         </div>
         <div class="cronograma-solicitado-grade">
           ${meses.map(c => `
-            <div class="cronograma-solicitado-item ${c.atendido ? 'atendido' : 'pendente'}" title="${c.atendido ? 'Coberto pelo total atendido' : 'Ainda não atendido'}">
+            <div class="cronograma-solicitado-item ${c.atendido ? 'atendido' : 'pendente'}" title="${c.atendido ? 'Atendido' : 'Falta atender'}">
               <span class="cronograma-solicitado-mes">${UI.escaparHtml(NOMES_MESES[c.mes - 1] || c.mes)}</span>
               <span class="cronograma-solicitado-valor">${UI.formatarMoeda(c.valor)}</span>
             </div>`).join('')}
         </div>
-        <p class="ajuda">🟩 já coberto pelo total atendido (R$ ${UI.formatarMoeda(g.total_atendido)}) · 🟥 ainda não atendido · Total solicitado: ${UI.formatarMoeda(total)}</p>
+        <p class="ajuda">🟩 Atendido (${UI.formatarMoeda(g.total_atendido)}) · 🟥 Falta atender · Total solicitado: ${UI.formatarMoeda(total)}</p>
       </div>`;
   }
 

@@ -507,6 +507,46 @@ function obterSof(session, id) {
   return ok_(sof);
 }
 
+/**
+ * SOF mais recente de um `tipo`, para servir de MODELO no formulário de criação
+ * (js/sof.js, evento change do campo "Tipo de SOF").
+ *
+ * ACHADO DE PERFORMANCE (2026-08-12): esse autopreenchimento chamava
+ * `listarSof({ tipo: [tipo], page: 1, pageSize: 1 })` - pedia UMA linha, mas
+ * `listarSof` calcula o universo inteiro antes de paginar:
+ *   - anexa fontes + total_solicitado a TODAS as SOFs (agruparFontesPorSof_,
+ *     que lê SofFontes + SofFontesCronograma);
+ *   - monta `agruparValorAtendidoPorSofFonteObjeto_` lendo NotasEmpenho inteira;
+ *   - lê ListasPersonalizadas para o destaque de "parado";
+ *   - filtra, ordena e só então corta em 1 registro.
+ * Ou seja: 4-5 leituras de aba e trabalho O(n) sobre todas as SOFs para
+ * devolver 1 linha - o usuário media 20 a 45 segundos.
+ *
+ * É a MESMA classe de problema já corrigida em `listarNotasEmpenhoPorUnidade`
+ * (NotasEmpenho.gs), que reaproveitava `montarGruposNotasEmpenho_` para usar 4
+ * campos.
+ *
+ * Aqui: uma varredura da aba SOF (cacheada) pegando o mais recente do tipo, e
+ * as fontes SÓ dessa linha. `total_atendido` de propósito não é calculado - o
+ * frontend descarta esse campo mesmo (é o empenhado da SOF de origem, não da
+ * nova).
+ */
+function obterTemplateSof(session, tipo) {
+  tipo = sanitizeString_(tipo, 100);
+  if (!isNonEmpty_(tipo)) return ok_(null);
+
+  var maisRecente = null;
+  todosSofComCache_().forEach(function (s) {
+    if (toBool_(s.excluido) || s.tipo !== tipo) return;
+    if (!maisRecente || String(s.data_criacao) > String(maisRecente.data_criacao)) maisRecente = s;
+  });
+  if (!maisRecente) return ok_(null);
+
+  var template = Object.assign({}, maisRecente);
+  template.fontes = listarFontesPorSof_(template.id);
+  return ok_(template);
+}
+
 /** Busca livre multi-campo (texto e numérico) + filtros combináveis (AND) + paginação. */
 function listarSof(session, params) {
   params = params || {};
