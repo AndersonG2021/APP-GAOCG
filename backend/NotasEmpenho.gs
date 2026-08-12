@@ -751,8 +751,18 @@ var MESES_ABREV_CRONOGRAMA_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 
  * O ano do mês é resolvido a partir dos 4 primeiros dígitos do numero_ne
  * (formato AAAANNxxxxxx, ex. "2026NE000418").
  */
+/**
+ * "mmm.aa" a partir de mês (1-12) e ano - mesmo formato de competência usado em
+ * toda a tela de Recibos. Extraído de dentro de situacaoCronogramaMes_ para o
+ * filtro de Competência da tela de Notas de Empenho usar exatamente a mesma
+ * regra de conversão (sessão 2026-08-12).
+ */
+function competenciaDoMes_(mes, ano) {
+  return MESES_ABREV_CRONOGRAMA_[mes - 1] + '.' + String(ano).slice(-2);
+}
+
 function situacaoCronogramaMes_(numeroNe, mes, ano, mapaRecibos) {
-  var competencia = MESES_ABREV_CRONOGRAMA_[mes - 1] + '.' + String(ano).slice(-2);
+  var competencia = competenciaDoMes_(mes, ano);
   var recibos = mapaRecibos[numeroNe + '|' + competencia] || [];
   if (!recibos.length) return 'Previsto';
   var algumPago = recibos.some(function (r) { return String(r.status || '').toUpperCase() === 'PAGO'; });
@@ -1037,6 +1047,25 @@ function filtrarGruposNotasEmpenho_(resultado, params) {
 
   var deaValores = paraArrayFiltro_(params.dea);
   if (deaValores.length) resultado = resultado.filter(function (g) { return deaValores.indexOf(g.sof_dea) !== -1; });
+
+  // Ano da NE: os 4 primeiros dígitos do próprio número (2026NE000418 -> 2026),
+  // já calculado como `g.ano` em montarGruposNotasEmpenho_.
+  var anoValores = paraArrayFiltro_(params.ano);
+  if (anoValores.length) resultado = resultado.filter(function (g) { return anoValores.indexOf(String(g.ano)) !== -1; });
+
+  // Competência (sessão 2026-08-12): a NE entra quando o CRONOGRAMA DE
+  // DESEMBOLSO dela tem algum mês naquela competência - definição escolhida
+  // pelo usuário. O mês vira "mmm.aa" com o ano do próprio número da NE, pela
+  // mesma competenciaDoMes_ que resolve a Situação de cada mês, para filtro e
+  // exibição nunca divergirem.
+  var competenciaValores = paraArrayFiltro_(params.competencia);
+  if (competenciaValores.length) {
+    resultado = resultado.filter(function (g) {
+      return (g.cronograma || []).some(function (c) {
+        return competenciaValores.indexOf(competenciaDoMes_(c.mes, g.ano)) !== -1;
+      });
+    });
+  }
 
   var busca = sanitizeString_(params.busca, 200).toLowerCase();
   if (busca) {

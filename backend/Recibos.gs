@@ -644,6 +644,19 @@ function mapaDeaPorNumeroNe_() {
   return mapa;
 }
 
+/**
+ * "jul.26" -> "2026". Convenção de 2 dígitos usada em todo o app (ver
+ * competenciaParaOrdinal_ em Dashboard.gs). Devolve '' quando a competência
+ * está vazia ou fora do padrão - assim a linha simplesmente não casa com
+ * nenhum ano, em vez de casar com o errado.
+ */
+function anoDaCompetencia_(competencia) {
+  var partes = String(competencia || '').split('.');
+  var ano = Number(partes[1]);
+  if (partes.length < 2 || isNaN(ano)) return '';
+  return String(ano < 100 ? 2000 + ano : ano);
+}
+
 /** Filtros compartilhados por listarRecibos e indicadoresRecibos (mesma lista visível = mesmos indicadores). */
 function filtrarLinhasRecibos_(rows, params) {
   rows = rows.filter(function (r) { return !toBool_(r.excluido); });
@@ -659,6 +672,12 @@ function filtrarLinhasRecibos_(rows, params) {
 
   var competenciaValores = paraArrayFiltro_(params.competencia);
   if (competenciaValores.length) rows = rows.filter(function (r) { return competenciaValores.indexOf(r.competencia) !== -1; });
+
+  // Ano (sessão 2026-08-12): derivado da própria competência do Recibo
+  // ("jul.26" -> "2026"), que é o campo temporal da tela. Combina com o filtro
+  // de Competência por E lógico, como todos os outros.
+  var anoValores = paraArrayFiltro_(params.ano);
+  if (anoValores.length) rows = rows.filter(function (r) { return anoValores.indexOf(anoDaCompetencia_(r.competencia)) !== -1; });
 
   var fonteValores = paraArrayFiltro_(params.fonte);
   if (fonteValores.length) rows = rows.filter(function (r) { return fonteValores.indexOf(r.fonte) !== -1; });

@@ -2644,6 +2644,61 @@ colunas.
 **Passo manual:** colar `backend/Sof.gs` e `backend/Code.gs` no editor do Apps
 Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
 
+## Filtros de Ano/Competência + "Falta atender" por mês no relatório (2026-08-12)
+
+### Filtros novos, com a semântica definida pelo usuário
+
+"Competência" não existe como campo em SOF nem em NE - precisava ser derivada, e
+derivar do campo errado devolveria subconjunto errado em silêncio. Consultado, o
+usuário definiu:
+
+| Tela | Competência | Ano |
+|---|---|---|
+| SOF | **não se aplica** | do Nº SOF (`173/2026`); sem Nº SOF, cai para o ano da `data_criacao` (`anoDoSof_`) |
+| Notas de Empenho | meses do **cronograma de desembolso** | 4 primeiros dígitos do nº da NE (já era `g.ano`) |
+| Recibos | mantida como estava | derivado da competência (`jul.26` → `2026`, `anoDaCompetencia_`) |
+| Unidades | não recebe nada | não recebe nada (cadastro sem dimensão temporal) |
+
+`competenciaDoMes_` foi extraída de `situacaoCronogramaMes_` para o filtro de NE
+usar **exatamente** a mesma conversão mês+ano → "mmm.aa" que resolve a Situação
+exibida. Se as duas divergissem, o filtro traria meses que a tela mostra como
+outra competência.
+
+**Além de filtrar, mostrar** (pedido explícito): com filtro de Competência ativo
+na tela de NE, o cronograma do card **abre expandido** e o(s) mês(es) filtrado(s)
+ficam destacados (`.linha-mes-filtrado` + selo "filtrado"), para a Situação
+daquele mês ficar visível sem abrir card por card. `competenciaDoMesNe_`
+(frontend) espelha a função do backend - o comentário marca essa dependência.
+
+`UI.listaAnos()` (js/app.js): do próximo ano até 2021, intervalo fixo de
+propósito - derivar dos dados custaria mais uma chamada ao backend só para
+montar um dropdown.
+
+### Relatório de NE: "Falta atender" por mês
+
+Pedido: saber **quanto** falta atender em cada mês, não só o total.
+
+Novo `faltaAtenderPorMes_` (`Relatorios.gs`): o `atendido` que já existia por mês
+é acumulado (o empenhado cobre os meses em ordem até acabar); aqui a mesma lógica
+vira **valor**, então o mês parcialmente coberto aparece com o pedaço que resta:
+
+```
+acumulado até o mês i = C_i ; total atendido = A
+C_i <= A       -> falta 0            (mês inteiro coberto)
+C_(i-1) >= A   -> falta o valor do mês (nada coberto)
+no meio        -> falta C_i - A       (parcial)
+```
+
+Vira 12 colunas planas `falta_mes_1..12` ("Falta Jan"... "Falta Dez"), geradas
+por `colunasFaltaPorMes_` em vez de escritas à mão. Sendo colunas de moeda, os
+subtotais por grupo e o total geral do relatório funcionam sozinhos. Ficam por
+último no catálogo (a ordem do catálogo é a ordem do relatório), para não
+empurrar as colunas principais de quem não marcar essas.
+
+**Passo manual:** colar `backend/Sof.gs`, `backend/NotasEmpenho.gs`,
+`backend/Recibos.gs` e `backend/Relatorios.gs` no Apps Script e reimplantar
+(Nova versão). Nenhuma coluna ou aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

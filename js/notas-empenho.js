@@ -15,6 +15,8 @@ const TelaNotasEmpenho = (function () {
   let unidades = [];
   let grupos = [];
   let gruposTodos = [];
+  /** Competências do filtro ativo - usadas para destacar o mês no cronograma (ver cronogramaBoxHtml_). */
+  let competenciasFiltradas_ = [];
   let ultimoFiltroJson = null;
   let paginaAtual = 1;
   let totalRegistros = 0;
@@ -57,6 +59,12 @@ const TelaNotasEmpenho = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
             <div id="neFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Ano</label>
+            <div id="neFiltroAno"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroAno" title="Limpar filtro de Ano">&times;</button>
+          </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Competência</label>
+            <div id="neFiltroCompetencia"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroCompetencia" title="Limpar filtro de Competência">&times;</button>
+          </div>
           <div class="campo campo-checkbox-filtro">
             <label class="rotulo-checkbox"><input type="checkbox" id="neFiltroSaldoBaixo" /> Somente saldo &lt; 20% da parcela</label>
           </div>
@@ -85,6 +93,8 @@ const TelaNotasEmpenho = (function () {
     UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
+    UI.criarFiltroMultiplo('neFiltroAno', UI.listaAnos());
+    UI.criarFiltroMultiplo('neFiltroCompetencia', UI.listaCompetencias());
     document.getElementById('neFiltroSaldoBaixo').addEventListener('change', () => {
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
     });
@@ -104,6 +114,12 @@ const TelaNotasEmpenho = (function () {
       tipo_unidade: UI.valoresFiltroMultiplo('neFiltroTipoUnidade'),
       dea: UI.valoresFiltroMultiplo('neFiltroDea'),
       fonte: UI.valoresFiltroMultiplo('neFiltroFonte'),
+      // Ano vem dos 4 primeiros dígitos do número da NE (2026NE000418).
+      ano: UI.valoresFiltroMultiplo('neFiltroAno'),
+      // Competência: a NE entra quando o CRONOGRAMA DE DESEMBOLSO dela tem
+      // algum mês naquela competência (definição escolhida pelo usuário) - ver
+      // filtrarGruposNotasEmpenho_ em backend/NotasEmpenho.gs.
+      competencia: UI.valoresFiltroMultiplo('neFiltroCompetencia'),
       saldoBaixo: document.getElementById('neFiltroSaldoBaixo').checked
     };
   }
@@ -111,7 +127,8 @@ const TelaNotasEmpenho = (function () {
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = {
     neFiltroUnidade: 'unidade_id', neFiltroOss: 'oss', neFiltroObjeto: 'objeto',
-    neFiltroTipoUnidade: 'tipo_unidade', neFiltroDea: 'dea', neFiltroFonte: 'fonte'
+    neFiltroTipoUnidade: 'tipo_unidade', neFiltroDea: 'dea', neFiltroFonte: 'fonte',
+    neFiltroAno: 'ano', neFiltroCompetencia: 'competencia'
   };
 
   /**
@@ -161,6 +178,10 @@ const TelaNotasEmpenho = (function () {
     // ele é buscado sem filtro na primeira vez que esse tipo é selecionado no
     // modal, e precisa refletir qualquer NE criada desde o último carregar().
     gruposTodos = [];
+    // Guardado antes da chamada porque a renderização usa isso para destacar o
+    // mês filtrado - e `aplicarResposta_` também roda na revalidação em segundo
+    // plano, quando os campos da tela podem já ter mudado.
+    competenciasFiltradas_ = filtros.competencia || [];
     ultimoFiltroJson = JSON.stringify(filtros);
     const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
     const resposta = await CacheAbas.comRevalidacao('notasEmpenho', params,
@@ -232,12 +253,29 @@ const TelaNotasEmpenho = (function () {
       </div>`;
   }
 
+  const MESES_ABREV_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+  /**
+   * "mmm.aa" a partir do mês do cronograma e do ano da NE - espelha
+   * competenciaDoMes_ (backend/NotasEmpenho.gs), que é quem decide o filtro.
+   * Se as duas divergirem, o mês filtrado deixa de ser destacado.
+   */
+  function competenciaDoMesNe_(mes, ano) {
+    return MESES_ABREV_[mes - 1] + '.' + String(ano).slice(-2);
+  }
+
   function cronogramaBoxHtml_(g) {
     const cronograma = g.cronograma || [];
     const total = cronograma.reduce((s, c) => s + Number(c.valor || 0), 0);
     const confereTotal = Math.abs(total - Number(g.valor_bruto || 0)) < 0.01;
+    // Com filtro de Competência ativo, o cronograma já abre expandido e o(s)
+    // mês(es) filtrado(s) ficam destacados - o pedido do usuário foi justamente
+    // "ao filtrar, mostrar como está a situação da NE naquele mês". Sem isso o
+    // analista teria de abrir card por card para ver o que filtrou.
+    const filtrando = competenciasFiltradas_.length > 0;
+    const ehFiltrado = c => filtrando && competenciasFiltradas_.indexOf(competenciaDoMesNe_(c.mes, g.ano)) !== -1;
     return `
-      <div class="cartao-ne-cronograma-caixa oculto">
+      <div class="cartao-ne-cronograma-caixa ${filtrando ? '' : 'oculto'}">
         ${cronogramaSolicitadoBoxHtml_(g)}
         ${cronograma.length ? `
         <div class="cartao-ne-cronograma-cabecalho">
@@ -250,8 +288,8 @@ const TelaNotasEmpenho = (function () {
         <table class="tabela">
           <thead><tr><th>Mês</th><th>Valor previsto</th><th>Situação</th></tr></thead>
           <tbody>${cronograma.map(c => `
-            <tr>
-              <td>${UI.escaparHtml(NOMES_MESES[c.mes - 1] || c.mes)}${c.reforco ? ' <span class="selo azul">+ reforço</span>' : ''}</td>
+            <tr class="${ehFiltrado(c) ? 'linha-mes-filtrado' : ''}">
+              <td>${UI.escaparHtml(NOMES_MESES[c.mes - 1] || c.mes)}${c.reforco ? ' <span class="selo azul">+ reforço</span>' : ''}${ehFiltrado(c) ? ' <span class="selo azul">filtrado</span>' : ''}</td>
               <td>${UI.formatarMoeda(c.valor)}</td>
               <td><span class="selo ${seloSituacao_(c.situacao)}">${UI.escaparHtml(c.situacao)}</span></td>
             </tr>`).join('') || '<tr><td colspan="3" class="estado-vazio">Sem cronograma lido para esta NE.</td></tr>'}</tbody>

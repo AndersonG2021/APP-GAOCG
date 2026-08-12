@@ -76,10 +76,47 @@ function montarLinhasRecibos_(session, filtros) {
  * aqui (oss, unidade, fonte) - objeto, tipo_unidade, dea, saldoBaixo e busca
  * eram ignorados em silêncio.
  */
+var MESES_RELATORIO_ = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+/**
+ * Quanto FALTA ser atendido em cada mês do cronograma solicitado (sessão
+ * 2026-08-12, pedido do usuário: "o que falta ser atendido deve estar separado
+ * por mês, para se saber o quanto falta em cada mês").
+ *
+ * O `atendido` que já existe por mês é acumulado: o empenhado cobre os meses em
+ * ordem até acabar. Aqui a mesma lógica vira VALOR, e não só sim/não, o que
+ * permite o mês parcialmente coberto aparecer com o pedaço que resta:
+ *
+ *   acumulado até o mês i = C_i ; total atendido = A
+ *   - C_i <= A            -> mês inteiro coberto      -> falta 0
+ *   - C_(i-1) >= A        -> nada do mês foi coberto  -> falta o valor do mês
+ *   - no meio             -> falta C_i - A
+ *
+ * Devolve um objeto { falta_mes_1..12 } para as colunas ficarem planas - é o
+ * que o gerador de relatório sabe projetar e somar em subtotal/total.
+ */
+function faltaAtenderPorMes_(cronogramaSolicitado, totalAtendido) {
+  var falta = {};
+  for (var m = 1; m <= 12; m++) falta['falta_mes_' + m] = 0;
+
+  var acumulado = 0;
+  var atendido = toNumber_(totalAtendido);
+  (cronogramaSolicitado || []).forEach(function (c) {
+    var mes = Number(c.mes);
+    if (!(mes >= 1 && mes <= 12)) return;
+    var valor = toNumber_(c.valor);
+    acumulado += valor;
+    var descoberto = acumulado - atendido;
+    if (descoberto <= 0) return;                 // mês inteiro já coberto
+    falta['falta_mes_' + mes] += Math.min(valor, descoberto);
+  });
+  return falta;
+}
+
 function montarLinhasNe_(session, filtros) {
   return filtrarGruposNotasEmpenho_(montarGruposNotasEmpenho_(session), filtros || {})
     .map(function (g) {
-      return {
+      return Object.assign(faltaAtenderPorMes_(g.cronograma_solicitado, g.total_atendido), {
         numero_ne: g.numero_ne || '', unidade: g.unidade_nome || '', oss: g.sof_oss || '', fonte: g.fonte || '',
         // objeto (sessão 2026-07-29): objeto ESPECÍFICO da fonte casada com
         // esta NE (SofFontes.objeto - ex. "CONTRATO DE GESTÃO (TES)"), mais
@@ -92,7 +129,7 @@ function montarLinhasNe_(session, filtros) {
         valor_liquidado: g.valor_liquidado,
         saldo_atual: g.saldo_atual, falta_atendido: g.falta_atendido,
         parcela_mensal_referencia: g.parcela_mensal_referencia
-      };
+      });
     });
 }
 
@@ -170,6 +207,18 @@ function montarLinhasUnidades_(session, filtros) {
     });
 }
 
+/**
+ * As 12 colunas de "Falta atender" por mês, geradas em vez de escritas à mão -
+ * 12 entradas repetitivas convidam a erro de digitação entre key e rótulo.
+ * Vêm por ÚLTIMO no catálogo (a ordem do catálogo é a ordem do relatório), para
+ * não empurrar as colunas principais para a direita de quem não as marcar.
+ */
+function colunasFaltaPorMes_() {
+  return MESES_RELATORIO_.map(function (nome, i) {
+    return { key: 'falta_mes_' + (i + 1), rotulo: 'Falta ' + nome, tipo: 'moeda' };
+  });
+}
+
 var RELATORIO_CATALOGO_ = {
   recibos: {
     rotulo: 'Recibos', montar: montarLinhasRecibos_,
@@ -212,7 +261,7 @@ var RELATORIO_CATALOGO_ = {
       { key: 'saldo_atual', rotulo: 'Saldo Atual', tipo: 'moeda' },
       { key: 'falta_atendido', rotulo: 'Falta ser Atendido', tipo: 'moeda' },
       { key: 'parcela_mensal_referencia', rotulo: 'Parcela Mensal Ref.', tipo: 'moeda' }
-    ]
+    ].concat(colunasFaltaPorMes_())
   },
   sof: {
     rotulo: 'SOF', montar: montarLinhasSof_,

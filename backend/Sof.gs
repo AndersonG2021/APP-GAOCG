@@ -547,6 +547,21 @@ function obterTemplateSof(session, tipo) {
   return ok_(template);
 }
 
+/**
+ * Ano de exercício de uma SOF, para o filtro de Ano (sessão 2026-08-12).
+ *
+ * A SOF não tem campo de competência (decisão do usuário: nesta tela só faz
+ * sentido o filtro de Ano). O ano vem do próprio Nº SOF, que é "NNN/AAAA" -
+ * é o número oficial do exercício. Quando o Nº SOF ainda não foi preenchido
+ * (campo opcional), cai para o ano da data de criação, para a linha não sumir
+ * de todos os filtros de ano.
+ */
+function anoDoSof_(sof) {
+  var doNumero = String(sof.sof_numero || '').match(/\/(\d{4})\s*$/);
+  if (doNumero) return doNumero[1];
+  return String(sof.data_criacao || '').slice(0, 4);
+}
+
 /** Busca livre multi-campo (texto e numérico) + filtros combináveis (AND) + paginação. */
 function listarSof(session, params) {
   params = params || {};
@@ -587,6 +602,9 @@ function listarSof(session, params) {
 
   var deaValores = paraArrayFiltro_(params.dea);
   if (deaValores.length) rows = rows.filter(function (r) { return deaValores.indexOf(r.dea) !== -1; });
+
+  var anoValores = paraArrayFiltro_(params.ano);
+  if (anoValores.length) rows = rows.filter(function (r) { return anoValores.indexOf(anoDoSof_(r)) !== -1; });
 
   var tipoValores = paraArrayFiltro_(params.tipo);
   if (tipoValores.length) rows = rows.filter(function (r) { return tipoValores.indexOf(r.tipo) !== -1; });
