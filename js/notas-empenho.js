@@ -210,7 +210,6 @@ const TelaNotasEmpenho = (function () {
   function cronogramaSolicitadoBoxHtml_(g) {
     const meses = g.cronograma_solicitado || [];
     if (!meses.length) return '';
-    const total = meses.reduce((s, c) => s + Number(c.valor || 0), 0);
     return `
       <div class="cartao-ne-cronograma-solicitado">
         <div class="cartao-ne-cronograma-cabecalho">
@@ -227,7 +226,9 @@ const TelaNotasEmpenho = (function () {
               <span class="cronograma-solicitado-valor">${UI.formatarMoeda(c.valor)}</span>
             </div>`).join('')}
         </div>
-        <p class="ajuda">🟩 Atendido (${UI.formatarMoeda(g.total_atendido)}) · 🟥 Falta atender · Total solicitado: ${UI.formatarMoeda(total)}</p>
+        <!-- Legenda é só a chave de cores: os valores (Total Atendido, Total
+             Solicitado) já aparecem no próprio card da NE, logo acima. -->
+        <p class="ajuda">🟩 Atendido · 🟥 Falta atender</p>
       </div>`;
   }
 
