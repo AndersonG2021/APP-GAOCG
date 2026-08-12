@@ -594,42 +594,52 @@ const UI = (function () {
   }
 
   /**
-   * Estreita em tempo real os filtros de múltipla escolha Unidade/Tipo de
-   * unidade/OSS entre si (sessão 2026-07-27) - marcar um valor num deles só
-   * deixa nos outros dois as opções que ainda fazem sentido dado o que já
-   * foi marcado (ex.: Tipo de unidade = UPA faz Unidade mostrar só UPAs).
-   * Reaproveitada pelas 4 telas com esse trio de filtros (SOF/Recibos/Notas
-   * de Empenho/Unidades) - cada uma só chama isso no `aoMudar` de cada um dos
-   * 3 widgets, passando a lista de unidades que já carrega sem filtro (usada
-   * hoje só pra popular os dropdowns).
+   * ===== Facetas: cada filtro só oferece o que ainda leva a resultado =====
    *
-   * Quando os outros dois filtros estão vazios, cada dropdown volta pra sua
-   * lista original completa (`unidadesTodas`/`opcoesTipoOriginais`/
-   * `opcoesOssOriginais`) - evita esconder, por exemplo, uma OSS cadastrada
-   * em Listas Personalizadas mas ainda sem nenhuma unidade usando ela.
+   * O backend devolve, junto com a página, um mapa `facetas` com os valores
+   * ainda possíveis de cada dimensão, calculados aplicando todos os OUTROS
+   * filtros (ver calcularFacetas_ em backend/Utils.gs). Aqui isso vira a lista
+   * de opções de cada widget.
+   *
+   * Por que vem do backend: a tela tem só a página atual (20 linhas), então não
+   * há como derivar dela quais valores existem no conjunto inteiro. Foi por isso
+   * também que o estreitamento antigo só funcionava para Unidade/Tipo/OSS - as
+   * únicas listas que o frontend tinha por completo.
+   *
+   * `cfg` mapeia id do widget -> { chave, rotulo }:
+   *   chave  - nome da dimensão no mapa de facetas;
+   *   rotulo - (opcional) função valor -> texto exibido (ex.: id da unidade
+   *            vira o nome dela).
+   *
+   * A seleção atual é SEMPRE mantida na lista, mesmo que a faceta não a traga.
+   * Sem isso, uma combinação que zera resultados faria a opção escolhida sumir
+   * e ser descartada silenciosamente - o usuário veria a lista mudar sozinha
+   * sem entender por quê, e sem conseguir desmarcar o que causou aquilo.
    */
-  function recalcularFiltrosCruzadosUnidade(cfg) {
-    const selUnidade = new Set(valoresFiltroMultiplo(cfg.idUnidade));
-    const selTipo = new Set(valoresFiltroMultiplo(cfg.idTipo));
-    const selOss = new Set(valoresFiltroMultiplo(cfg.idOss));
-
-    const bateTipo = u => !selTipo.size || selTipo.has(u.tipo);
-    const bateOss = u => !selOss.size || selOss.has(u.oss);
-    const bateUnidadeSel = u => !selUnidade.size || selUnidade.has(String(u.id));
-
-    const paraUnidade = (!selTipo.size && !selOss.size)
-      ? cfg.unidadesTodas
-      : cfg.unidadesTodas.filter(u => bateTipo(u) && bateOss(u));
-    atualizarOpcoesFiltroMultiplo(cfg.idUnidade, paraUnidade.map(u => ({ valor: u.id, rotulo: u.nome })));
-
-    atualizarOpcoesFiltroMultiplo(cfg.idTipo, (!selUnidade.size && !selOss.size)
-      ? cfg.opcoesTipoOriginais
-      : dedupOrdenado_(cfg.unidadesTodas.filter(u => bateUnidadeSel(u) && bateOss(u)).map(u => u.tipo)));
-
-    atualizarOpcoesFiltroMultiplo(cfg.idOss, (!selUnidade.size && !selTipo.size)
-      ? cfg.opcoesOssOriginais
-      : dedupOrdenado_(cfg.unidadesTodas.filter(u => bateUnidadeSel(u) && bateTipo(u)).map(u => u.oss)));
+  function aplicarFacetas(facetas, cfg) {
+    if (!facetas) return;
+    Object.keys(cfg).forEach(id => {
+      const { chave, rotulo } = cfg[id];
+      const disponiveis = facetas[chave];
+      if (!disponiveis) return;
+      const valores = Array.from(new Set(disponiveis.concat(valoresFiltroMultiplo(id).map(String))));
+      atualizarOpcoesFiltroMultiplo(id, rotulo
+        ? valores.map(v => ({ valor: v, rotulo: rotulo(v) }))
+        : valores.slice().sort());
+    });
   }
+
+  // recalcularFiltrosCruzadosUnidade foi REMOVIDA na sessão 2026-08-12.
+  //
+  // Ela estreitava em tempo real só o trio Unidade/Tipo de unidade/OSS, a
+  // partir da lista de unidades que o frontend já tinha inteira - as outras
+  // dimensões (Objeto, DEA, Fonte, Status, Competência, Ano) ficavam de fora
+  // porque a tela só tem a página atual, não o conjunto todo.
+  //
+  // O estreitamento agora vale para TODOS os filtros e vem das facetas
+  // calculadas no backend (aplicarFacetas acima). Manter as duas coisas seria
+  // pior que escolher uma: a versão local reescrevia as opções a cada clique de
+  // checkbox, desfazendo o que as facetas tinham acabado de definir.
 
   /**
    * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
@@ -681,7 +691,7 @@ const UI = (function () {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
     formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
-    atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
+    atualizarOpcoesFiltroMultiplo, aplicarFacetas, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };
 })();
 

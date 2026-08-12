@@ -2699,6 +2699,73 @@ empurrar as colunas principais de quem não marcar essas.
 `backend/Recibos.gs` e `backend/Relatorios.gs` no Apps Script e reimplantar
 (Nova versão). Nenhuma coluna ou aba nova.
 
+## Filtros facetados: cada filtro só oferece o que leva a resultado (2026-08-12)
+
+**Pedido:** "quando eu escolher um filtro e filtrar, os outros filtros só devem
+mostrar opções equivalentes... e isso deve valer em todo app".
+
+### Por que precisou ir para o backend
+
+Já existia `recalcularFiltrosCruzadosUnidade` (js/app.js), mas ela só cobria o
+trio Unidade/Tipo de unidade/OSS - justamente as três listas que o frontend
+tinha **inteiras** em memória. As demais dimensões (Objeto, DEA, Fonte, Status,
+Competência, Ano) não davam: a tela só tem a página atual (20 linhas), não há
+como derivar dela quais valores existem no conjunto todo.
+
+Por isso o cálculo passou para o backend: novo `calcularFacetas_` (Utils.gs),
+que devolve, junto com a página, os valores ainda possíveis de cada dimensão.
+
+**A regra que faz funcionar:** a faceta de cada dimensão é calculada **excluindo
+o filtro dela mesma**. Se a própria dimensão entrasse na conta, escolher
+"TESOURO" em Fonte deixaria a lista de Fonte só com "TESOURO" - e não haveria
+como marcar uma segunda fonte. Cada dimensão é calculada com os outros filtros
+aplicados e o seu próprio removido.
+
+`filtrarFn` recebida é sempre a MESMA função que filtra a listagem, para faceta
+e resultado nunca discordarem - senão a lista ofereceria um filtro que não
+existe, ou esconderia um que existe.
+
+### Refatorações que isso exigiu (e que pagam por si)
+
+`listarSof` e `listarUnidades` tinham a cadeia de filtros **inline**. Foram
+extraídas para `filtrarLinhasSof_` e `filtrarLinhasUnidades_`, seguindo o que já
+tinha sido feito em `filtrarLinhasRecibos_` e `filtrarGruposNotasEmpenho_`. Agora
+as quatro telas têm o mesmo formato, e a extração do SOF abre caminho para o
+relatório de SOF respeitar todos os filtros da tela (hoje `montarLinhasSof_`
+ainda só entende oss/unidade - **pendência conhecida**).
+
+### Frontend
+
+Novo `UI.aplicarFacetas(facetas, cfg)`: cada tela declara um mapa
+`id do widget -> { chave, rotulo }` (`FACETAS_SOF_`, `FACETAS_NE_`,
+`FACETAS_REC_`, `FACETAS_UNI_`) e aplica na resposta de cada carga.
+
+**A seleção atual é sempre mantida na lista**, mesmo que a faceta não a traga.
+Sem isso, uma combinação que zera resultados faria a opção escolhida sumir e ser
+descartada em silêncio - o usuário veria a lista mudar sozinha e ficaria sem
+como desmarcar o que causou aquilo.
+
+`recalcularFiltrosCruzadosUnidade` foi **removida**. Manter as duas seria pior
+que escolher uma: a versão local reescrevia as opções a cada clique de checkbox,
+desfazendo o que as facetas tinham acabado de definir.
+
+**Mudança de comportamento consciente:** o estreitamento agora acontece ao clicar
+em **Filtrar** (quando a resposta chega), não no instante do clique no checkbox,
+como era para o trio. Foi o momento descrito no pedido ("quando eu escolher um
+filtro **e filtrar**").
+
+### Custo
+
+`calcularFacetas_` roda o filtro uma vez por dimensão - até 9 passagens em
+Recibos - mas tudo **em memória**, sobre linhas já carregadas, sem leitura extra
+de planilha. `mapaDeaPorNumeroNe_` ganhou memo por execução porque, com o filtro
+de DEA ativo, seria remontado em quase todas as passagens (cada uma reparseando
+SOF + NE do CacheService).
+
+**Passo manual:** colar `backend/Utils.gs`, `backend/Sof.gs`,
+`backend/NotasEmpenho.gs`, `backend/Recibos.gs` e `backend/Unidades.gs` no Apps
+Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

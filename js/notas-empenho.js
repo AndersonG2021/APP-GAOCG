@@ -81,16 +81,13 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
     document.getElementById('btnGerarRelatorioNe').addEventListener('click', abrirGerarRelatorio);
-    // Unidade/Tipo de unidade/OSS se estreitam entre si em tempo real (sessão
-    // 2026-07-27) - ver UI.recalcularFiltrosCruzadosUnidade (js/app.js).
-    const recalcularFiltrosCruzados_ = () => UI.recalcularFiltrosCruzadosUnidade({
-      idUnidade: 'neFiltroUnidade', idTipo: 'neFiltroTipoUnidade', idOss: 'neFiltroOss',
-      unidadesTodas: unidades, opcoesTipoOriginais: tiposUnidade, opcoesOssOriginais: opcoesOss.map(o => o.valor)
-    });
-    UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })), recalcularFiltrosCruzados_);
-    UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor), recalcularFiltrosCruzados_);
+    // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
+    // backend (ver FACETAS_NE_/aplicarResposta_). Substitui o estreitamento
+    // antigo, que valia só para Unidade/Tipo/OSS.
+    UI.criarFiltroMultiplo('neFiltroUnidade', unidades.map(u => ({ valor: u.id, rotulo: u.nome })));
+    UI.criarFiltroMultiplo('neFiltroOss', opcoesOss.map(o => o.valor));
     UI.criarFiltroMultiplo('neFiltroObjeto', opcoesObjeto.map(o => o.valor));
-    UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
+    UI.criarFiltroMultiplo('neFiltroTipoUnidade', tiposUnidade);
     UI.criarFiltroMultiplo('neFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('neFiltroFonte', OPCOES_FONTE);
     UI.criarFiltroMultiplo('neFiltroAno', UI.listaAnos());
@@ -191,9 +188,22 @@ const TelaNotasEmpenho = (function () {
     aplicarResposta_(resposta);
   }
 
+  /** id do widget -> dimensão no mapa de facetas (ver UI.aplicarFacetas). */
+  const FACETAS_NE_ = {
+    neFiltroUnidade: { chave: 'unidade_id', rotulo: id => (unidades.find(u => String(u.id) === String(id)) || {}).nome || id },
+    neFiltroOss: { chave: 'oss' },
+    neFiltroObjeto: { chave: 'objeto' },
+    neFiltroTipoUnidade: { chave: 'tipo_unidade' },
+    neFiltroDea: { chave: 'dea' },
+    neFiltroFonte: { chave: 'fonte' },
+    neFiltroAno: { chave: 'ano' },
+    neFiltroCompetencia: { chave: 'competencia' }
+  };
+
   function aplicarResposta_(resposta) {
     grupos = resposta.items;
     totalRegistros = resposta.total;
+    UI.aplicarFacetas(resposta.facetas, FACETAS_NE_);
     renderCards();
     renderPaginacao();
   }
