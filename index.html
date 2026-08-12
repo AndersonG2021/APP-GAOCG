@@ -65,17 +65,17 @@
     </div>
   </div>
 
-  <!-- MODAL GENÉRICO (reaproveitado por todas as telas) -->
-  <div id="sobreposicaoModal" class="sobreposicao-modal oculto">
-    <div id="modal" class="modal">
-      <div class="modal-cabecalho">
-        <h3 id="modalTitulo"></h3>
-        <button type="button" class="fechar" id="botaoFecharModal">&times;</button>
-      </div>
-      <div class="modal-corpo" id="modalCorpo"></div>
-      <div class="modal-rodape" id="modalRodape"></div>
-    </div>
-  </div>
+  <!--
+    MODAL GENÉRICO (reaproveitado por todas as telas) - sessão 2026-08-12:
+    o conteúdo (.modal, com título/corpo/rodapé) passou a ser criado por JS
+    (UI.abrirModal, js/app.js) em vez de fixo aqui, pra permitir minimizar um
+    card editado (sai de dentro de #sobreposicaoModal, vai pra
+    #areaModaisMinimizados, sem perder nenhum estado/listener) e reabri-lo
+    depois pelo "dock" (#dockModais, canto inferior esquerdo).
+  -->
+  <div id="sobreposicaoModal" class="sobreposicao-modal oculto"></div>
+  <div id="areaModaisMinimizados" class="oculto"></div>
+  <div id="dockModais" class="dock-modais"></div>
 
   <!--
     defer: os 14 arquivos são baixados em PARALELO durante o parse do HTML e
