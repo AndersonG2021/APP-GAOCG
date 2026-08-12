@@ -219,12 +219,41 @@ function extrairNeReferencia_(texto) {
 }
 
 /**
- * "Preço Total" fica perto de "LOCALIDADE DE ENTREGA" no rodapé do documento,
- * numa linha só (rótulo "TOTAL" + valor), diferente do cabeçalho da tabela de
- * itens ("PREÇO UNITÁRIO"/"PREÇO TOTAL", sem valor logo depois) - o
- * lookbehind evita casar com esse cabeçalho.
+ * "Preço Total" fica perto de "LOCALIDADE DE ENTREGA" no rodapé do
+ * documento - rótulo "TOTAL" (diferente do cabeçalho "PREÇO UNITÁRIO"/
+ * "PREÇO TOTAL" da tabela de itens; o lookbehind evita casar com esse
+ * cabeçalho) seguido do valor.
+ *
+ * Achado real (sessão 2026-08-12, documento 2026NE005877, pedido do
+ * usuário): a suposição original era que rótulo e valor sempre saíam juntos,
+ * "numa linha só" (regex antiga: TOTAL + só espaço/dois-pontos + dígitos,
+ * colados). Só que esse rodapé é a MESMA grade de duas colunas (rótulo |
+ * rótulo, valor | valor) do Cronograma de Desembolso (ver
+ * extrairCronogramaDesembolso_ acima, mesmo artefato de posição do PDF já
+ * documentado ali) - "LOCALIDADE DE ENTREGA:" e "TOTAL" são os dois rótulos
+ * de uma linha, o endereço e o valor são os dois valores da linha seguinte;
+ * o OCR pode devolver os dois rótulos primeiro, e só depois "<endereço>
+ * <valor>", com o endereço inteiro entre "TOTAL" e o número - a regex antiga
+ * não achava nada e a leitura falhava por inteiro (Número/Cronograma
+ * identificados, mas "Preço Total" não).
+ *
+ * Corrigido com o mesmo padrão "rótulo antes, valor numa janela seguinte" já
+ * usado em extrairNeReferencia_ logo acima: acha "TOTAL" e pega o primeiro
+ * número em formato de dinheiro BR (mesmo padrão usado no cronograma, não o
+ * "[\d.,]+" antigo - mais preciso, não confunde com outro token qualquer)
+ * dentro dos próximos 400 caracteres. Um endereço no meio (que não tem esse
+ * formato) é simplesmente pulado - não exige mais que rótulo e valor fiquem
+ * colados, mas também não muda nada nos documentos em que já ficavam.
  */
-var REGEX_PRECO_TOTAL_NE_DOCUMENTO = /(?<!PRE[ÇC]O\s)\bTOTAL\s*:?\s*([\d.,]+)/i;
+var REGEX_LABEL_TOTAL_NE_DOCUMENTO_ = /(?<!PRE[ÇC]O\s)\bTOTAL\s*:?/i;
+function extrairPrecoTotal_(texto) {
+  var labelMatch = texto.match(REGEX_LABEL_TOTAL_NE_DOCUMENTO_);
+  if (!labelMatch) return null;
+  var inicio = labelMatch.index + labelMatch[0].length;
+  var trecho = texto.slice(inicio, inicio + 400);
+  var valorMatch = trecho.match(/\d{1,3}(?:\.\d{3})*,\d{2}/);
+  return valorMatch ? normalizarValorMonetarioBr_(valorMatch[0]) : null;
+}
 
 /**
  * O código orçamentário da FONTE é um número de 10 dígitos sem separadores
@@ -273,13 +302,21 @@ function lerAnexoNotaEmpenho(session, params) {
     return fail_('Não foi possível ler o documento: ' + e.message);
   }
 
+  // texto_ocr_debug (sessão 2026-08-12): as duas falhas abaixo agora levam o
+  // texto bruto do OCR junto (fail_ aceita um 2º argumento - ver Utils.gs) -
+  // achado real: antes, esse diagnóstico só saía na resposta de SUCESSO
+  // (ok_, no fim da função), então bem no caso que mais precisa dele - um
+  // campo não identificado - o frontend não tinha nenhuma pista do que o OCR
+  // tinha lido de fato, e depurar virava adivinhação (ou pedir o PDF puro
+  // pro usuário, caso do documento 2026NE005877 que expôs este bug).
+  var debugParcial = { texto_ocr_debug: texto.slice(0, 6000) };
+
   var matchNumero = texto.match(REGEX_NUMERO_NE_DOCUMENTO);
-  if (!matchNumero) return fail_('Não foi possível identificar o número da Nota de Empenho no documento anexado.');
+  if (!matchNumero) return fail_('Não foi possível identificar o número da Nota de Empenho no documento anexado.', debugParcial);
   var numeroNe = matchNumero[1].toUpperCase();
 
-  var matchTotal = texto.match(REGEX_PRECO_TOTAL_NE_DOCUMENTO);
-  var precoTotal = matchTotal ? normalizarValorMonetarioBr_(matchTotal[1]) : null;
-  if (precoTotal === null) return fail_('Não foi possível identificar o Preço Total no documento anexado.');
+  var precoTotal = extrairPrecoTotal_(texto);
+  if (precoTotal === null) return fail_('Não foi possível identificar o Preço Total no documento anexado.', debugParcial);
 
   var cronograma = extrairCronogramaDesembolso_(texto);
   var somaCronograma = cronograma.reduce(function (s, m) { return s + m.valor; }, 0);

@@ -487,8 +487,21 @@ function ok_(data) {
   return out;
 }
 
-function fail_(mensagem) {
-  return { ok: false, error: mensagem };
+/**
+ * dados (opcional, sessão 2026-08-12): payload extra devolvido junto com o
+ * erro - usado por lerAnexoNotaEmpenho pra mandar texto_ocr_debug mesmo
+ * quando a leitura falha (Número/Preço Total não identificados), que é
+ * justamente quando esse diagnóstico mais faz falta. Antes, o campo só saía
+ * na resposta de SUCESSO (ok_) - nos casos de falha, que são os que
+ * realmente precisam de diagnóstico, o frontend não tinha nenhuma pista do
+ * que o OCR tinha lido. json.error continua sendo a única coisa usada pela
+ * maioria dos chamadores (Api.chamar relança como Error) - dados é só um
+ * extra, ignorado por quem não pede.
+ */
+function fail_(mensagem, dados) {
+  var out = { ok: false, error: mensagem };
+  if (dados !== undefined) out.data = dados;
+  return out;
 }
 
 // ===================== SANITIZAÇÃO / VALIDAÇÃO =====================
