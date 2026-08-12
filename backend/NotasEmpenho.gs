@@ -115,6 +115,88 @@ function extrairCronogramaDesembolso_(texto) {
 }
 
 /**
+ * Carga única (2026-08-12, pedido do usuário - rodar manualmente pelo editor
+ * do Apps Script, mesmo padrão de semearListaOSS/semearListaObjetos em
+ * ListasPersonalizadas.gs: sem `session`, não passa por Code.gs, é o
+ * desenvolvedor quem executa uma vez pelo botão Executar).
+ *
+ * Preenche NotasEmpenhoCronograma para NEs "original" que já estavam
+ * cadastradas e ficaram sem cronograma - seja por terem sido criadas antes
+ * desta coluna existir (ver PROGRESS.md, sessão 2026-07-18), seja por terem
+ * entrado pelo mini-formulário de NE embutido no SOF (js/sof.js, que não
+ * pede cronograma - ver comentário de lerAnexoNotaEmpenho acima). Reforço
+ * nunca entra aqui: não tem cronograma próprio (tem mes_referencia).
+ *
+ * Não pede upload de novo - reprocessa o PRÓPRIO arquivo já anexado
+ * (arquivo_drive_id) com o mesmo OCR + regex da leitura original
+ * (extrairTextoOcr_ + extrairCronogramaDesembolso_ acima), então o resultado
+ * é idêntico ao que teria saído se o cronograma tivesse sido lido na hora do
+ * cadastro.
+ *
+ * Idempotente e resumível: só processa quem ainda não tem nenhuma linha em
+ * NotasEmpenhoCronograma, então rodar de novo (ex.: depois de um timeout de
+ * 6 min do Apps Script num lote grande) só continua de onde parou, nunca
+ * duplica. Erro em um arquivo (OCR indisponível, PDF ilegível etc.) não para
+ * o lote - fica registrado no resultado e os demais continuam.
+ */
+function migrarCronogramaNotasEmpenhoExistentes() {
+  var jaTemCronograma = {};
+  todoCronogramaComCache_().forEach(function (c) { jaTemCronograma[c.nota_empenho_id] = true; });
+
+  var pendentes = todasNotasEmpenhoComCache_().filter(function (n) {
+    return n.tipo === 'original' && !jaTemCronograma[n.id];
+  });
+
+  var cronoSheet = getSheet_(SHEETS.NOTAS_EMPENHO_CRONOGRAMA);
+  var resultado = { total_pendentes: pendentes.length, preenchidas: [], sem_cronograma_no_documento: [], sem_arquivo: [], com_erro: [] };
+
+  pendentes.forEach(function (n) {
+    if (!n.arquivo_drive_id) {
+      resultado.sem_arquivo.push(n.numero_ne);
+      return;
+    }
+    try {
+      var arquivo = DriveApp.getFileById(n.arquivo_drive_id);
+      var blob = arquivo.getBlob();
+      var base64 = Utilities.base64Encode(blob.getBytes());
+      var texto = extrairTextoOcr_(base64, arquivo.getName(), blob.getContentType());
+      var cronograma = extrairCronogramaDesembolso_(texto);
+      if (!cronograma.length) {
+        resultado.sem_cronograma_no_documento.push(n.numero_ne);
+        return;
+      }
+
+      // Mesmo padrão de criarNotaEmpenho: 1 reserva de IDs + 1 escrita em
+      // lote para os 12 meses desta NE, não 1 ciclo por mês.
+      var ids = proximosIds_('NotasEmpenhoCronograma', cronograma.length);
+      var agora = nowIso_();
+      var linhas = cronograma.map(function (item, i) {
+        return {
+          id: ids[i],
+          nota_empenho_id: n.id,
+          mes: item.mes,
+          valor: item.valor,
+          criado_por: 'rotina_migracao_cronograma',
+          data_criacao: agora
+        };
+      });
+      appendObjectRows_(cronoSheet, linhas);
+      resultado.preenchidas.push(n.numero_ne);
+    } catch (e) {
+      resultado.com_erro.push(n.numero_ne + ': ' + e.message);
+    }
+  });
+
+  invalidarCacheCronograma_();
+  bumpVersao_('notasEmpenho');
+  // Execução manual pelo editor não mostra o valor de retorno da função por
+  // padrão - Logger.log garante que o resumo apareça no painel de execução
+  // (mesmo recurso usado em Seed.gs pras rotinas de carga inicial).
+  Logger.log(JSON.stringify(resultado));
+  return resultado;
+}
+
+/**
  * "Nº DA N.E. DE REFERÊNCIA:" (sessão 2026-07-30, pedido do usuário) - só
  * aparece preenchido em documentos de REFORÇO, apontando pra NE "mãe" que
  * está sendo reforçada; em NE original o rótulo existe no layout, mas sem

@@ -2766,6 +2766,48 @@ SOF + NE do CacheService).
 `backend/NotasEmpenho.gs`, `backend/Recibos.gs` e `backend/Unidades.gs` no Apps
 Script e reimplantar (Nova versão). Nenhuma coluna ou aba nova.
 
+## Backfill do Cronograma de Desembolso das NEs já cadastradas (2026-08-12)
+
+Pedido: "adicione as NEs já cadastradas à aba NotasEmpenhoCronograma" -
+`NotasEmpenhoCronograma` só passou a ser preenchida a partir da sessão
+2026-07-18 (ver seção acima na data correspondente); NEs originais lançadas
+antes disso, ou lançadas pelo mini-formulário embutido no SOF (que não pede
+cronograma), ficaram sem essas linhas mesmo já tendo o PDF anexado com a
+tabela "CRONOGRAMA DE DESEMBOLSO" nele.
+
+Nova rotina `migrarCronogramaNotasEmpenhoExistentes()` (`backend/NotasEmpenho.gs`) -
+mesmo padrão manual de `semearListaOSS`/`semearListaObjetos`
+(`ListasPersonalizadas.gs`): sem `session`, **não** passa por `Code.gs`, roda
+uma única vez direto pelo editor do Apps Script (selecionar a função no
+dropdown → Executar). Não é uma tela nem um endpoint - reprocessamento pesado
+(um OCR por documento) não deve ficar exposto a chamada de API repetida.
+
+**O que faz:** para cada NE `tipo === 'original'` que ainda não tem nenhuma
+linha em `NotasEmpenhoCronograma`, reabre o próprio arquivo já anexado
+(`arquivo_drive_id`) e reaplica exatamente o mesmo OCR + regex da leitura
+original (`extrairTextoOcr_` + `extrairCronogramaDesembolso_`, as mesmas
+usadas por `lerAnexoNotaEmpenho` na hora do cadastro) - não pede upload de
+nada de novo. Grava os 12 meses com `criado_por: 'rotina_migracao_cronograma'`
+(mesmo espírito de `origem: 'importacao_inicial'` em `migrarRecibosHistorico`
+- rastreável como carga em lote, não lançamento manual de um analista).
+
+**Idempotente e resumível:** só entra na lista quem ainda não tem cronograma,
+então rodar de novo (ex.: se o lote for grande e bater no limite de 6 min de
+execução do Apps Script) simplesmente continua de onde parou - nunca duplica
+linha. Erro num arquivo (OCR fora do ar, PDF sem a tabela, etc.) fica
+registrado no objeto de retorno (`sem_arquivo`, `sem_cronograma_no_documento`,
+`com_erro`) e não interrompe os demais.
+
+**Fora do escopo, por decisão de dado:** NE `reforço` nunca entra aqui -
+reforço não tem cronograma próprio (tem `mes_referencia`, já existente).
+
+**Passo manual:** colar `backend/NotasEmpenho.gs` no Apps Script, reimplantar
+(Nova versão) e então, no próprio editor do Apps Script, selecionar
+`migrarCronogramaNotasEmpenhoExistentes` no dropdown de funções e clicar
+Executar. Olhar o retorno no log de execução (View → Logs, ou o painel de
+execução) para conferir `preenchidas`/`sem_cronograma_no_documento`/
+`sem_arquivo`/`com_erro`.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
