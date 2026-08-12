@@ -57,6 +57,15 @@ const TelaSof = (function () {
   // distinto do número da NE mãe; agrupa os meses desse mesmo documento como
   // "um reforço só" na tela de Notas de Empenho.
   let numeroNeReforcoMiniform_ = null;
+  // arquivo_drive_id/arquivo_url (sessão 2026-08-12) - quando a leitura por
+  // OCR do anexo do mini-formulário dá certo, o arquivo já sobe pro Drive
+  // nessa hora (lerAnexoNotaEmpenho, NotasEmpenho.gs); salvar reaproveita em
+  // vez de reenviar o mesmo arquivo. null enquanto não há leitura bem-sucedida
+  // pendente - nesse caso lerMiniFormularioNe_ cai no caminho antigo (reler o
+  // arquivo e mandar o base64), porque este mini-formulário permite salvar
+  // com o arquivo mesmo que a leitura automática tenha falhado.
+  let arquivoNeDriveIdMiniform_ = null;
+  let arquivoNeUrlMiniform_ = null;
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
@@ -692,7 +701,12 @@ const TelaSof = (function () {
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
       `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnGerarDocumentoSei">Salvar e gerar documento SEI</button><button class="botao" id="btnEnviarSofSei" title="Salva a SOF e preenche o formulário de Incluir Documento num processo já aberto no SEI">Salvar e enviar ao SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
       { grande: true });
-    if (editando) UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('SOF', sof.id));
+    // Duas limpezas no mesmo fechamento (aoFecharModal só guarda 1 callback
+    // por vez - ver UI.abrirModal/aoFecharModal, js/app.js): liberar a trava
+    // de edição simultânea (já existia) e descartar, em segundo plano, um
+    // anexo de NE já enviado ao Drive pelo mini-formulário mas nunca salvo
+    // (sessão 2026-08-12 - ver descartarArquivoNeNaoSalvo_).
+    if (editando) UI.aoFecharModal(() => { EdicaoSimultanea.sairDaEdicao('SOF', sof.id); descartarArquivoNeNaoSalvo_(); });
 
     renderFontesFormulario();
     document.getElementById('btnAdicionarFonte').addEventListener('click', () => {
@@ -1098,9 +1112,20 @@ const TelaSof = (function () {
     if (!arquivo) throw new Error('Anexe o arquivo da Nota de Empenho.');
     if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo da Nota de Empenho muito grande (máximo 8MB).');
 
-    const arquivoBase64 = await UI.lerArquivoBase64(arquivo);
+    // arquivo_drive_id (sessão 2026-08-12): se o anexo atual já foi lido com
+    // sucesso por lerAnexoNotaEmpenho (ligarOcrMiniFormularioNe_ acima), o
+    // arquivo JÁ está no Drive - reaproveita em vez de reler/reenviar o mesmo
+    // arquivo (evitava o segundo upload completo que fazia leitura+salvamento
+    // somarem 30s+ - achado do usuário, sessão 2026-08-12). Se a leitura
+    // falhou (arquivoNeDriveIdMiniform_ ainda null) mas o analista preencheu
+    // os campos manualmente com o arquivo selecionado, cai no caminho antigo -
+    // reler o arquivo e mandar o base64, upload acontece no backend como
+    // sempre aconteceu (nunca foi exigido que o OCR desse certo pra salvar
+    // aqui, e isso continua valendo).
+    const arquivoBase64 = arquivoNeDriveIdMiniform_ ? null : await UI.lerArquivoBase64(arquivo);
     return {
       tipo, numero_ne: numero, fonte, objeto, valor, arquivoBase64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type,
+      arquivo_drive_id: arquivoNeDriveIdMiniform_, arquivo_url: arquivoNeUrlMiniform_,
       // itens (sessão 2026-07-29): meses reforçados detectados por OCR, quando
       // tipo=reforco e o documento tinha um cronograma com 1+ meses - ver
       // ligarOcrMiniFormularioNe_. salvarSof usa criarReforcosEmLote nesse caso.
@@ -1161,14 +1186,22 @@ const TelaSof = (function () {
         if (dadosNe.tipo === 'reforco' && dadosNe.itens && dadosNe.itens.length) {
           await Api.chamar('criarReforcosEmLote', {
             data: { sof_id: resposta.id, numero_ne: dadosNe.numero_ne, numero_ne_reforco: dadosNe.numero_ne_reforco, itens: dadosNe.itens,
-              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
+              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo,
+              arquivo_drive_id: dadosNe.arquivo_drive_id, arquivo_url: dadosNe.arquivo_url }
           });
         } else {
           await Api.chamar('criarNotaEmpenho', {
             data: { sof_id: resposta.id, tipo: dadosNe.tipo, numero_ne: dadosNe.numero_ne, numero_ne_reforco: dadosNe.numero_ne_reforco, fonte: dadosNe.fonte, objeto: dadosNe.objeto, valor: dadosNe.valor,
-              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo }
+              arquivoBase64: dadosNe.arquivoBase64, arquivoNome: dadosNe.arquivoNome, arquivoTipo: dadosNe.arquivoTipo,
+              arquivo_drive_id: dadosNe.arquivo_drive_id, arquivo_url: dadosNe.arquivo_url }
           });
         }
+        // Zera ANTES de qualquer fecharModal() adiante (chamado logo abaixo,
+        // no branch sofExistente) - o arquivo acabou de ser vinculado à NE
+        // salva, não é mais "não salvo" (ver aoFecharModal registrado em
+        // abrirFormulario, senão o próprio arquivo recém-salvo seria apagado).
+        arquivoNeDriveIdMiniform_ = null;
+        arquivoNeUrlMiniform_ = null;
         if (dadosNe.tipo === 'original') {
           resposta.possui_ne = true;
           const idxAtual = ETAPAS_ANDAMENTO.indexOf(resposta.andamento);
@@ -1346,6 +1379,10 @@ const TelaSof = (function () {
     const fontesDisponiveis = opcoesFonte.length ? opcoesFonte : OPCOES_FONTE;
     itensReforcoMiniform_ = null;
     numeroNeReforcoMiniform_ = null;
+    // A seção inteira vai ser reconstruída (alvo.innerHTML abaixo) - qualquer
+    // anexo já lido/enviado ao Drive nesta versão anterior do mini-formulário
+    // fica órfão se não descartado agora (sessão 2026-08-12).
+    descartarArquivoNeNaoSalvo_();
     const alvo = document.getElementById('secaoNotasEmpenho');
     alvo.innerHTML = `
       <h4 style="margin:0 0 8px">Notas de Empenho (total: ${UI.formatarMoeda(total)})</h4>
@@ -1379,6 +1416,7 @@ const TelaSof = (function () {
       document.getElementById('neArquivo').value = '';
       itensReforcoMiniform_ = null;
       numeroNeReforcoMiniform_ = null;
+      descartarArquivoNeNaoSalvo_();
       const alvoMeses = document.getElementById('neMesesDetectados');
       alvoMeses.classList.add('oculto');
       alvoMeses.innerHTML = '';
@@ -1487,6 +1525,23 @@ const TelaSof = (function () {
   }
 
   /**
+   * Apaga em segundo plano (sessão 2026-08-12) o arquivo que uma leitura por
+   * OCR do mini-formulário já subiu definitivamente pro Drive mas que acabou
+   * não sendo salvo - trocar de anexo, "Remover anexo", trocar o Tipo, ou
+   * fechar o formulário de SOF sem salvar. Mesma lógica de
+   * descartarArquivoNaoSalvo_ em js/notas-empenho.js, duplicada aqui por
+   * serem módulos/DOMs separados. Sempre zera as duas variáveis - chamar de
+   * novo depois (nada pendente) é seguro e não faz nada.
+   */
+  function descartarArquivoNeNaoSalvo_() {
+    if (arquivoNeDriveIdMiniform_) {
+      Api.chamar('descartarArquivoNaoSalvoNotaEmpenho', { arquivoId: arquivoNeDriveIdMiniform_ }, { silencioso: true }).catch(() => {});
+    }
+    arquivoNeDriveIdMiniform_ = null;
+    arquivoNeUrlMiniform_ = null;
+  }
+
+  /**
    * Ao anexar o arquivo no mini-formulário de NE (dentro da edição de SOF),
    * lê o documento por OCR:
    * - Original: preenche Número, Fonte (classificada do código orçamentário)
@@ -1539,6 +1594,7 @@ const TelaSof = (function () {
       statusEl.innerHTML += ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
         e.preventDefault();
+        descartarArquivoNeNaoSalvo_();
         itensReforcoMiniform_ = null;
         numeroNeReforcoMiniform_ = null;
         alvoMeses.classList.add('oculto');
@@ -1586,6 +1642,7 @@ const TelaSof = (function () {
         + ' <a href="#" class="anexo-ocr-remover">Remover anexo</a>';
       statusEl.querySelector('.anexo-ocr-remover').addEventListener('click', e => {
         e.preventDefault();
+        descartarArquivoNeNaoSalvo_();
         if (numeroEl) {
           numeroEl.readOnly = false;
           numeroEl.value = '';
@@ -1603,6 +1660,11 @@ const TelaSof = (function () {
     }
 
     function travar(resultado) {
+      // arquivo_drive_id/arquivo_url (sessão 2026-08-12): a leitura já subiu
+      // o arquivo definitivamente pro Drive - lerMiniFormularioNe_ reaproveita
+      // em vez de reler/reenviar o mesmo arquivo no "Salvar" (ver lá).
+      arquivoNeDriveIdMiniform_ = resultado.arquivo_drive_id || null;
+      arquivoNeUrlMiniform_ = resultado.arquivo_url || null;
       mostrarDiagnosticoOcr_(resultado.texto_ocr_debug);
       if (document.getElementById('neTipo').value === 'reforco') travarReforco_(resultado);
       else travarOriginal_(resultado);
@@ -1611,6 +1673,9 @@ const TelaSof = (function () {
     inputEl.addEventListener('change', async function () {
       const arquivo = inputEl.files[0];
       if (!arquivo) return;
+      // Trocar de arquivo sem clicar "Remover anexo" primeiro abandona
+      // qualquer upload já feito por uma leitura anterior (sessão 2026-08-12).
+      descartarArquivoNeNaoSalvo_();
       try {
         if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
         const base64 = await UI.lerArquivoBase64(arquivo);
