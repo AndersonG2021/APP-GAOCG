@@ -122,6 +122,9 @@ const TelaRecibos = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Competência</label>
             <div id="recFiltroCompetencia"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroCompetencia" title="Limpar filtro de Competência">&times;</button>
           </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Ano</label>
+            <div id="recFiltroAno"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroAno" title="Limpar filtro de Ano">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
             <div id="recFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
@@ -166,6 +169,7 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('recFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('recFiltroCompetencia', UI.listaCompetencias());
+    UI.criarFiltroMultiplo('recFiltroAno', UI.listaAnos());
     UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
     if (filtroInicial && filtroInicial.competencia) UI.definirValoresFiltroMultiplo('recFiltroCompetencia', filtroInicial.competencia);
@@ -200,6 +204,9 @@ const TelaRecibos = (function () {
       tipo_unidade: UI.valoresFiltroMultiplo('recFiltroTipoUnidade'),
       dea: UI.valoresFiltroMultiplo('recFiltroDea'),
       competencia: UI.valoresFiltroMultiplo('recFiltroCompetencia'),
+      // Ano derivado da própria competência ("jul.26" -> "2026"), ver
+      // anoDaCompetencia_ em backend/Recibos.gs. Combina com Competência por E.
+      ano: UI.valoresFiltroMultiplo('recFiltroAno'),
       fonte: UI.valoresFiltroMultiplo('recFiltroFonte'),
       status: UI.valoresFiltroMultiplo('recFiltroStatus'),
       instrumento: document.getElementById('recFiltroInstrumento').value.trim(),
@@ -212,7 +219,7 @@ const TelaRecibos = (function () {
   const CHAVE_POR_FILTRO_ = {
     recFiltroUnidade: 'unidade_id', recFiltroOss: 'oss', recFiltroObjeto: 'objeto',
     recFiltroTipoUnidade: 'tipo_unidade', recFiltroDea: 'dea', recFiltroCompetencia: 'competencia',
-    recFiltroFonte: 'fonte', recFiltroStatus: 'status'
+    recFiltroAno: 'ano', recFiltroFonte: 'fonte', recFiltroStatus: 'status'
   };
 
   /**

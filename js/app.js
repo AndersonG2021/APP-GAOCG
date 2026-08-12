@@ -265,6 +265,18 @@ const UI = (function () {
   }
 
   /**
+   * Anos para os filtros de Ano (sessão 2026-08-12), do próximo ano até 2021,
+   * do mais recente para o mais antigo. Intervalo fixo de propósito: derivar
+   * dos dados exigiria mais uma chamada ao backend só para montar um dropdown,
+   * e a base do app começa em 2022 (migração do histórico de Recibos).
+   */
+  function listaAnos() {
+    const lista = [];
+    for (let ano = new Date().getFullYear() + 1; ano >= 2021; ano--) lista.push(String(ano));
+    return lista;
+  }
+
+  /**
    * Monta as <option> de um <select> de competência. Se valorSelecionado não
    * estiver na lista padrão (dado histórico fora do intervalo gerado), ele é
    * incluído mesmo assim para não "perder" a seleção atual.
@@ -667,7 +679,7 @@ const UI = (function () {
 
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
-    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, opcoesCompetenciaHtml, tornarPesquisavel,
+    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, recalcularFiltrosCruzadosUnidade, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };

@@ -97,6 +97,9 @@ const TelaSof = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Fonte</label>
             <div id="sofFiltroFonte"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroFonte" title="Limpar filtro de Fonte">&times;</button>
           </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Ano</label>
+            <div id="sofFiltroAno"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroAno" title="Limpar filtro de Ano">&times;</button>
+          </div>
           <label style="align-self:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="sofFiltroSemNe" /> Sem NE emitida</label>
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosSof">Limpar filtros</button>
@@ -130,6 +133,7 @@ const TelaSof = (function () {
     UI.criarFiltroMultiplo('sofFiltroTipoUnidade', tiposUnidade, recalcularFiltrosCruzados_);
     UI.criarFiltroMultiplo('sofFiltroDea', ['SIM', 'NÃO']);
     UI.criarFiltroMultiplo('sofFiltroFonte', OPCOES_FONTE);
+    UI.criarFiltroMultiplo('sofFiltroAno', UI.listaAnos());
     UI.ligarLimpezaFiltros('.barra-filtros', 'btnLimparFiltrosSof', () => {
       document.getElementById('sofFiltroSemNe').checked = false;
       if (filtrosMudaram_()) { paginaAtual = 1; carregar(); }
@@ -153,6 +157,10 @@ const TelaSof = (function () {
       tipo_unidade: UI.valoresFiltroMultiplo('sofFiltroTipoUnidade'),
       dea: UI.valoresFiltroMultiplo('sofFiltroDea'),
       fonte: UI.valoresFiltroMultiplo('sofFiltroFonte'),
+      // Ano de exercício, tirado do Nº SOF ("173/2026") - ver anoDoSof_ em
+      // backend/Sof.gs. A SOF não tem competência (decisão do usuário: nesta
+      // tela só o Ano faz sentido).
+      ano: UI.valoresFiltroMultiplo('sofFiltroAno'),
       semNe: document.getElementById('sofFiltroSemNe').checked
     };
   }
@@ -160,7 +168,8 @@ const TelaSof = (function () {
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = {
     sofFiltroUnidade: 'unidade_id', sofFiltroOss: 'oss', sofFiltroObjeto: 'objeto',
-    sofFiltroTipoUnidade: 'tipo_unidade', sofFiltroDea: 'dea', sofFiltroFonte: 'fonte'
+    sofFiltroTipoUnidade: 'tipo_unidade', sofFiltroDea: 'dea', sofFiltroFonte: 'fonte',
+    sofFiltroAno: 'ano'
   };
 
   /**
