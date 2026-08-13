@@ -1858,15 +1858,6 @@ const TelaSof = (function () {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  /** "2026-07-21" -> "21 de Julho de 2026" (formato usado no cabeçalho do documento). */
-  function formatarDataSeiExtenso_(iso) {
-    if (!iso) return '';
-    const partes = String(iso).split('-');
-    if (partes.length !== 3) return iso;
-    const mes = NOMES_MESES_SEI_[Number(partes[1]) - 1] || partes[1];
-    return `${Number(partes[2])} de ${mes} de ${partes[0]}`;
-  }
-
   function parseManutencaoSei_(jsonTexto) {
     try {
       const arr = JSON.parse(jsonTexto || '[]');
@@ -1957,9 +1948,9 @@ const TelaSof = (function () {
 <meta charset="utf-8" />
 <title>${UI.escaparHtml(sof.sof_numero || sof.id)} - Solicitação Orçamentária e Financeira</title>
 <style>
-  body { font-family: Calibri, Arial, sans-serif; font-size: 12pt; color: #000; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000; max-width: 900px; margin: 24px auto; padding: 0 16px; }
   p { margin: 6pt 0; text-align: justify; }
-  h2 { text-align: center; font-size: 13pt; }
+  h2 { text-align: left; font-size: 13pt; }
   table.sei-tabela { border-collapse: collapse; width: 100%; margin: 8px 0; }
   table.sei-tabela td, table.sei-tabela th { border: 1px solid #000; padding: 4px 8px; font-size: 10.5pt; vertical-align: top; }
   table.sei-tabela th { text-align: center; }
@@ -1969,19 +1960,11 @@ const TelaSof = (function () {
 </style>
 </head>
 <body>
-  <h2>${UI.escaparHtml(sof.sof_numero || '')} - SES – Secretaria de Saúde - Solicitação Orçamentária e Financeira</h2>
-  <p class="sei-direita">Em, ${UI.escaparHtml(formatarDataSeiExtenso_(sof.sei_data))}</p>
-  <p><strong>Diretoria Geral de Planejamento Orçamentário - DGPO</strong></p>
-  <p>Prezado(a), Solicito (assinalar com X):</p>
+  <h2>SOF ${UI.escaparHtml(sof.sof_numero || '')} - SES – Secretaria de Saúde - Solicitação Orçamentária e Financeira</h2>
+  <p>Prezado(a), Solicito:</p>
   ${solicitacaoHtml}
 
-  <table class="sei-tabela">
-    <tr><td>Previsto no PCA? ( ${marcado_(sof.sei_previsto_pca, 'SIM')} ) SIM &nbsp; ( ${marcado_(sof.sei_previsto_pca, 'NÃO')} ) NÃO</td></tr>
-    <tr><td>Nº Plano de Contratações Anual (PCA): ${UI.escaparHtml(sof.sei_numero_pca || '')}</td></tr>
-    <tr><td>Nº Documento de Formalização da Demanda (DFD): ${UI.escaparHtml(sof.sei_numero_dfd || '')}</td></tr>
-  </table>
-
-  <p>Assinalar o pleito:</p>
+  <p>Em caso de envio à CPF/SAD, assinalar o pleito:</p>
   <table class="sei-tabela"><tbody>${pleitoHtml}</tbody></table>
 
   <p>Justificativa do pleito para a CPF/SAD:</p>
@@ -1997,6 +1980,7 @@ const TelaSof = (function () {
   <p>Ação: ${UI.escaparHtml(sof.sei_acao || '')}</p>
   <p>Subação: ${UI.escaparHtml(sof.sei_subacao || '')}</p>
   <p>Grupo de despesa: ${UI.escaparHtml(sof.sei_grupo_despesa || '')}</p>
+  <p>Contrato CEO: ${UI.escaparHtml(sof.ceo || '')}</p>
 
   <p>Valor total com cronograma de desembolso (mensal):</p>
   <table class="sei-tabela">
@@ -2025,7 +2009,13 @@ const TelaSof = (function () {
   <p>CEO E-fisco: ${UI.escaparHtml(sof.ceo || '')}</p>
 
   <p>Observações:</p>
-  ${OBSERVACOES_SEI_.map(o => `<p>${o}</p>`).join('')}
+  ${OBSERVACOES_SEI_.map(o => {
+    // Sublinha só o rótulo (até os dois-pontos), igual ao modelo do SEI -
+    // ver montarDocumentoSeiHtml_ acima. Strings fixas do código, não
+    // precisam escapar.
+    const fimRotulo = o.indexOf(':');
+    return fimRotulo === -1 ? `<p>${o}</p>` : `<p><u>${o.slice(0, fimRotulo + 1)}</u>${o.slice(fimRotulo + 1)}</p>`;
+  }).join('')}
 
   <table class="sei-tabela">
     <tr><th colspan="2">SOLICITANTE</th></tr>
