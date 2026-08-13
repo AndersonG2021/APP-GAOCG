@@ -1,0 +1,399 @@
+/*
+ * GAOCG App - "Novo visual" (sessão 2026-08-13, pedido do usuário).
+ *
+ * Este arquivo roda em PARALELO a css/style.css, nunca no lugar dele - é
+ * carregado sempre, mas só faz efeito quando <html> tem o atributo
+ * data-tema="novo" (ver js/tema.js e o script inline em index.html, que
+ * aplica o atributo ANTES do parser chegar no <body>, pra nunca piscar um
+ * visual e trocar pro outro). Voltar pro visual de sempre é clicar em
+ * "Atual" no controle do topo (ou desfazer as poucas linhas que este
+ * arquivo/tema.js acrescentaram a index.html e app.js - ver os dois "git
+ * diff" no momento em que isso foi commitado) - nenhuma tela ou função de
+ * negócio existente foi alterada por este redesenho, só a aparência.
+ *
+ * A técnica: css/style.css já é 100% orientado a variáveis (--azul, --verde,
+ * --cinza-100..900, --raio, --sombra...) e os componentes (cards, stepper,
+ * selos, botões) já usam SVG de verdade (não emoji) - então a maior parte do
+ * "novo visual" é só redefinir os VALORES dessas variáveis dentro do escopo
+ * [data-tema="novo"]. As exceções (--lateral-* e --superficie*) existem
+ * porque --azul-escuro e --branco faziam DOIS papéis cada um no CSS antigo
+ * (ex.: --branco = "fundo de card" E "texto branco em cima de botão azul" -
+ * papéis que precisam de cores DIFERENTES no tema escuro), então esses dois
+ * papéis foram separados em tokens novos só pra este arquivo.
+ */
+
+/* ============================================================
+   Controle de alternância (SEMPRE carregado, mesmo com o tema
+   antigo ativo - é o próprio controle que liga o novo visual).
+   Usa as variáveis de css/style.css (--azul, --cinza-200 etc.) -
+   como os dois arquivos definem os mesmos nomes, o controle já
+   nasce com a cor certa não importa qual tema esteja ativo.
+============================================================ */
+.tema-controles { display: flex; align-items: center; gap: 6px; }
+.tema-segmento { display: flex; background: var(--cinza-100); border: 1px solid var(--cinza-300); border-radius: 999px; padding: 2px; }
+.tema-seg-btn {
+  border: none; background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--cinza-700);
+  padding: 5px 11px; border-radius: 999px; cursor: pointer;
+}
+.tema-seg-btn.ativo { background: var(--azul); color: var(--branco); }
+.tema-modo-cor { display: flex; gap: 2px; background: var(--cinza-100); border: 1px solid var(--cinza-300); border-radius: 999px; padding: 2px; }
+.tema-modo-cor.oculto { display: none; }
+.tema-modo-btn { border: none; background: none; padding: 5px 7px; border-radius: 999px; cursor: pointer; color: var(--cinza-500); display: flex; }
+.tema-modo-btn.ativo { background: var(--branco); color: var(--azul); box-shadow: var(--sombra); }
+.tema-modo-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ============================================================
+   TOKENS - claro (padrão do novo visual)
+============================================================ */
+html[data-tema="novo"] {
+  color-scheme: light;
+
+  --fundo: #F2F4FA;         /* NOVO - fundo da página (era --cinza-100, que também fazia papel de "preenchimento dentro do card") */
+  --superficie: #FFFFFF;    /* NOVO - fundo de card/painel/modal (papel que --branco fazia sozinho antes) */
+  --superficie-2: #F8F9FD;  /* NOVO - preenchimento sutil dentro de um card já branco (grade de infos, cabeçalho de tabela) */
+
+  --azul: #2C4FBF;
+  --azul-escuro: #1B3480;   /* só texto/título agora - o fundo da barra lateral virou --lateral-fundo, ver abaixo */
+  --azul-claro: #E7ECFB;
+  --verde: #157F53;
+  --verde-claro: #E1F5EA;
+  --vermelho: #C13327;
+  --vermelho-claro: #FBE9E7;
+  --amarelo: #B15A0A;
+  --amarelo-claro: #FBEEDC;
+  --roxo: #6D45C9;
+  --roxo-claro: #EFE9FC;
+  --ciano: #0D7C87;
+  --ciano-claro: #DFF3F4;
+
+  --cinza-100: #F8F9FD;
+  --cinza-200: #E1E5F0;
+  --cinza-300: #CBD2E3;
+  --cinza-500: #8891A8;
+  --cinza-700: #4A5470;
+  --cinza-900: #101828;
+  --branco: #FFFFFF;        /* fica literal (texto sobre fundo colorido) nos dois modos - só a SUPERFÍCIE muda no escuro */
+
+  --raio: 12px;
+  --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 1px rgba(16,24,40,.04);
+  --sombra-forte: 0 10px 26px rgba(16,24,40,.12), 0 2px 8px rgba(16,24,40,.07);
+
+  --lateral-fundo: #0E1730;
+  --lateral-fundo-2: #16213F;
+  --lateral-texto: #B7C0DC;
+  --lateral-acento: #24345C;
+
+  --fonte-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+/* ===== TOKENS - escuro (3 estados: sistema, claro forçado, escuro forçado) =====
+   Repetido em dois gatilhos de propósito - "seguir o sistema" (só quando o
+   SO pede dark E o usuário não forçou "claro") e "escuro" explícito (ganha
+   do sistema nos dois sentidos). Sem isso o SO no claro + usuário pedindo
+   "escuro" explicitamente ficaria sem efeito. */
+@media (prefers-color-scheme: dark) {
+  html[data-tema="novo"]:not([data-modo-cor="claro"]) {
+    color-scheme: dark;
+    --fundo: #0A1020;
+    --superficie: #121A2E;
+    --superficie-2: #0E1526;
+
+    --azul: #7C9AF5;
+    --azul-escuro: #A9BEFA;
+    --azul-claro: rgba(124,154,245,.16);
+    --verde: #3FCE8E;
+    --verde-claro: rgba(63,206,142,.14);
+    --vermelho: #F0776A;
+    --vermelho-claro: rgba(240,119,106,.14);
+    --amarelo: #EFA83F;
+    --amarelo-claro: rgba(239,168,63,.14);
+    --roxo: #B79CF0;
+    --roxo-claro: rgba(183,156,240,.14);
+    --ciano: #4FD3DD;
+    --ciano-claro: rgba(79,211,221,.14);
+
+    --cinza-100: #18213A;
+    --cinza-200: #232D46;
+    --cinza-300: #303C5C;
+    --cinza-500: #6B7592;
+    --cinza-700: #A2AAC6;
+    --cinza-900: #E9ECF7;
+
+    --sombra: 0 1px 2px rgba(0,0,0,.3);
+    --sombra-forte: 0 10px 26px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.3);
+
+    --lateral-fundo: #060A16;
+    --lateral-fundo-2: #0E1526;
+    --lateral-texto: #8D96B5;
+    --lateral-acento: #1B2748;
+  }
+}
+html[data-tema="novo"][data-modo-cor="escuro"] {
+  color-scheme: dark;
+  --fundo: #0A1020;
+  --superficie: #121A2E;
+  --superficie-2: #0E1526;
+
+  --azul: #7C9AF5;
+  --azul-escuro: #A9BEFA;
+  --azul-claro: rgba(124,154,245,.16);
+  --verde: #3FCE8E;
+  --verde-claro: rgba(63,206,142,.14);
+  --vermelho: #F0776A;
+  --vermelho-claro: rgba(240,119,106,.14);
+  --amarelo: #EFA83F;
+  --amarelo-claro: rgba(239,168,63,.14);
+  --roxo: #B79CF0;
+  --roxo-claro: rgba(183,156,240,.14);
+  --ciano: #4FD3DD;
+  --ciano-claro: rgba(79,211,221,.14);
+
+  --cinza-100: #18213A;
+  --cinza-200: #232D46;
+  --cinza-300: #303C5C;
+  --cinza-500: #6B7592;
+  --cinza-700: #A2AAC6;
+  --cinza-900: #E9ECF7;
+
+  --sombra: 0 1px 2px rgba(0,0,0,.3);
+  --sombra-forte: 0 10px 26px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.3);
+
+  --lateral-fundo: #060A16;
+  --lateral-fundo-2: #0E1526;
+  --lateral-texto: #8D96B5;
+  --lateral-acento: #1B2748;
+}
+
+/* ============================================================
+   BASE
+============================================================ */
+html[data-tema="novo"] body {
+  background: var(--fundo);
+  color: var(--cinza-900);
+  font-variant-numeric: tabular-nums;
+}
+html[data-tema="novo"] ::-webkit-scrollbar-thumb { background: var(--cinza-300); }
+@media (prefers-reduced-motion: reduce) {
+  html[data-tema="novo"] * { animation: none !important; transition: none !important; }
+}
+
+/* ===== Login ===== */
+html[data-tema="novo"] #telaLogin { background: linear-gradient(160deg, var(--lateral-fundo), var(--azul)); }
+html[data-tema="novo"] .cartao-login { background: var(--superficie); box-shadow: var(--sombra-forte); border: 1px solid var(--cinza-200); }
+
+/* ===== Barra lateral / topo ===== */
+html[data-tema="novo"] #barraLateral { background: var(--lateral-fundo); }
+html[data-tema="novo"] #barraLateral .logo { border-bottom-color: rgba(255,255,255,.08); letter-spacing: -.01em; }
+html[data-tema="novo"] #barraLateral nav { padding: 10px; }
+html[data-tema="novo"] #barraLateral nav button { color: var(--lateral-texto); border-radius: 8px; margin-bottom: 1px; }
+html[data-tema="novo"] #barraLateral nav button:hover { background: rgba(255,255,255,.06); color: #fff; }
+html[data-tema="novo"] #barraLateral nav button.ativo { background: var(--lateral-fundo-2); color: #fff; box-shadow: inset 2px 0 0 var(--azul); }
+html[data-tema="novo"] #barraTopo { background: var(--superficie); border-bottom-color: var(--cinza-200); }
+html[data-tema="novo"] #barraTopo .usuario-info strong { color: var(--cinza-900); }
+html[data-tema="novo"] #barraTopo .usuario-info { color: var(--cinza-500); }
+html[data-tema="novo"] #conteudo { color: var(--cinza-900); }
+
+/* ===== Título de tela ===== */
+html[data-tema="novo"] h2.titulo-tela { color: var(--cinza-900); font-size: 20px; font-weight: 700; letter-spacing: -.015em; }
+
+/* ===== Botões ===== */
+html[data-tema="novo"] .botao {
+  background: var(--superficie); color: var(--cinza-900); border: 1px solid var(--cinza-300);
+  border-radius: 9px; box-shadow: none; transition: background-color .12s ease, border-color .12s ease, transform .06s ease;
+}
+html[data-tema="novo"] .botao:hover { filter: none; background: var(--superficie-2); }
+html[data-tema="novo"] .botao:active { filter: none; }
+html[data-tema="novo"] .botao.primario { background: var(--azul); border-color: var(--azul); color: var(--branco); }
+html[data-tema="novo"] .botao.primario:hover { background: var(--azul-escuro); border-color: var(--azul-escuro); }
+html[data-tema="novo"] .botao.perigo { background: var(--vermelho); border-color: var(--vermelho); color: var(--branco); }
+html[data-tema="novo"] .botao.sucesso { background: var(--verde); border-color: var(--verde); color: var(--branco); }
+html[data-tema="novo"] .botao-limpar-filtros { background: var(--vermelho-claro); border-color: transparent; color: var(--vermelho); }
+html[data-tema="novo"] .botao-icone { background: var(--superficie-2); color: var(--cinza-700); border-radius: 8px; }
+html[data-tema="novo"] .botao-icone.editar:hover { background: var(--azul-claro); color: var(--azul-escuro); }
+html[data-tema="novo"] .botao-icone.excluir { color: var(--vermelho); background: transparent; }
+html[data-tema="novo"] .botao-icone.excluir:hover { background: var(--vermelho-claro); }
+
+/* ===== Campos de formulário ===== */
+html[data-tema="novo"] .campo label { color: var(--cinza-700); font-weight: 650; }
+html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]),
+html[data-tema="novo"] .campo select,
+html[data-tema="novo"] .campo textarea,
+html[data-tema="novo"] .select-pesquisavel-input,
+html[data-tema="novo"] .filtro-multiplo-cabecalho,
+html[data-tema="novo"] .filtro-multiplo-busca,
+html[data-tema="novo"] .dash-graf-controles select,
+html[data-tema="novo"] .rel-input {
+  background: var(--superficie); color: var(--cinza-900); border: 1px solid var(--cinza-300);
+  border-radius: 9px; transition: border-color .12s ease, box-shadow .12s ease;
+}
+html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]):focus,
+html[data-tema="novo"] .campo select:focus,
+html[data-tema="novo"] .campo textarea:focus,
+html[data-tema="novo"] .select-pesquisavel-input:focus,
+html[data-tema="novo"] .filtro-multiplo-busca:focus,
+html[data-tema="novo"] .rel-input:focus {
+  outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-claro);
+}
+html[data-tema="novo"] .campo input.destaque-repeticao,
+html[data-tema="novo"] .campo select.destaque-repeticao,
+html[data-tema="novo"] .campo textarea.destaque-repeticao { border-color: var(--amarelo); background: var(--amarelo-claro); }
+html[data-tema="novo"] .campo input.campo-invalido { border-color: var(--vermelho); background: var(--vermelho-claro); }
+html[data-tema="novo"] .campo .ajuda { color: var(--cinza-500); }
+html[data-tema="novo"] .select-pesquisavel-lista { background: var(--superficie); border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
+html[data-tema="novo"] .select-pesquisavel-opcao:hover, html[data-tema="novo"] .select-pesquisavel-opcao.destacada { background: var(--azul-claro); color: var(--azul-escuro); }
+html[data-tema="novo"] .filtro-multiplo.tem-selecao .filtro-multiplo-cabecalho { border-color: var(--azul); background: var(--azul-claro); color: var(--azul-escuro); }
+html[data-tema="novo"] .filtro-multiplo-painel { background: var(--superficie); border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
+html[data-tema="novo"] .filtro-multiplo-opcao:hover { background: var(--superficie-2); }
+html[data-tema="novo"] .linhas-fonte, html[data-tema="novo"] .linha-fonte, html[data-tema="novo"] .linha-fonte-cronograma,
+html[data-tema="novo"] .linha-ta, html[data-tema="novo"] .linha-parcela-dividida { background: var(--superficie-2); }
+html[data-tema="novo"] .linha-fonte-total-exibicao { background: var(--superficie); border-color: var(--cinza-200); color: var(--cinza-900); }
+html[data-tema="novo"] .linha-fonte-total-atendido-exibicao { background: var(--verde-claro); color: var(--verde); border-color: var(--verde-claro); }
+html[data-tema="novo"] .linha-fonte-mes-campo.mes-atendido input { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); }
+html[data-tema="novo"] .linha-fonte-mes-campo.mes-pendente input { background: var(--vermelho-claro); border-color: var(--vermelho); color: var(--vermelho); }
+
+/* ===== Painéis / filtros / tabelas ===== */
+html[data-tema="novo"] .painel { background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200); }
+html[data-tema="novo"] table.tabela th { background: var(--superficie-2); color: var(--cinza-700); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+html[data-tema="novo"] table.tabela th, html[data-tema="novo"] table.tabela td { border-bottom-color: var(--cinza-200); }
+html[data-tema="novo"] table.tabela tbody tr:hover { background: var(--superficie-2); }
+html[data-tema="novo"] table.tabela tbody tr.linha-parada { background: var(--amarelo-claro); }
+html[data-tema="novo"] .cartao-grupo-recibo { background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200); border-left: 3px solid var(--azul); }
+html[data-tema="novo"] .cartao-grupo-recibo-cabecalho { background: var(--azul-claro); }
+html[data-tema="novo"] .cartao-grupo-recibo-titulo { color: var(--azul-escuro); }
+html[data-tema="novo"] .select-status-recibo { background-color: var(--cinza-100); color: var(--cinza-700); border: none; }
+html[data-tema="novo"] .paginacao { color: var(--cinza-500); }
+
+/* ===== Selos / badges ===== */
+html[data-tema="novo"] .selo.azul { background: var(--azul-claro); color: var(--azul-escuro); }
+html[data-tema="novo"] .selo.verde { background: var(--verde-claro); color: var(--verde); }
+html[data-tema="novo"] .selo.amarelo { background: var(--amarelo-claro); color: var(--amarelo); }
+html[data-tema="novo"] .selo.vermelho { background: var(--vermelho-claro); color: var(--vermelho); }
+html[data-tema="novo"] .selo.cinza { background: var(--cinza-100); color: var(--cinza-700); }
+
+/* ===== Cards indicadores (Dashboard) - sem a barra colorida decorativa;
+   o ícone (já é SVG de verdade, ver ICONE_* em dashboard.js) vira um chip
+   redondo com fundo suave, e a cor só aparece quando o cartão tem mesmo algo
+   pra sinalizar (ver corClasse por cartão em dashboard.js). ===== */
+html[data-tema="novo"] .cartao-indicador {
+  background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200);
+  border-top: none; padding: 18px 19px;
+}
+html[data-tema="novo"] .cartao-indicador.acento-azul,
+html[data-tema="novo"] .cartao-indicador.acento-verde,
+html[data-tema="novo"] .cartao-indicador.acento-amarelo,
+html[data-tema="novo"] .cartao-indicador.acento-vermelho,
+html[data-tema="novo"] .cartao-indicador.acento-roxo,
+html[data-tema="novo"] .cartao-indicador.acento-ciano { border-top: none; }
+html[data-tema="novo"] .cartao-indicador.clicavel:hover { transform: none; box-shadow: var(--sombra-forte); border-color: var(--cinza-300); }
+html[data-tema="novo"] .cartao-indicador .valor { color: var(--cinza-900); font-size: 26px; letter-spacing: -.02em; }
+html[data-tema="novo"] .cartao-indicador .rotulo { color: var(--cinza-700); font-weight: 600; font-size: 12.5px; }
+html[data-tema="novo"] .cartao-indicador-icone { width: 38px; height: 38px; background: var(--cinza-100); color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-indicador-icone.verde { background: var(--verde-claro); color: var(--verde); }
+html[data-tema="novo"] .cartao-indicador-icone.amarelo { background: var(--amarelo-claro); color: var(--amarelo); }
+html[data-tema="novo"] .cartao-indicador-icone.vermelho { background: var(--vermelho-claro); color: var(--vermelho); }
+html[data-tema="novo"] .cartao-indicador-icone.roxo { background: var(--roxo-claro); color: var(--roxo); }
+html[data-tema="novo"] .cartao-indicador-icone.ciano { background: var(--ciano-claro); color: var(--ciano); }
+html[data-tema="novo"] .cartao-indicador-delta { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-indicador-delta.positivo { color: var(--verde); }
+html[data-tema="novo"] .cartao-indicador-delta.negativo { color: var(--vermelho); }
+html[data-tema="novo"] .cartao-indicador-subvalor { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-indicador-barra, html[data-tema="novo"] .barra-progresso { background: var(--superficie-2); border: 1px solid var(--cinza-200); }
+html[data-tema="novo"] .dash-etiqueta { color: var(--cinza-500); }
+html[data-tema="novo"] .dash-subtitulo { color: var(--cinza-700); }
+html[data-tema="novo"] .dash-item-lista:hover { background: var(--superficie-2); }
+
+/* ===== Cards de SOF / Notas de Empenho / Unidades - a borda colorida de 4px
+   vira um contorno fino neutro (o estado "parado"/"alerta" continua se
+   destacando pelo fundo tingido, sem depender só de uma faixa de cor). ===== */
+html[data-tema="novo"] .cartao-sof, html[data-tema="novo"] .cartao-ne, html[data-tema="novo"] .cartao-unidade {
+  background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200); border-left: 1px solid var(--cinza-200);
+}
+html[data-tema="novo"] .cartao-sof:hover, html[data-tema="novo"] .cartao-ne:hover, html[data-tema="novo"] .cartao-unidade:hover { box-shadow: var(--sombra-forte); border-color: var(--cinza-300); }
+html[data-tema="novo"] .cartao-sof.parado { border-left: 1px solid var(--amarelo); background: var(--amarelo-claro); }
+html[data-tema="novo"] .cartao-ne.alerta { border-left: 1px solid var(--vermelho); background: var(--vermelho-claro); }
+html[data-tema="novo"] .cartao-unidade.inativa { border-left-color: var(--cinza-200); }
+html[data-tema="novo"] .cartao-sof-titulo, html[data-tema="novo"] .cartao-ne-numero { color: var(--cinza-900); font-family: var(--fonte-mono); font-size: 19px; letter-spacing: -.01em; }
+html[data-tema="novo"] .cartao-sof-subtitulo { color: var(--cinza-500); font-weight: 650; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+html[data-tema="novo"] .cartao-ne-unidade { color: var(--cinza-500); font-weight: 650; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+html[data-tema="novo"] .cartao-sof-infogrid, html[data-tema="novo"] .cartao-ne-infogrid { background: var(--superficie-2); border: 1px solid var(--cinza-200); }
+html[data-tema="novo"] .cartao-sof-infogrid-item span, html[data-tema="novo"] .cartao-ne-infogrid-item span { color: var(--cinza-500); font-weight: 650; }
+html[data-tema="novo"] .cartao-sof-infogrid-item strong, html[data-tema="novo"] .cartao-ne-infogrid-item strong { color: var(--cinza-900); }
+/* Número do Processo é sempre o 1º item da grade da SOF (ver abrirFormulario/
+   listarSof em js/sof.js) - único jeito de mirar "isto é um código", sem
+   precisar marcar cada campo no HTML gerado. */
+html[data-tema="novo"] .cartao-sof-infogrid-item:nth-child(1) strong { font-family: var(--fonte-mono); font-size: 12.5px; }
+html[data-tema="novo"] .cartao-ne-infogrid-item strong.vermelho { color: var(--vermelho); }
+html[data-tema="novo"] .cartao-ne-infogrid-item strong.verde { color: var(--verde); }
+html[data-tema="novo"] .cartao-sof-andamento-topo { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-sof-andamento-topo strong { color: var(--cinza-900); }
+html[data-tema="novo"] .cartao-sof-rodape { border-top-color: var(--cinza-200); }
+html[data-tema="novo"] .cartao-ne-detalhe { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-ne-linhas, html[data-tema="novo"] .cartao-ne-cronograma-caixa { background: var(--superficie-2); }
+html[data-tema="novo"] .cartao-ne-linhas label { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-ne-cronograma-badge { background: var(--superficie); color: var(--cinza-700); }
+html[data-tema="novo"] .tabela-reforcos, html[data-tema="novo"] .cartao-ne-cronograma-caixa table.tabela th,
+html[data-tema="novo"] .cartao-ne-cronograma-caixa table.tabela td { background: var(--superficie); }
+html[data-tema="novo"] .cronograma-ne-item { background: var(--superficie-2); }
+html[data-tema="novo"] .cronograma-solicitado-item.atendido { background: var(--verde-claro); color: var(--verde); }
+html[data-tema="novo"] .cronograma-solicitado-item.pendente { background: var(--vermelho-claro); color: var(--vermelho); }
+html[data-tema="novo"] .cartao-ne-cronograma-solicitado { border-bottom-color: var(--cinza-200); }
+
+html[data-tema="novo"] .cartao-unidade-cabecalho h3 { color: var(--cinza-900); }
+html[data-tema="novo"] .cartao-unidade-repasse-regular { color: var(--verde); }
+html[data-tema="novo"] .cartao-unidade-repasse-total, html[data-tema="novo"] .cartao-unidade-meta { color: var(--cinza-700); }
+html[data-tema="novo"] .cartao-unidade-detalhe { border-top-color: var(--cinza-200); }
+html[data-tema="novo"] .cartao-unidade-detalhe-linha { color: var(--cinza-700); }
+html[data-tema="novo"] .cartao-unidade-detalhe-secao { color: var(--cinza-500); }
+html[data-tema="novo"] .cartao-unidade-ta-vencido { color: var(--vermelho); }
+
+/* ===== Stepper de andamento ===== */
+html[data-tema="novo"] .stepper-no:not(:first-child)::before { background: var(--cinza-300); height: 2px; }
+html[data-tema="novo"] .stepper-no.concluido:not(:first-child)::before, html[data-tema="novo"] .stepper-no.atual:not(:first-child)::before { background: var(--verde); }
+html[data-tema="novo"] .stepper-marcador { background: var(--superficie); color: var(--cinza-500); border: 2px solid var(--cinza-300); box-shadow: none; }
+html[data-tema="novo"] .stepper-no.concluido .stepper-marcador { background: var(--verde); border-color: var(--verde); color: var(--branco); }
+html[data-tema="novo"] .stepper-no.atual .stepper-marcador { background: var(--azul-claro); border-color: var(--azul); color: var(--azul-escuro); box-shadow: none; }
+html[data-tema="novo"] .stepper-rotulo { color: var(--cinza-500); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+html[data-tema="novo"] .stepper-no.concluido .stepper-rotulo, html[data-tema="novo"] .stepper-no.atual .stepper-rotulo { color: var(--cinza-900); }
+
+/* ===== Modal ===== */
+html[data-tema="novo"] .sobreposicao-modal { background: rgba(10,16,32,.55); }
+html[data-tema="novo"] .modal { background: var(--superficie); box-shadow: var(--sombra-forte); border: 1px solid var(--cinza-200); }
+html[data-tema="novo"] .modal-cabecalho { border-bottom-color: var(--cinza-200); }
+html[data-tema="novo"] .modal-cabecalho h3 { color: var(--cinza-900); font-weight: 700; }
+html[data-tema="novo"] .modal-cabecalho button.fechar { color: var(--cinza-500); }
+html[data-tema="novo"] .modal-cabecalho button.fechar:hover { color: var(--vermelho); }
+html[data-tema="novo"] .modal-rodape { border-top-color: var(--cinza-200); background: var(--superficie-2); }
+html[data-tema="novo"] .sei-secao-titulo { color: var(--azul-escuro); font-weight: 700; letter-spacing: .06em; font-size: 11px; border-top-color: var(--cinza-200); }
+html[data-tema="novo"] .aviso-divergencia { color: var(--amarelo); }
+html[data-tema="novo"] .aviso-edicao-simultanea { background: var(--amarelo-claro); border-color: var(--amarelo); }
+html[data-tema="novo"] .estado-vazio { color: var(--cinza-500); }
+html[data-tema="novo"] .aviso-exclusao { color: var(--vermelho); }
+html[data-tema="novo"] .editor-rico { background: var(--superficie); border-color: var(--cinza-300); }
+html[data-tema="novo"] .editor-rico-barra { background: var(--superficie-2); border-bottom-color: var(--cinza-200); }
+html[data-tema="novo"] .editor-rico-btn { background: var(--superficie); border-color: var(--cinza-300); color: var(--cinza-900); }
+html[data-tema="novo"] .editor-rico-area { color: var(--cinza-900); }
+html[data-tema="novo"] .editor-rico-area:empty:before { color: var(--cinza-500); }
+
+/* ===== Dock de modais minimizados / toasts / spinner ===== */
+html[data-tema="novo"] .dock-modal-card { background: var(--superficie); border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
+html[data-tema="novo"] .dock-modal-card:hover { border-color: var(--azul); background: var(--azul-claro); }
+html[data-tema="novo"] .dock-modal-card-titulo { color: var(--cinza-900); }
+html[data-tema="novo"] .toast { box-shadow: var(--sombra-forte); }
+html[data-tema="novo"] #sobreposicaoCarregando { background: rgba(10,16,32,.35); }
+html[data-tema="novo"] .spinner { border-color: var(--cinza-200); border-top-color: var(--azul); }
+
+/* ===== Gráficos do Dashboard ===== */
+html[data-tema="novo"] .dash-graf-controles label { color: var(--cinza-500); }
+html[data-tema="novo"] .graf-hbar-rotulo, html[data-tema="novo"] .graf-hbar-valor { color: var(--cinza-700); }
+html[data-tema="novo"] .graf-hbar-trilho { background: var(--superficie-2); }
+html[data-tema="novo"] .graf-hbar-fill { background: var(--azul); }
+html[data-tema="novo"] .graf-leg-rotulo { color: var(--cinza-700); }
+html[data-tema="novo"] .graf-leg-valor { color: var(--cinza-500); }
+html[data-tema="novo"] .graf-tabela-wrap summary { color: var(--azul); }
+html[data-tema="novo"] .graf-eixo-txt { fill: var(--cinza-500); }
+html[data-tema="novo"] .graf-val-txt { fill: var(--cinza-700); }
+
+/* ===== Assistente de relatório ===== */
+html[data-tema="novo"] .rel-secao > label { color: var(--azul-escuro); }
+html[data-tema="novo"] .rel-hint { color: var(--cinza-500); }
+html[data-tema="novo"] .rel-modelos, html[data-tema="novo"] .rel-salvar { background: var(--superficie-2); border-radius: var(--raio); }

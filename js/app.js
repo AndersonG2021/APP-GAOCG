@@ -1005,6 +1005,8 @@ const App = (function () {
   }
 
   function init() {
+    Tema.montarControles();
+
     document.querySelectorAll('#barraLateral nav button').forEach(btn => {
       btn.addEventListener('click', () => { navegarPara(btn.dataset.tela); fecharMenuMobile(); });
     });
