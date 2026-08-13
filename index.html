@@ -6,6 +6,27 @@
   <title>GAOCG App - Gestão Orçamentária dos Contratos de Gestão</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
+  <!--
+    "Novo visual" (sessão 2026-08-13) - roda em PARALELO ao style.css acima,
+    nunca no lugar dele (ver css/tema-novo.css). Continua carregado mesmo com
+    o tema antigo ativo porque é o próprio controle no topo que liga o novo
+    visual (js/tema.js).
+  -->
+  <link rel="stylesheet" href="css/tema-novo.css" />
+  <script>
+    // Aplica o tema salvo ANTES do <body> ser montado, pra nunca piscar um
+    // visual e trocar pro outro - por isso é um script síncrono aqui (não
+    // "defer" como os demais), e repete a mesma leitura de localStorage que
+    // js/tema.js faz (esse só carrega tarde demais pra evitar o flash).
+    (function () {
+      try {
+        var visual = localStorage.getItem('gaocg_tema_visual') || 'antigo';
+        var modoCor = localStorage.getItem('gaocg_tema_modo_cor') || 'sistema';
+        document.documentElement.setAttribute('data-tema', visual);
+        if (modoCor !== 'sistema') document.documentElement.setAttribute('data-modo-cor', modoCor);
+      } catch (e) { /* localStorage indisponível (modo privado etc.) - fica no tema antigo. */ }
+    })();
+  </script>
 </head>
 <body>
 
@@ -54,6 +75,7 @@
         <button type="button" id="btnMenuMobile" class="botao-icone oculto-desktop" aria-label="Abrir menu">☰</button>
         <div id="tituloTopo" style="font-weight:600;color:var(--azul-escuro)"></div>
         <div style="display:flex;align-items:center;gap:16px">
+          <div id="temaControles"></div>
           <div class="usuario-info">
             <strong id="nomeUsuarioTopo"></strong>
             <span id="perfilUsuarioTopo"></span>
@@ -78,7 +100,7 @@
   <div id="dockModais" class="dock-modais"></div>
 
   <!--
-    defer: os 14 arquivos são baixados em PARALELO durante o parse do HTML e
+    defer: os 15 arquivos são baixados em PARALELO durante o parse do HTML e
     executados na ordem declarada, logo antes do DOMContentLoaded - em vez de
     um download bloqueante atrás do outro. A ordem entre eles continua
     garantida (é isso que `defer` promete), então as dependências de carga
@@ -101,6 +123,7 @@
   <script defer src="js/log-auditoria.js"></script>
   <script defer src="js/relatorios.js"></script>
   <script defer src="js/dashboard.js"></script>
+  <script defer src="js/tema.js"></script>
   <script defer src="js/app.js"></script>
 </body>
 </html>
