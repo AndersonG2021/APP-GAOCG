@@ -1917,8 +1917,18 @@ const TelaSof = (function () {
   function montarDocumentoSeiHtml_(sof) {
     const nl2br_ = texto => UI.escaparHtml(texto || '').replace(/\n/g, '<br>');
     const marcado_ = (valorAtual, opcao) => valorAtual === opcao ? 'X' : '&nbsp;';
+    // Soma direto do cronograma, em vez de usar f.total_solicitado (sessão
+    // 2026-08-13, achado do usuário: coluna Total saindo zerada). Esse campo
+    // só existe de verdade na resposta do backend - o formulário nunca lê/
+    // escreve nele (é só um <strong> calculado na tela, ver
+    // atualizarTotalLinhaFonte_) - e em salvarSof o sofCompleta é montado com
+    // `Object.assign({}, sofExistente, resposta, dados)`, onde dados.fontes
+    // (lido do DOM, sem total_solicitado) SOBRESCREVE resposta.fontes (que
+    // tinha o valor certo). Calcular aqui evita depender dessa ordem de
+    // merge - e é literalmente a mesma conta que o formulário já faz.
+    const totalPorCronograma_ = f => (f.cronograma || []).reduce((s, c) => s + (Number(c.valor) || 0), 0);
     const fontes = sof.fontes || [];
-    const totalFontes = fontes.reduce((s, f) => s + (Number(f.total_solicitado) || 0), 0);
+    const totalFontes = fontes.reduce((s, f) => s + totalPorCronograma_(f), 0);
     const linhasManutencao = parseManutencaoSei_(sof.sei_manutencao_linhas).filter(l => l.codigo || l.elemento || l.valor);
     const totalManutencao = linhasManutencao.reduce((s, l) => s + (Number(l.valor) || 0), 0);
 
@@ -1933,7 +1943,7 @@ const TelaSof = (function () {
           const porMes = {};
           (f.cronograma || []).forEach(c => { porMes[c.mes] = c.valor; });
           const celulasMeses = Array.from({ length: 12 }, (_, i) => `<td>${porMes[i + 1] ? UI.formatarMoeda(porMes[i + 1]) : ''}</td>`).join('');
-          return `<tr><td>${UI.escaparHtml(f.codigo_poas || '')}</td><td>${UI.escaparHtml(f.fonte || '')}</td>${celulasMeses}<td>${UI.formatarMoeda(f.total_solicitado)}</td></tr>`;
+          return `<tr><td>${UI.escaparHtml(f.codigo_poas || '')}</td><td>${UI.escaparHtml(f.fonte || '')}</td>${celulasMeses}<td>${UI.formatarMoeda(totalPorCronograma_(f))}</td></tr>`;
         }).join('')
       : `<tr><td colspan="15" style="text-align:center">Nenhuma fonte cadastrada no SOF.</td></tr>`;
 
