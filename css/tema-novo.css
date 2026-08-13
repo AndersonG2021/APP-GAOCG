@@ -90,78 +90,98 @@ html[data-tema="novo"] {
    Repetido em dois gatilhos de propósito - "seguir o sistema" (só quando o
    SO pede dark E o usuário não forçou "claro") e "escuro" explícito (ganha
    do sistema nos dois sentidos). Sem isso o SO no claro + usuário pedindo
-   "escuro" explicitamente ficaria sem efeito. */
+   "escuro" explicitamente ficaria sem efeito.
+
+   Ajuste 2026-08-13 (feedback do usuário: "cards sem destaque no escuro") -
+   duas causas: sombra escura não gera contraste nenhum sobre um fundo já
+   escuro (sombra só "aparece" contra algo mais claro ao redor), e
+   --superficie/--cinza-200 estavam próximos demais de --fundo. Correção:
+   --superficie bem mais clara que --fundo (card se separa da página mesmo
+   sem sombra), borda (--cinza-200/300) mais clara pra ficar visível contra a
+   superfície, e a "sombra" ganhou um friso de 1px claro por cima (efeito
+   comum de elevação em UI escura - simula luz batendo na borda de cima) em
+   vez de depender só do blur preto. */
 @media (prefers-color-scheme: dark) {
   html[data-tema="novo"]:not([data-modo-cor="claro"]) {
     color-scheme: dark;
-    --fundo: #0A1020;
-    --superficie: #121A2E;
-    --superficie-2: #0E1526;
+    --fundo: #080C17;
+    --superficie: #16213D;
+    --superficie-2: #101A30;
 
     --azul: #7C9AF5;
     --azul-escuro: #A9BEFA;
-    --azul-claro: rgba(124,154,245,.16);
+    --azul-claro: rgba(124,154,245,.18);
     --verde: #3FCE8E;
-    --verde-claro: rgba(63,206,142,.14);
+    --verde-claro: rgba(63,206,142,.16);
     --vermelho: #F0776A;
-    --vermelho-claro: rgba(240,119,106,.14);
+    --vermelho-claro: rgba(240,119,106,.16);
     --amarelo: #EFA83F;
-    --amarelo-claro: rgba(239,168,63,.14);
+    --amarelo-claro: rgba(239,168,63,.16);
     --roxo: #B79CF0;
-    --roxo-claro: rgba(183,156,240,.14);
+    --roxo-claro: rgba(183,156,240,.16);
     --ciano: #4FD3DD;
-    --ciano-claro: rgba(79,211,221,.14);
+    --ciano-claro: rgba(79,211,221,.16);
 
-    --cinza-100: #18213A;
-    --cinza-200: #232D46;
-    --cinza-300: #303C5C;
-    --cinza-500: #6B7592;
-    --cinza-700: #A2AAC6;
-    --cinza-900: #E9ECF7;
+    --cinza-100: #1C2745;
+    --cinza-200: #2E3B5E;
+    --cinza-300: #3D4C74;
+    --cinza-500: #7F89A8;
+    --cinza-700: #AEB6D1;
+    --cinza-900: #EDF0FA;
 
-    --sombra: 0 1px 2px rgba(0,0,0,.3);
-    --sombra-forte: 0 10px 26px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.3);
+    --sombra: 0 1px 0 rgba(255,255,255,.05) inset, 0 1px 3px rgba(0,0,0,.4);
+    --sombra-forte: 0 1px 0 rgba(255,255,255,.06) inset, 0 16px 34px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
 
-    --lateral-fundo: #060A16;
-    --lateral-fundo-2: #0E1526;
+    --lateral-fundo: #05070F;
+    --lateral-fundo-2: #101A30;
     --lateral-texto: #8D96B5;
-    --lateral-acento: #1B2748;
+    --lateral-acento: #1E2A4A;
+  }
+  /* Chip "neutro" dos cards do Dashboard (sem estado pra sinalizar - ver
+     corClasse em dashboard.js): usa branco translúcido em vez de depender só
+     de --cinza-100, pra continuar visível mesmo se a superfície do card
+     mudar de tom no futuro. */
+  html[data-tema="novo"]:not([data-modo-cor="claro"]) .cartao-indicador-icone {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09);
   }
 }
 html[data-tema="novo"][data-modo-cor="escuro"] {
   color-scheme: dark;
-  --fundo: #0A1020;
-  --superficie: #121A2E;
-  --superficie-2: #0E1526;
+  --fundo: #080C17;
+  --superficie: #16213D;
+  --superficie-2: #101A30;
 
   --azul: #7C9AF5;
   --azul-escuro: #A9BEFA;
-  --azul-claro: rgba(124,154,245,.16);
+  --azul-claro: rgba(124,154,245,.18);
   --verde: #3FCE8E;
-  --verde-claro: rgba(63,206,142,.14);
+  --verde-claro: rgba(63,206,142,.16);
   --vermelho: #F0776A;
-  --vermelho-claro: rgba(240,119,106,.14);
+  --vermelho-claro: rgba(240,119,106,.16);
   --amarelo: #EFA83F;
-  --amarelo-claro: rgba(239,168,63,.14);
+  --amarelo-claro: rgba(239,168,63,.16);
   --roxo: #B79CF0;
-  --roxo-claro: rgba(183,156,240,.14);
+  --roxo-claro: rgba(183,156,240,.16);
   --ciano: #4FD3DD;
-  --ciano-claro: rgba(79,211,221,.14);
+  --ciano-claro: rgba(79,211,221,.16);
 
-  --cinza-100: #18213A;
-  --cinza-200: #232D46;
-  --cinza-300: #303C5C;
-  --cinza-500: #6B7592;
-  --cinza-700: #A2AAC6;
-  --cinza-900: #E9ECF7;
+  --cinza-100: #1C2745;
+  --cinza-200: #2E3B5E;
+  --cinza-300: #3D4C74;
+  --cinza-500: #7F89A8;
+  --cinza-700: #AEB6D1;
+  --cinza-900: #EDF0FA;
 
-  --sombra: 0 1px 2px rgba(0,0,0,.3);
-  --sombra-forte: 0 10px 26px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.3);
+  --sombra: 0 1px 0 rgba(255,255,255,.05) inset, 0 1px 3px rgba(0,0,0,.4);
+  --sombra-forte: 0 1px 0 rgba(255,255,255,.06) inset, 0 16px 34px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
 
-  --lateral-fundo: #060A16;
-  --lateral-fundo-2: #0E1526;
+  --lateral-fundo: #05070F;
+  --lateral-fundo-2: #101A30;
   --lateral-texto: #8D96B5;
-  --lateral-acento: #1B2748;
+  --lateral-acento: #1E2A4A;
+}
+html[data-tema="novo"][data-modo-cor="escuro"] .cartao-indicador-icone {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09);
 }
 
 /* ============================================================
@@ -276,14 +296,17 @@ html[data-tema="novo"] .selo.cinza { background: var(--cinza-100); color: var(--
    pra sinalizar (ver corClasse por cartão em dashboard.js). ===== */
 html[data-tema="novo"] .cartao-indicador {
   background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200);
-  border-top: none; padding: 18px 19px;
+  padding: 18px 19px;
 }
+/* .acento-* (herdada do CSS antigo, cor na borda-topo) não faz mais sentido
+   sem a faixa colorida - zera especificamente aquele lado pra não sobrar uma
+   borda de cor errada por cima da borda neutra acima. */
 html[data-tema="novo"] .cartao-indicador.acento-azul,
 html[data-tema="novo"] .cartao-indicador.acento-verde,
 html[data-tema="novo"] .cartao-indicador.acento-amarelo,
 html[data-tema="novo"] .cartao-indicador.acento-vermelho,
 html[data-tema="novo"] .cartao-indicador.acento-roxo,
-html[data-tema="novo"] .cartao-indicador.acento-ciano { border-top: none; }
+html[data-tema="novo"] .cartao-indicador.acento-ciano { border-top-color: var(--cinza-200); }
 html[data-tema="novo"] .cartao-indicador.clicavel:hover { transform: none; box-shadow: var(--sombra-forte); border-color: var(--cinza-300); }
 html[data-tema="novo"] .cartao-indicador .valor { color: var(--cinza-900); font-size: 26px; letter-spacing: -.02em; }
 html[data-tema="novo"] .cartao-indicador .rotulo { color: var(--cinza-700); font-weight: 600; font-size: 12.5px; }
