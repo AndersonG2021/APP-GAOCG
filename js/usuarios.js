@@ -101,6 +101,11 @@ const TelaUsuarios = (function () {
     }
 
     document.getElementById('btnSalvarUsuario').addEventListener('click', async () => {
+      // Nada mudou (sessão 2026-08-13, pedido do usuário): editando um
+      // usuário já existente, só fecha o card em vez de chamar o backend à
+      // toa - mesmo dirty-tracking que já decidia minimizar x fechar no
+      // clique fora (ver UI.modalFoiEditado, js/app.js).
+      if (editando && !UI.modalFoiEditado()) { UI.fecharModal(); return; }
       const erroEl = document.getElementById('usErro');
       erroEl.classList.add('oculto');
       const dados = {

@@ -156,6 +156,19 @@ const UI = (function () {
     callbackFecharModal = callback;
   }
 
+  /**
+   * Dirty-tracking genérico do modal ativo (ver corpoEl.addEventListener em
+   * abrirModal acima) - true assim que o usuário mexeu em QUALQUER campo do
+   * corpo desde que o modal abriu. Já existia só pra decidir minimizar x
+   * fechar no clique fora; passou a ser exposto (sessão 2026-08-13, pedido do
+   * usuário) pros botões "Salvar" de cada tela pularem todo o esquema de
+   * salvar (validação + chamada de rede) quando nada mudou - só fecham o
+   * card, evitando a lentidão de salvar à toa.
+   */
+  function modalFoiEditado() {
+    return modalSujo_;
+  }
+
   function fecharModal() {
     if (modalAtivoEl) { modalAtivoEl.remove(); modalAtivoEl = null; }
     document.getElementById('sobreposicaoModal').innerHTML = '';
@@ -878,7 +891,7 @@ const UI = (function () {
   }
 
   return {
-    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, mostrarErro, lerArquivoBase64,
+    escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, modalFoiEditado, mostrarErro, lerArquivoBase64,
     formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, aplicarFacetas, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo

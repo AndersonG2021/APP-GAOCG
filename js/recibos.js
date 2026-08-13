@@ -1326,6 +1326,10 @@ const TelaRecibos = (function () {
   }
 
   async function salvarReciboEdicao(recibo) {
+    // Nada mudou (sessão 2026-08-13, pedido do usuário): só fecha o card em
+    // vez de validar + chamar o backend à toa - mesmo dirty-tracking que já
+    // decidia minimizar x fechar no clique fora (ver UI.modalFoiEditado, js/app.js).
+    if (!UI.modalFoiEditado()) { UI.fecharModal(); return; }
     const erroEl = document.getElementById('recEdErro');
     erroEl.classList.add('oculto');
     // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
