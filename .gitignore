@@ -1,2 +1,9 @@
 .claude/
 graphify-out/
+
+# Chave privada do par gerado pra fixar o ID da extensão gaocg-sei-bridge
+# (a pública já está embutida em Extension/gaocg-sei-bridge/manifest.json,
+# campo "key" - é só ela que precisa estar no manifest pro ID ficar fixo. A
+# privada não tem por que ir pro repositório - só serve pra gerar uma chave
+# nova algum dia, o que não deveria ser necessário).
+Extension/gaocg-sei-bridge/*.pem
