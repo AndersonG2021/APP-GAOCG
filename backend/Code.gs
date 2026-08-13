@@ -71,7 +71,7 @@ function handleRequest_(params) {
       // SOF (Funcionalidade 3)
       case 'listarSof': return jsonOut_(listarSof(session, params));
       case 'obterSof': return jsonOut_(obterSof(session, params.id));
-      case 'obterTemplateSof': return jsonOut_(obterTemplateSof(session, params.tipo));
+      case 'obterTemplateSof': return jsonOut_(obterTemplateSof(session, params.tipo, params.unidadeId));
       case 'criarSof': return jsonOut_(criarSof(session, params.data));
       case 'atualizarSof': return jsonOut_(atualizarSof(session, params.id, params.data));
       case 'marcarSofVisualizado': return jsonOut_(marcarSofVisualizado(session, params.id));

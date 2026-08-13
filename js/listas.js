@@ -123,6 +123,11 @@ const TelaListas = (function () {
 
     document.getElementById('btnCancelarOpcao').addEventListener('click', UI.fecharModal);
     document.getElementById('btnSalvarOpcao').addEventListener('click', async () => {
+      // Nada mudou (sessão 2026-08-13, pedido do usuário): editando uma
+      // opção já existente, só fecha o card em vez de chamar o backend à
+      // toa - mesmo dirty-tracking que já decidia minimizar x fechar no
+      // clique fora (ver UI.modalFoiEditado, js/app.js).
+      if (opcaoExistente && !UI.modalFoiEditado()) { UI.fecharModal(); return; }
       const erroEl = document.getElementById('opErro');
       erroEl.classList.add('oculto');
       const valor = document.getElementById('opValor').value.trim();

@@ -521,8 +521,16 @@ function obterSof(session, id) {
 }
 
 /**
- * SOF mais recente de um `tipo`, para servir de MODELO no formulário de criação
- * (js/sof.js, evento change do campo "Tipo de SOF").
+ * SOF mais recente de um `tipo` PARA UMA UNIDADE específica, para servir de
+ * MODELO no formulário de criação (js/sof.js, evento change dos campos
+ * "Unidade" e "Tipo de SOF").
+ *
+ * Exige unidadeId (sessão 2026-08-13, pedido do usuário): antes buscava o
+ * SOF mais recente do tipo em QUALQUER unidade, o que trazia campos (e até o
+ * unidade_id do modelo, sobrescrevendo a unidade já escolhida) de uma unidade
+ * diferente da selecionada. Agora só autopreenche se a própria unidade
+ * escolhida já tiver um SOF daquele tipo - senão devolve null (silencioso,
+ * usuário preenche na mão).
  *
  * ACHADO DE PERFORMANCE (2026-08-12): esse autopreenchimento chamava
  * `listarSof({ tipo: [tipo], page: 1, pageSize: 1 })` - pedia UMA linha, mas
@@ -539,18 +547,19 @@ function obterSof(session, id) {
  * (NotasEmpenho.gs), que reaproveitava `montarGruposNotasEmpenho_` para usar 4
  * campos.
  *
- * Aqui: uma varredura da aba SOF (cacheada) pegando o mais recente do tipo, e
- * as fontes SÓ dessa linha. `total_atendido` de propósito não é calculado - o
- * frontend descarta esse campo mesmo (é o empenhado da SOF de origem, não da
- * nova).
+ * Aqui: uma varredura da aba SOF (cacheada) pegando o mais recente do
+ * tipo+unidade, e as fontes SÓ dessa linha. `total_atendido` de propósito não
+ * é calculado - o frontend descarta esse campo mesmo (é o empenhado da SOF de
+ * origem, não da nova).
  */
-function obterTemplateSof(session, tipo) {
+function obterTemplateSof(session, tipo, unidadeId) {
   tipo = sanitizeString_(tipo, 100);
-  if (!isNonEmpty_(tipo)) return ok_(null);
+  unidadeId = sanitizeString_(unidadeId, 100);
+  if (!isNonEmpty_(tipo) || !isNonEmpty_(unidadeId)) return ok_(null);
 
   var maisRecente = null;
   todosSofComCache_().forEach(function (s) {
-    if (toBool_(s.excluido) || s.tipo !== tipo) return;
+    if (toBool_(s.excluido) || s.tipo !== tipo || s.unidade_id !== unidadeId) return;
     if (!maisRecente || String(s.data_criacao) > String(maisRecente.data_criacao)) maisRecente = s;
   });
   if (!maisRecente) return ok_(null);

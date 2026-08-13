@@ -485,13 +485,15 @@ const TelaSof = (function () {
   ];
 
   /**
-   * Aplica um SOF "modelo" (o mais recente do mesmo Tipo de SOF) nos campos do
+   * Aplica um SOF "modelo" (o mais recente do mesmo Tipo de SOF NA MESMA
+   * unidade já escolhida - ver obterTemplateSof em Sof.gs) nos campos do
    * formulário em criação, destacando (classe .destaque-repeticao) tudo que
    * foi preenchido automaticamente - o usuário decide o que muda e o que
-   * repete. Unidade não entra no mapeamento acima porque troca-la já dispara
-   * seu próprio autopreenchimento (listener de sofUnidade); aqui só a marcamos
-   * como destacada. O destaque de um campo some sozinho assim que o usuário
-   * mexe nele (input/change, uma vez).
+   * repete. Unidade não entra no preenchimento (sessão 2026-08-13, pedido do
+   * usuário): o backend já garante que template.unidade_id é a unidade
+   * escolhida, então sobrescrever o campo aqui só arriscaria desfazer uma
+   * troca de unidade que o usuário acabou de fazer. O destaque de um campo
+   * some sozinho assim que o usuário mexe nele (input/change, uma vez).
    */
   function aplicarTemplateSof_(template) {
     const destacar = el => {
@@ -500,13 +502,6 @@ const TelaSof = (function () {
       el.addEventListener('input', remover, { once: true });
       el.addEventListener('change', remover, { once: true });
     };
-
-    if (template.unidade_id) {
-      const elUnidade = document.getElementById('sofUnidade');
-      elUnidade.value = template.unidade_id;
-      elUnidade.dispatchEvent(new Event('change', { bubbles: true }));
-      destacar(elUnidade);
-    }
 
     CAMPOS_TEMPLATE_SOF_.forEach(item => {
       const el = document.getElementById(item.id);
@@ -568,7 +563,7 @@ const TelaSof = (function () {
             <option value="">Selecione...</option>
             ${OPCOES_SOF_TIPO.map(o => opt(sof ? sof.tipo : '', o)).join('')}
           </select>
-          ${!editando ? '<p class="ajuda">Ao escolher, os campos são preenchidos com os dados do último SOF desse tipo (destacados em amarelo) - revise antes de salvar.</p>' : ''}
+          ${!editando ? '<p class="ajuda">Se a unidade escolhida já tiver um SOF desse tipo, os campos são preenchidos com os dados do último (destacados em amarelo) - revise antes de salvar.</p>' : ''}
         </div>
         <div class="campo"><label>Objeto (lista) *</label>${selectObjetoHtml_(opcoesObjeto, sof ? sof.objeto : '')}</div>
         ${sof && sof.divergente_da_unidade ? '<p class="aviso-divergencia">⚠ Um ou mais campos abaixo divergem do cadastro atual da unidade.</p>' : ''}
@@ -762,24 +757,32 @@ const TelaSof = (function () {
     });
 
     if (!editando) {
-      // Autopreenchimento pelo último SOF do mesmo tipo.
+      // Autopreenchimento pelo último SOF do mesmo tipo NA MESMA unidade
+      // escolhida (sessão 2026-08-13, pedido do usuário) - antes buscava o
+      // último SOF do tipo em qualquer unidade, o que trazia campos (e até
+      // trocava a própria unidade já selecionada) de outra unidade. Agora só
+      // autopreenche se essa unidade já tiver um SOF daquele tipo; reage à
+      // troca de Unidade OU de Tipo, em qualquer ordem que o usuário preencha.
       //
       // Usava `listarSof({ tipo, page: 1, pageSize: 1 })`: pedia 1 linha, mas o
       // backend calculava fontes/atendido/destaque de TODAS as SOFs antes de
       // paginar - 20 a 45 segundos na medição do usuário. `obterTemplateSof`
       // (Sof.gs) faz só o necessário. `cache: true` deixa instantânea a troca
-      // repetida de tipo; salvarSof invalida esse cache, porque o "último SOF
-      // do tipo" muda quando um novo é criado.
-      document.getElementById('sofTipoSof').addEventListener('change', async function () {
-        const tipo = this.value;
-        if (!tipo) return;
+      // repetida de tipo/unidade; salvarSof invalida esse cache, porque o
+      // "último SOF do tipo" muda quando um novo é criado.
+      const buscarTemplateSof_ = async () => {
+        const tipo = document.getElementById('sofTipoSof').value;
+        const unidadeId = document.getElementById('sofUnidade').value;
+        if (!tipo || !unidadeId) return;
         try {
-          const template = await Api.chamar('obterTemplateSof', { tipo }, { cache: true });
+          const template = await Api.chamar('obterTemplateSof', { tipo, unidadeId }, { cache: true });
           if (template) aplicarTemplateSof_(template);
         } catch (err) {
           // Autopreenchimento é conveniência, não deve travar o cadastro - falha silenciosa, usuário preenche na mão.
         }
-      });
+      };
+      document.getElementById('sofTipoSof').addEventListener('change', buscarTemplateSof_);
+      document.getElementById('sofUnidade').addEventListener('change', buscarTemplateSof_);
     }
 
     // "+ Adicionar novo objeto..." (última opção do select, ver selectObjetoHtml_): não persiste
@@ -1226,6 +1229,16 @@ const TelaSof = (function () {
    */
   async function salvarSof(sofExistente, opcoes) {
     opcoes = opcoes || {};
+    // Nada mudou (sessão 2026-08-13, pedido do usuário): editando uma SOF já
+    // existente, no botão "Salvar" puro (gerarDocumento/enviarSei pedem uma
+    // ação explícita à parte, então continuam rodando mesmo sem edição), só
+    // fecha o card em vez de validar + chamar o backend à toa - é o mesmo
+    // dirty-tracking que já decidia minimizar x fechar no clique fora (ver
+    // UI.modalFoiEditado, js/app.js).
+    if (sofExistente && !opcoes.gerarDocumento && !opcoes.enviarSei && !UI.modalFoiEditado()) {
+      UI.fecharModal();
+      return;
+    }
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
     // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
