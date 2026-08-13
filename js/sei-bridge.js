@@ -96,6 +96,15 @@ const SeiBridge = (function () {
    *
    * Sem isso, o documento chegaria no SEI sem nenhuma borda de tabela - é o
    * grosso do layout da SOF (cronograma de desembolso, assinaturas).
+   *
+   * ATENÇÃO - duplicação manual: as regras abaixo são uma CÓPIA das do
+   * <style> de montarDocumentoSeiHtml_ (js/sof.js), não uma leitura
+   * automática dele - as duas listas podem ficar dessincronizadas se só um
+   * dos dois arquivos for atualizado (foi exatamente o que aconteceu em
+   * 2026-08-13: o título passou a sair alinhado à esquerda no download/
+   * impressão, mas continuou centralizado no envio ao SEI, porque só o
+   * <style> de sof.js tinha sido corrigido). Toda vez que o <style> de
+   * montarDocumentoSeiHtml_ mudar, revise esta função também.
    */
   function prepararHtmlParaEditor_(htmlCompleto) {
     const doc = new DOMParser().parseFromString(htmlCompleto, 'text/html');
@@ -112,7 +121,7 @@ const SeiBridge = (function () {
     aplicar('table.sei-tabela td, table.sei-tabela th', 'border:1px solid #000;padding:4px 8px;font-size:10.5pt;vertical-align:top');
     aplicar('table.sei-tabela th', 'text-align:center');
     aplicar('p', 'margin:6pt 0;text-align:justify');
-    aplicar('h2', 'text-align:center;font-size:13pt');
+    aplicar('h2', 'text-align:left;font-size:13pt');
     aplicar('.sei-direita', 'text-align:right');
     aplicar('.sei-assinatura-ne', 'background:#f1c40f');
     aplicar('.sei-assinatura-nl', 'background:#e6a19b');
@@ -121,7 +130,18 @@ const SeiBridge = (function () {
     // tabelas ainda saem com borda em vez de virar texto corrido.
     corpo.querySelectorAll('table.sei-tabela').forEach(t => t.setAttribute('border', '1'));
 
-    return corpo.innerHTML;
+    // A fonte/tamanho/cor do body (ver <style> de montarDocumentoSeiHtml_)
+    // nunca tinha um elemento próprio pra virar style inline - innerHTML não
+    // inclui a tag <body> em si, só o conteúdo dela. Sem isso, o texto
+    // colado no CKEditor herdava a fonte padrão do editor do SEI (Times New
+    // Roman), não a Calibri do documento gerado (achado do usuário,
+    // 2026-08-13). Um <div> envolvendo tudo resolve: filhos herdam
+    // font-family/font-size/color por CSS normal, e as células de tabela
+    // continuam com o próprio font-size (10.5pt) por cima, como já era.
+    const envoltorio = doc.createElement('div');
+    envoltorio.setAttribute('style', 'font-family:Calibri, Arial, sans-serif;font-size:11pt;color:#000');
+    while (corpo.firstChild) envoltorio.appendChild(corpo.firstChild);
+    return envoltorio.outerHTML;
   }
 
   /**
