@@ -26,19 +26,27 @@ o SEI aberto e logado.
 2. Ative "Modo do desenvolvedor" (canto superior direito).
 3. "Carregar sem compactação" → selecione a pasta `Extension/gaocg-sei-bridge`
    (a que contém o `manifest.json`).
-4. Copie o **ID da extensão** que aparece no card.
-5. Compare com o ID configurado em `js/sei-bridge.js` (`ID_PADRAO_`). Se for
-   diferente, **não precisa mexer no código** — no app, abra o console do
-   navegador (F12) e rode:
-   ```javascript
-   localStorage.setItem('gaocg_sei_extension_id', 'cole-o-id-aqui');
-   ```
-   Recarregue a página e pronto.
+4. Pronto - o ID que aparece no card deve ser sempre
+   `gmhefdeokoolgcpfohhkomgljndffnpi`, o mesmo já configurado em
+   `js/sei-bridge.js` (`ID_PADRAO_`). Não precisa copiar nem configurar nada,
+   **em nenhum computador** - ver por quê logo abaixo.
 
-> **Por que o ID pode mudar:** numa extensão sem compactação, o Chrome deriva o
-> ID do CAMINHO da pasta no disco. Mover ou renomear a pasta muda o ID. Foi
-> exatamente o que aconteceu quando a pasta duplicada
-> (`gaocg-sei-bridge/gaocg-sei-bridge/`) foi achatada.
+> **Por que o ID não muda mais de computador pra computador (sessão
+> 2026-08-13):** numa extensão sem compactação "crua", o Chrome deriva o ID
+> do CAMINHO da pasta no disco - mover, renomear ou copiar a pasta pra outro
+> lugar muda o ID e quebra a ponte com "Could not establish connection.
+> Receiving end does not exist." (aconteceu ao achatar a pasta duplicada
+> `gaocg-sei-bridge/gaocg-sei-bridge/`, e de novo com a pasta extraída sendo
+> movida de lugar num 2º computador). O `manifest.json` agora tem um campo
+> `"key"` (a chave pública de um par gerado só pra isso, via `openssl genrsa`
+> / `openssl rsa -pubout`) - com ele, o ID vira uma função só da CHAVE, não
+> do caminho, e sai igual em qualquer pasta/computador que carregue este
+> mesmo `manifest.json`.
+>
+> Se um dia for preciso gerar uma chave nova (não deveria - é exatamente o
+> problema que isso resolve), o app ainda aceita um ID diferente sem
+> precisar de deploy novo, via `localStorage.setItem('gaocg_sei_extension_id',
+> 'novo-id-aqui')` no console do navegador.
 
 ## Como usar
 
@@ -121,7 +129,8 @@ unidade usar outro nome.
 | `manifest.json` → `host_permissions` / `content_scripts` | `https://sei.pe.gov.br/*` | Se o SEI da sua unidade estiver em outro domínio |
 | `manifest.json` → `externally_connectable` | `https://andersong2021.github.io/*` | Se o GAOCG mudar de domínio. **Só origem — o Chrome ignora caminho aqui**, então não dá para restringir a `/APP-GAOCG/` |
 | `content-sei.js` → `MAPA_TIPO_DOCUMENTO` | `sof: "SOF"` | O texto tem que ser **idêntico** ao tipo de documento cadastrado no SEI da sua unidade |
-| `js/sei-bridge.js` → `ID_PADRAO_` | ID da extensão | Ver instalação acima (ou use o `localStorage`) |
+| `manifest.json` → `key` | Chave pública fixa (define o ID da extensão) | Só se precisar gerar uma chave nova - ver instalação acima |
+| `js/sei-bridge.js` → `ID_PADRAO_` | ID da extensão (derivado da `key` acima) | Só junto com uma troca de `key` (ou use o `localStorage` como atalho sem deploy) |
 
 ## Ainda não validado num SEI real
 

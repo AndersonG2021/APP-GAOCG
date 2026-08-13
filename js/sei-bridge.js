@@ -15,21 +15,25 @@
 
 const SeiBridge = (function () {
   /**
-   * ID da extensão sem compactação. ATENÇÃO: o Chrome deriva esse ID do
-   * CAMINHO da pasta no disco - se a pasta for movida ou renomeada, o ID muda e
-   * este valor precisa ser atualizado.
+   * ID da extensão - FIXO desde a sessão 2026-08-13 (ver "key" em
+   * Extension/gaocg-sei-bridge/manifest.json). Antes disso, uma extensão sem
+   * compactação tinha o ID derivado do CAMINHO da pasta no disco - mover,
+   * renomear ou copiar a pasta pra outra máquina mudava o ID e quebrava a
+   * ponte com "Could not establish connection. Receiving end does not exist."
+   * (aconteceu de novo com o usuário testando num 2º computador, depois de
+   * mover a pasta extraída mais de uma vez). O par de chaves foi gerado com
+   * `openssl genrsa`/`openssl rsa -pubout`, e o ID abaixo é derivado
+   * matematicamente da chave pública (SHA-256 dela, primeiros 16 bytes,
+   * mapeados pro alfabeto a-p que o Chrome usa) - a MESMA chave em
+   * manifest.json em qualquer pasta/computador sempre gera este mesmo ID.
    *
-   * Para não exigir um novo deploy do app a cada mudança de ID (a extensão é
-   * carregada manualmente por cada máquina), o valor pode ser sobrescrito em
-   * runtime pelo localStorage, sem tocar no código:
+   * Se um dia a chave do manifest.json for trocada de novo (não deveria - é
+   * exatamente o que este ajuste elimina), o valor pode ser sobrescrito em
+   * runtime pelo localStorage, sem precisar de deploy:
    *
    *     localStorage.setItem('gaocg_sei_extension_id', 'novo-id-aqui');
-   *
-   * O ID abaixo foi copiado do chrome://extensions depois que a pasta duplicada
-   * da extensão foi achatada (o ID anterior, do README, deixou de valer junto
-   * com o caminho antigo).
    */
-  const ID_PADRAO_ = 'mnohlkhmphcilholmgolecdelpmebkdg';
+  const ID_PADRAO_ = 'gmhefdeokoolgcpfohhkomgljndffnpi';
   const CHAVE_ID_LOCAL_ = 'gaocg_sei_extension_id';
 
   function idExtensao() {
