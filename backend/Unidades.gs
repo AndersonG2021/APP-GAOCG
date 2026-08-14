@@ -364,7 +364,7 @@ function reativarUnidade(session, id) {
  * em nenhuma planilha/arquivo do repositório, só aqui).
  *
  * RODE UMA VEZ, manualmente, pelo editor do Apps Script (seletor de função
- * "backfillContratoCeoUnidades_" → Executar), DEPOIS de:
+ * "backfillContratoCeoUnidades" → Executar), DEPOIS de:
  *   1. criar a coluna "contrato_ceo" na aba Unidades (cabeçalho na linha 1,
  *      em qualquer coluna livre - leitura/escrita é por NOME de coluna, não
  *      por posição, ver getHeaders_ em Utils.gs);
@@ -379,7 +379,7 @@ function reativarUnidade(session, id) {
  * entra no log de "não encontradas" pra conferência manual, nunca é
  * preenchida "no chute". Idempotente - pode rodar de novo sem problema.
  */
-function backfillContratoCeoUnidades_() {
+function backfillContratoCeoUnidades() {
   var MAPA_CONTRATO_CEO_ = {
     'Hosp. Dom Helder Câmara': '00871/2022',
     'Hosp. Nossa Senhora das Graças (Alfa)': '01017/2022',
