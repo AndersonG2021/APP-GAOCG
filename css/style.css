@@ -166,6 +166,14 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .campo .editor-rico-area.campo-obrigatorio-vazio {
   border-color: var(--vermelho); background: var(--vermelho-claro);
 }
+/* Menu suspenso de <select> é pintado à parte pelo navegador/SO - cor sólida
+   nas <option>, pro texto continuar legível ali mesmo que a cor de fundo do
+   campo (acima) vire uma variável translúcida no futuro (ver o mesmo ajuste,
+   motivado por um bug real no tema escuro, em css/tema-novo.css). */
+.campo select.destaque-repeticao option,
+.campo select.campo-obrigatorio-vazio option {
+  background: var(--branco); color: var(--cinza-900);
+}
 .campo .ajuda { font-size: 11.5px; color: var(--cinza-500); margin-top: 3px; }
 /* Input + botão auxiliar na mesma linha (ex.: Nº SOF + "Buscar no SEI", sessão 2026-08-14). */
 .campo-linha-botao { display: flex; gap: 6px; align-items: stretch; }
