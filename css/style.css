@@ -142,7 +142,20 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .campo input.campo-invalido {
   border-color: var(--vermelho); background: var(--vermelho-claro);
 }
+/* Campo obrigatório do formulário de SOF ainda vazio (sessão 2026-08-14,
+   pedido do usuário) - ver CAMPOS_OBRIGATORIOS/aplicarDestaqueObrigatorios_
+   em js/sof.js. Some sozinho assim que o campo é preenchido (na mão ou por
+   autopreenchimento de template/unidade); nunca convive com .destaque-repeticao
+   no mesmo campo, porque um campo preenchido pelo template deixa de estar vazio. */
+.campo input.campo-obrigatorio-vazio, .campo select.campo-obrigatorio-vazio, .campo textarea.campo-obrigatorio-vazio,
+.campo .editor-rico-area.campo-obrigatorio-vazio {
+  border-color: var(--vermelho); background: var(--vermelho-claro);
+}
 .campo .ajuda { font-size: 11.5px; color: var(--cinza-500); margin-top: 3px; }
+/* Input + botão auxiliar na mesma linha (ex.: Nº SOF + "Buscar no SEI", sessão 2026-08-14). */
+.campo-linha-botao { display: flex; gap: 6px; align-items: stretch; }
+.campo-linha-botao input { flex: 1; min-width: 0; }
+.campo-linha-botao .botao { white-space: nowrap; padding: 8px 10px; }
 .campo .erro-campo { font-size: 11.5px; color: var(--vermelho); margin-top: 3px; }
 @keyframes piscarErro { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .erro-campo.piscar-erro { animation: piscarErro 0.25s ease-in-out 2; }
