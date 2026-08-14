@@ -19,6 +19,7 @@ const TelaSof = (function () {
     { id: 'seiAcao', rotulo: 'Ação' },
     { id: 'seiSubacao', rotulo: 'Subação' },
     { id: 'seiGrupoDespesa', rotulo: 'Grupo de despesa' },
+    { id: 'sofCeo', rotulo: 'Contrato CEO' },
     { id: 'sofSei', rotulo: 'Número do Processo' },
     { id: 'sofNumero', rotulo: 'Nº SOF' },
     { id: 'sofDea', rotulo: 'DEA' },
@@ -638,6 +639,7 @@ const TelaSof = (function () {
           <div class="campo"><label>Ação *</label><input id="seiAcao" value="${UI.escaparHtml((sof && sof.sei_acao) || snapshot.acao_snapshot || '')}" /></div>
           <div class="campo"><label>Subação *</label><input id="seiSubacao" value="${UI.escaparHtml((sof && sof.sei_subacao) || snapshot.subacao_snapshot || '')}" /></div>
           <div class="campo"><label>Grupo de despesa *</label><input id="seiGrupoDespesa" value="${UI.escaparHtml((sof && sof.sei_grupo_despesa) || snapshot.gd_snapshot || '')}" placeholder="Ex.: 3.3.50" /></div>
+          <div class="campo"><label>Contrato CEO *</label><input id="sofCeo" value="${UI.escaparHtml((sof && sof.ceo) || (unidadeAtual ? unidadeAtual.contrato_ceo : '') || '')}" placeholder="Ex.: 00871/2022" /></div>
         </div>
 
         <div class="campo">
@@ -673,7 +675,6 @@ const TelaSof = (function () {
         <h4 class="sei-secao-titulo">Licitações</h4>
         <div class="grade-2">
           <div class="campo"><label>Número do Contrato</label><input id="sofNumeroContrato" value="${v('contrato')}" /></div>
-          <div class="campo"><label>CEO E-fisco</label><input id="sofCeo" value="${v('ceo')}" /></div>
         </div>
 
         <h4 class="sei-secao-titulo">Solicitante</h4>
@@ -776,6 +777,11 @@ const TelaSof = (function () {
       document.getElementById('seiSubacao').value = preenchido.subacao_snapshot;
       // Campo unificado "Grupo de despesa" recebe o G.D. da unidade.
       document.getElementById('seiGrupoDespesa').value = preenchido.gd_snapshot;
+      // Contrato CEO (sessão 2026-08-14, pedido do usuário) - mesmo padrão de
+      // Destinação/Credor acima: vem direto da Unidade, não do snapshot
+      // (não existe "campo espelhado" pra ele, é sempre o dado vigente da
+      // Unidade no momento da troca). Continua editável depois.
+      document.getElementById('sofCeo').value = unidade ? unidade.contrato_ceo || '' : '';
     });
 
     if (!editando) {
