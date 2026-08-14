@@ -40,6 +40,17 @@ var REGEX_NUMERO_LE_DOCUMENTO = /\b(\d{4}LE\d{6})\b/i;
 var REGEX_NUMERO_OB_DOCUMENTO = /\b(\d{4}OB\d{6})\b/i;
 
 /**
+ * Título impresso no topo de cada documento (sessão 2026-08-13, pedido do
+ * usuário: rejeitar um documento que não seja mesmo uma LE/OB, em vez de só
+ * tentar extrair valor/número best-effort de qualquer PDF anexado). Mesma
+ * convenção já confirmada pra Nota de Empenho (título "NOTA DE EMPENHO" no
+ * topo do documento, ver lerAnexoNotaEmpenho/NotasEmpenho.gs) - os
+ * documentos do e-fisco/PE têm o nome do tipo como título.
+ */
+var REGEX_TITULO_NOTA_LIQUIDACAO_ = /NOTA\s+DE\s+LIQUIDA[ÇC][ÃA]O/i;
+var REGEX_TITULO_ORDEM_BANCARIA_ = /ORDEM\s+BANC[ÁA]RIA/i;
+
+/**
  * Lê a aba Recibos inteira, com cache de 30s (sessão 2026-07-30, mesmo padrão
  * de todasNotasEmpenhoComCache_ em NotasEmpenho.gs / todasFontesComCache_ em
  * Sof.gs) - achado real ao investigar lentidão de 10-15s ao selecionar a
@@ -89,6 +100,16 @@ function lerAnexoRecibo(session, params) {
     texto = extrairTextoOcr_(params.arquivoBase64, params.arquivoNome, params.arquivoTipo);
   } catch (e) {
     return fail_('Não foi possível ler o documento: ' + e.message);
+  }
+
+  // Tipo do documento (sessão 2026-08-13, pedido do usuário) - checado ANTES
+  // de tudo o mais: um documento do tipo errado (ex.: uma OB anexada no
+  // campo de LE) pode até coincidentemente ter um número de NE válido no
+  // texto, então checar isso primeiro dá o diagnóstico certo ("não é uma
+  // Nota de Liquidação"), em vez de um erro de NE confuso e fora do assunto.
+  var regexTitulo = tipo === 'ordem_bancaria' ? REGEX_TITULO_ORDEM_BANCARIA_ : REGEX_TITULO_NOTA_LIQUIDACAO_;
+  if (!regexTitulo.test(texto)) {
+    return fail_(tipo === 'ordem_bancaria' ? 'Esse documento não é uma Ordem Bancária.' : 'Esse documento não é uma Nota de Liquidação.');
   }
 
   var matchNe = texto.match(REGEX_NUMERO_NE_DOCUMENTO);
@@ -182,6 +203,40 @@ function getSheetOrdensBancariasRecibo_() {
 }
 
 /**
+ * Lê a aba RecibosOrdensBancarias inteira, com cache de 30s - mesmo padrão
+ * de todasRecibosComCache_ acima. Nova (sessão 2026-08-13, pedido do
+ * usuário: mostrar o número da OB na coluna "Ordem Bancária" da listagem de
+ * Recibos) - antes só listarRecibosPorGrupo lia esta aba, com uma leitura
+ * crua (sem cache) porque só rodava pra 1 grupo por vez; listarRecibos roda
+ * a cada carga da tela inteira, então precisa do mesmo tratamento de cache
+ * das outras abas grandes.
+ */
+function todasOrdensBancariasComCache_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'recibos_ordens_bancarias';
+  var emCache = cache.get(chave);
+  if (emCache) return JSON.parse(emCache);
+
+  var rows = sheetToObjects_(getSheetOrdensBancariasRecibo_());
+  rows.forEach(function (o) { delete o._row; });
+  cachePut_(cache, chave, rows, 30);
+  return rows;
+}
+
+function invalidarCacheOrdensBancarias_() {
+  CacheService.getScriptCache().remove('recibos_ordens_bancarias');
+}
+
+/** Ordens Bancárias de TODOS os Recibos, agrupadas por recibo_id - uma única leitura pra popular a listagem inteira (ver listarRecibos), em vez de reler a aba uma vez por linha. */
+function agruparOrdensBancariasPorRecibo_() {
+  var mapa = {};
+  todasOrdensBancariasComCache_().forEach(function (o) {
+    (mapa[o.recibo_id] = mapa[o.recibo_id] || []).push(o);
+  });
+  return mapa;
+}
+
+/**
  * Soma dos itens de ordens_bancarias de uma parcela - usada tanto pra
  * recalcular valor_pago (soma automática, decisão do usuário) quanto por
  * quem só precisa do total sem mexer na planilha.
@@ -191,23 +246,47 @@ function somaOrdensBancarias_(itens) {
 }
 
 /**
- * Número de OB repetido DENTRO da lista de uma mesma parcela (sessão
- * 2026-08-12, pedido do usuário) - evita anexar a mesma Ordem Bancária duas
- * vezes ao mesmo Recibo (ex.: o analista clicou "+ Adicionar OB" e escolheu
- * por engano o mesmo arquivo de novo). Números vazios (OCR não leu o número
- * do documento) nunca contam como duplicata entre si - não dá pra saber se
- * são o mesmo documento ou dois diferentes sem número legível. Devolve o
- * número duplicado encontrado, ou null se não achou nenhum.
+ * Número de LE ou OB repetido em QUALQUER parcela do mesmo processo (sessão
+ * 2026-08-13, pedido do usuário: "impeça o usuário de anexar uma LE ou OB
+ * que já tenha sido anexada nesse processo" - ampliado da versão anterior,
+ * que só olhava a lista de OB de UMA parcela por vez; agora cobre as duas
+ * (LE e OB) e todas as parcelas juntas).
+ *
+ * `parcelas` é o array INTEIRO mandado numa única chamada de
+ * criarGrupoParcelaDivididaRecibo/atualizarParcelasDivididasRecibo -
+ * `atualizarParcelasDivididasRecibo` já manda SEMPRE todas as linhas do
+ * grupo (ver comentário lá), então isso cobre o processo inteiro que está
+ * sendo salvo, sem precisar reler nada da planilha. Números vazios (OCR não
+ * leu o número do documento) nunca contam como duplicata entre si - não dá
+ * pra saber se são o mesmo documento ou dois diferentes sem número legível.
+ *
+ * Devolve `{ tipo, numero }` do primeiro duplicado encontrado, ou null se
+ * não achou nenhum.
  */
-function numeroObDuplicadoNaLista_(itens) {
-  var vistos = {};
-  for (var i = 0; i < (itens || []).length; i++) {
-    var numero = sanitizeString_(itens[i].numero_ob, 50);
-    if (!numero) continue;
-    if (vistos[numero]) return numero;
-    vistos[numero] = true;
+function documentoDuplicadoNoProcesso_(parcelas) {
+  var vistosOb = {};
+  var vistosLe = {};
+  for (var i = 0; i < (parcelas || []).length; i++) {
+    var itensOb = parcelas[i].ordens_bancarias || [];
+    for (var j = 0; j < itensOb.length; j++) {
+      var numeroOb = sanitizeString_(itensOb[j].numero_ob, 50);
+      if (!numeroOb) continue;
+      if (vistosOb[numeroOb]) return { tipo: 'ordem_bancaria', numero: numeroOb };
+      vistosOb[numeroOb] = true;
+    }
+    var numeroLe = sanitizeString_(parcelas[i].nota_liquidacao_numero, 50);
+    if (numeroLe) {
+      if (vistosLe[numeroLe]) return { tipo: 'nota_liquidacao', numero: numeroLe };
+      vistosLe[numeroLe] = true;
+    }
   }
   return null;
+}
+
+/** Mensagem amigável pro duplicado achado por documentoDuplicadoNoProcesso_. */
+function mensagemDocumentoDuplicado_(duplicado) {
+  var rotulo = duplicado.tipo === 'ordem_bancaria' ? 'A Ordem Bancária' : 'A Nota de Liquidação';
+  return rotulo + ' nº ' + duplicado.numero + ' já foi anexada a este processo.';
 }
 
 /**
@@ -224,6 +303,10 @@ function substituirOrdensBancariasParcela_(reciboId, itens, criadoPor) {
   var todas = sheetToObjects_(sheet);
   var linhasExistentes = todas.filter(function (r) { return String(r.recibo_id) === String(reciboId); });
   deleteRowsEmLote_(sheet, linhasExistentes.map(function (r) { return r._row; }));
+  // Invalida já aqui, não só no fim - o "apagar e recriar" acima já mudou a
+  // aba mesmo quando `itens` vem vazio (early return logo abaixo), que é
+  // justamente o caso de "removi a última OB/LE desta parcela".
+  invalidarCacheOrdensBancarias_();
 
   if (!itens || !itens.length) return;
   var ids = proximosIds_('RecibosOrdensBancarias', itens.length);
@@ -331,12 +414,11 @@ function criarGrupoParcelaDivididaRecibo(session, dadosBase, parcelas) {
   var unidade = buscarUnidadePorId_(dadosBase.unidade_id);
   if (!unidade) return fail_('Unidade não encontrada.');
 
-  // Duplicidade de OB (sessão 2026-08-12) - falha rápido, antes de qualquer
-  // escrita/upload, se alguma parcela trouxer o mesmo número de OB duas vezes.
-  for (var iParcela = 0; iParcela < parcelas.length; iParcela++) {
-    var obDuplicada = numeroObDuplicadoNaLista_(parcelas[iParcela].ordens_bancarias);
-    if (obDuplicada) return fail_('A Ordem Bancária nº ' + obDuplicada + ' já foi anexada a este Recibo.');
-  }
+  // Duplicidade de LE/OB (sessão 2026-08-12, ampliado 2026-08-13 pra cobrir
+  // o processo inteiro, não só uma parcela) - falha rápido, antes de
+  // qualquer escrita/upload.
+  var duplicado = documentoDuplicadoNoProcesso_(parcelas);
+  if (duplicado) return fail_(mensagemDocumentoDuplicado_(duplicado));
 
   var parcelaDivididaGrupoId = proximoId_('Recibos') + '-PD';
   var criados = [];
@@ -403,10 +485,8 @@ function listarRecibosPorGrupo(session, grupoId) {
   });
   linhas.sort(function (a, b) { return String(a.id) < String(b.id) ? -1 : 1; });
 
-  var todasOrdensBancarias = sheetToObjects_(getSheetOrdensBancariasRecibo_());
-  linhas.forEach(function (linha) {
-    linha.ordens_bancarias = todasOrdensBancarias.filter(function (o) { return String(o.recibo_id) === String(linha.id); });
-  });
+  var obPorRecibo = agruparOrdensBancariasPorRecibo_();
+  linhas.forEach(function (linha) { linha.ordens_bancarias = obPorRecibo[linha.id] || []; });
   return ok_(linhas);
 }
 
@@ -440,12 +520,9 @@ function atualizarParcelasDivididasRecibo(session, id, dadosBase, parcelas) {
   dadosBase = dadosBase || {};
   if (!parcelas || parcelas.length < 2) return fail_('Informe ao menos duas parcelas.');
 
-  // Duplicidade de OB (sessão 2026-08-12) - mesma checagem de
-  // criarGrupoParcelaDivididaRecibo, ver lá.
-  for (var iParcela = 0; iParcela < parcelas.length; iParcela++) {
-    var obDuplicada = numeroObDuplicadoNaLista_(parcelas[iParcela].ordens_bancarias);
-    if (obDuplicada) return fail_('A Ordem Bancária nº ' + obDuplicada + ' já foi anexada a este Recibo.');
-  }
+  // Duplicidade de LE/OB - mesma checagem de criarGrupoParcelaDivididaRecibo, ver lá.
+  var duplicadoEd = documentoDuplicadoNoProcesso_(parcelas);
+  if (duplicadoEd) return fail_(mensagemDocumentoDuplicado_(duplicadoEd));
 
   var sheet = getSheet_(SHEETS.RECIBOS);
   var existente = findById_(sheet, id);
@@ -828,7 +905,14 @@ function listarRecibos(session, params) {
   // destacar_parado só é exibido - calcular só na página visível, com uma
   // única leitura (cacheada) de ListasPersonalizadas (ver RELATORIO_LENTIDAO_SOF.md).
   var listasCarregadas = todasOpcoesComCache_();
-  pageRows.forEach(function (r) { Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas)); });
+  // ordens_bancarias (sessão 2026-08-13, pedido do usuário: mostrar o número
+  // da OB na coluna "Ordem Bancária" do card/tabela) - só na página visível,
+  // mesma lógica de destacar_parado acima.
+  var obPorRecibo = agruparOrdensBancariasPorRecibo_();
+  pageRows.forEach(function (r) {
+    Object.assign(r, calcularDestaqueParadoRecibo_(r, listasCarregadas));
+    r.ordens_bancarias = obPorRecibo[r.id] || [];
+  });
 
   return ok_({ items: pageRows, total: total, page: page, pageSize: pageSize, indicadores: indicadores, facetas: facetas });
 }

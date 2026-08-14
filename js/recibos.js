@@ -322,6 +322,43 @@ const TelaRecibos = (function () {
     }
   }
 
+  /**
+   * Números de OB já anexados a este Recibo, pra coluna "Ordem Bancária"
+   * (sessão 2026-08-13, pedido do usuário: "quando forem adicionadas a(s)
+   * OB(s), o número da OB apareça na coluna Ordem Bancária") - prioriza a
+   * lista (RecibosOrdensBancarias, pode ter mais de uma - ver
+   * agruparOrdensBancariasPorRecibo_, Recibos.gs), cai pro campo único
+   * antigo (ordem_bancaria) só se a lista vier vazia (Recibo ainda não
+   * migrado pra esse formato).
+   */
+  function textoOrdensBancarias_(r) {
+    const numeros = (r.ordens_bancarias || []).map(o => o.numero_ob).filter(Boolean);
+    if (numeros.length) return numeros.join(', ');
+    return r.ordem_bancaria || '';
+  }
+
+  /**
+   * Diz ESPECIFICAMENTE qual divergência de valores existe (sessão
+   * 2026-08-13, pedido do usuário: "ao passar o mouse por cima da
+   * notificação de erro, seja informado qual é o erro") - mesma regra de
+   * recalcularAlertaRecibo_ (Recibos.gs): (a) Valor Liquidado diferente do
+   * Valor Pago DESTA linha; (b) soma do Valor Pago de TODO o grupo diferente
+   * da Parcela Contratual. `linhasDoGrupo` é opcional - Recibo avulso (sem
+   * grupo) usa só a própria linha pra (b), já que "grupo" é ele mesmo.
+   */
+  function descricaoDivergenciaValores_(r, linhasDoGrupo) {
+    const motivos = [];
+    if (Math.abs((Number(r.valor_liquidado) || 0) - (Number(r.valor_pago) || 0)) > 0.01) {
+      motivos.push('Valor Liquidado diferente do Valor Pago');
+    }
+    const grupo = linhasDoGrupo || [r];
+    const somaPago = grupo.reduce((s, x) => s + (Number(x.valor_pago) || 0), 0);
+    if (Math.abs(somaPago - (Number(r.parcela_contratual) || 0)) > 0.01) {
+      motivos.push(grupo.length > 1 ? 'Soma do Valor Pago das parcelas diferente da Parcela Contratual' : 'Valor Pago diferente da Parcela Contratual');
+    }
+    return motivos.join(' e ') || 'Divergência de valores';
+  }
+
   function linhaReciboHtml_(r) {
     const unidade = unidades.find(u => u.id === r.unidade_id);
     return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
@@ -331,16 +368,17 @@ const TelaRecibos = (function () {
       <td>${UI.escaparHtml(r.numero_processo)}</td>
       <td>${UI.escaparHtml(r.competencia)}</td>
       <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
-      <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
-      <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
+      <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r))}">!</span>` : ''}</td>
+      <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
       <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+      <td>${UI.escaparHtml(r.observacao || '-')}</td>
     </tr>`;
   }
 
   function tabelaRecibosHtml_(linhas) {
     return `
       <table class="tabela">
-        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
+        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th><th>Observação</th></tr></thead>
         <tbody>${linhas.map(linhaReciboHtml_).join('')}</tbody>
       </table>`;
   }
@@ -355,6 +393,9 @@ const TelaRecibos = (function () {
    * tabelinha embaixo mostra só o que muda entre as parcelas: percentual,
    * valores, OB e status (cada linha com seu próprio <select> de status,
    * já que cada parcela pode estar numa etapa diferente do fluxo).
+   * Observação (sessão 2026-08-13) também é compartilhada pelo grupo (mesmo
+   * texto em todas as linhas - só existe UM campo de Observação por Recibo/
+   * grupo na edição), então aparece 1x só no cabeçalho, igual Unidade/Objeto.
    */
   function cartaoGrupoReciboHtml_(linhasDoGrupo) {
     const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
@@ -371,6 +412,7 @@ const TelaRecibos = (function () {
           </span>
           ${algumParado ? '<span class="selo amarelo">Parado</span>' : ''}
         </div>
+        ${primeira.observacao ? `<p class="cartao-grupo-recibo-observacao">💬 ${UI.escaparHtml(primeira.observacao)}</p>` : ''}
         <div class="tabela-reforcos-wrap">
           <table class="tabela">
             <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
@@ -379,8 +421,8 @@ const TelaRecibos = (function () {
                 <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
                 <td>${r.percentual_parcela_dividida !== '' && r.percentual_parcela_dividida !== undefined ? UI.escaparHtml(String(r.percentual_parcela_dividida)) + '%' : '-'}</td>
                 <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
-                <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ' <span class="selo vermelho" title="Divergência de valores">!</span>' : ''}</td>
-                <td>${UI.escaparHtml(r.ordem_bancaria)}</td>
+                <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r, ordenadas))}">!</span>` : ''}</td>
+                <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
                 <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
               </tr>`).join('')}</tbody>
           </table>
@@ -842,6 +884,25 @@ const TelaRecibos = (function () {
   }
 
   /**
+   * Todo número de LE/OB já anexado em QUALQUER linha de parcela dividida
+   * dentro de `containerId` agora (sessão 2026-08-13, pedido do usuário) -
+   * usado pro aviso imediato de duplicidade ao clicar "+Adicionar LE"/"+
+   * Adicionar OB", antes mesmo de salvar (o backend confere de novo, com
+   * certeza, no salvamento - documentoDuplicadoNoProcesso_, Recibos.gs).
+   * Olha TODAS as linhas do container, não só a que disparou o anexo - o
+   * mesmo documento pode ter sido colado por engano numa parcela diferente.
+   */
+  function numerosDocumentosAnexadosNaTela_(containerId) {
+    const numerosOb = new Set();
+    const numerosLe = new Set();
+    document.querySelectorAll('#' + containerId + ' .linha-parcela-dividida').forEach(linha => {
+      (linha._ordensBancarias || []).forEach(it => { if (it.numero_ob) numerosOb.add(it.numero_ob); });
+      if (linha._notaLiquidacao && linha._notaLiquidacao.numero) numerosLe.add(linha._notaLiquidacao.numero);
+    });
+    return { numerosOb, numerosLe };
+  }
+
+  /**
    * Monta uma linha do editor de parcela dividida dentro do container
    * `containerId` (sessão 2026-07-30: parametrizada pra ser reaproveitada
    * tanto em "Novo processo de Recibo" - `linhasParcelaDividida`, sempre
@@ -861,39 +922,36 @@ const TelaRecibos = (function () {
    *
    * `opts.percentualFixo` (sessão 2026-08-06, Recibo dividido de Contrato de
    * Gestão (TES) - ver semearParcelasTes_): quando informado, o campo
-   * Percentual nasce travado (somente leitura) com esse valor, a linha nunca
-   * mostra botão de remover (split fixo, não dá pra ficar com menos que
-   * PARCELA_DIVIDIDA_TES_PERCENTUAIS.length parcelas), e se for o MAIOR
-   * percentual do split (PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB), a linha
-   * troca o campo único "Ordem Bancária (anexo)" por uma tabela "Documentos
-   * anexados" (LE + N OBs) com botão "+ Adicionar OB" - ver
-   * renderTabelaOrdensBancariasParcela_. Valor Pago nessa linha vira
-   * somente leitura, somado automaticamente a partir da tabela.
+   * Percentual nasce travado (somente leitura) com esse valor, e a linha
+   * nunca mostra botão de remover (split fixo, não dá pra ficar com menos
+   * que PARCELA_DIVIDIDA_TES_PERCENTUAIS.length parcelas).
+   *
+   * TODA linha usa a mesma tabela "Documentos anexados" (LE + N OBs) com os
+   * botões "+ Adicionar LE"/"+ Adicionar OB" - ver
+   * renderTabelaOrdensBancariasParcela_ (sessão 2026-08-13, pedido do
+   * usuário: "preciso que o layout de botões e a tabela... sejam os
+   * mesmos" - antes só a linha de maior percentual usava esse padrão, a
+   * outra ainda tinha os <input type="file"> soltos de antes da
+   * padronização). Valor Pago é sempre somente leitura, somado
+   * automaticamente a partir da tabela.
    */
   function adicionarLinhaParcelaDividida_(containerId, obterNotaEmpenho, dadosExistentes, opts) {
     contadorLinhasParcelaDividida++;
     const id = contadorLinhasParcelaDividida;
     const jaSalva = !!(dadosExistentes && dadosExistentes.id);
     const percentualFixo = opts && opts.percentualFixo;
-    const multiOB = percentualFixo === PARCELA_DIVIDIDA_TES_PERCENTUAL_MULTI_OB;
     const div = document.createElement('div');
     div.className = 'linha-parcela-dividida';
     div.dataset.linhaParcelaDividida = id;
     if (jaSalva) div.dataset.idExistente = dadosExistentes.id;
-    if (multiOB) div.dataset.multiOb = '1';
     const valorPercentual = percentualFixo || (dadosExistentes && dadosExistentes.percentual_parcela_dividida) || '';
     div.innerHTML = `
       <div class="linha-parcela-dividida-corpo">
         <div class="grade-3">
           <div class="campo"><label>Percentual (%)</label><input type="text" inputmode="decimal" class="pd-percentual campo-moeda" value="${valorPercentual}" ${percentualFixo ? 'readonly' : ''} /></div>
           <div class="campo"><label>Valor Liquidado</label><input type="text" inputmode="decimal" class="pd-liquidado campo-moeda" value="${dadosExistentes && dadosExistentes.valor_liquidado ? dadosExistentes.valor_liquidado : ''}" /></div>
-          <div class="campo"><label>Valor Pago${multiOB ? ' (soma automática)' : ''}</label><input type="text" inputmode="decimal" class="pd-pago campo-moeda" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" ${multiOB ? 'readonly' : ''} /></div>
+          <div class="campo"><label>Valor Pago (soma automática)</label><input type="text" inputmode="decimal" class="pd-pago campo-moeda" value="${dadosExistentes && dadosExistentes.valor_pago ? dadosExistentes.valor_pago : ''}" readonly /></div>
         </div>
-        ${multiOB ? '' : `<div class="grade-2">
-          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" class="pd-notaLiquidacaoArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
-          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" class="pd-ordemBancariaArquivo" accept=".pdf,image/*" />${dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(dadosExistentes.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
-        </div>`}
-        ${multiOB ? `
         <div class="campo pd-ob-bloco">
           <label>Documentos anexados (LE + Ordens Bancárias)</label>
           <div class="pd-ob-tabela-wrap"></div>
@@ -901,7 +959,7 @@ const TelaRecibos = (function () {
           <input type="file" class="pd-ob-novo-anexo oculto" accept=".pdf,image/*" />
           <button type="button" class="botao pd-add-le">+ Adicionar LE</button>
           <button type="button" class="botao pd-add-ob">+ Adicionar OB</button>
-        </div>` : ''}
+        </div>
       </div>
       ${jaSalva || percentualFixo ? '' : '<button type="button" class="linha-parcela-dividida-remover" title="Remover parcela">&times;</button>'}`;
     document.getElementById(containerId).appendChild(div);
@@ -913,108 +971,96 @@ const TelaRecibos = (function () {
     }
     atualizarBotoesRemoverParcelaDividida_(containerId);
 
-    if (multiOB) {
-      // LE virou item único tratado como a lista de OB (sessão 2026-08-12,
-      // pedido do usuário: "padronização de layout" - botão "+Adicionar LE"
-      // em vez do <input type="file"> solto, mostrado na mesma tabela
-      // "Documentos anexados" com Ver/apagar). _notaLiquidacaoOriginalUrl
-      // (imutável, capturada aqui) é o que diferencia "nunca existiu" de "já
-      // existia e foi removida agora" pra montarPayloadNotaLiquidacao_ saber
-      // quando mandar removerNotaLiquidacaoArquivo.
-      div._notaLiquidacaoOriginalUrl = (dadosExistentes && dadosExistentes.nota_liquidacao_url) || '';
-      div._notaLiquidacao = div._notaLiquidacaoOriginalUrl ? {
-        numero: (dadosExistentes && dadosExistentes.nota_liquidacao_numero) || '',
-        url: div._notaLiquidacaoOriginalUrl
-      } : null;
+    // _notaLiquidacaoOriginalUrl (imutável, capturada aqui) diferencia "nunca
+    // existiu" de "já existia e foi removida agora" pra
+    // montarPayloadNotaLiquidacao_ saber quando mandar
+    // removerNotaLiquidacaoArquivo.
+    div._notaLiquidacaoOriginalUrl = (dadosExistentes && dadosExistentes.nota_liquidacao_url) || '';
+    div._notaLiquidacao = div._notaLiquidacaoOriginalUrl ? {
+      numero: (dadosExistentes && dadosExistentes.nota_liquidacao_numero) || '',
+      url: div._notaLiquidacaoOriginalUrl
+    } : null;
 
-      div._ordensBancarias = ((dadosExistentes && dadosExistentes.ordens_bancarias) || []).map(it => ({
-        numero_ob: it.numero_ob || '', valor: Number(it.valor) || 0,
-        arquivo_drive_id: it.arquivo_drive_id || '', arquivo_url: it.arquivo_url || ''
-      }));
-      // Compatibilidade (sessão 2026-08-06): se esta linha vem de um Recibo
-      // avulso que já tinha UMA Ordem Bancária no formato antigo (campo
-      // único, antes desta funcionalidade existir) e ainda não foi migrada
-      // pra um item da tabela, mostra ela como item herdado, em vez de
-      // "sumir" da tela.
-      if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url && !div._ordensBancarias.length) {
-        div._ordensBancarias.push({
-          numero_ob: '', valor: Number(dadosExistentes.valor_pago) || 0,
-          arquivo_drive_id: dadosExistentes.ordem_bancaria_arquivo_drive_id || '', arquivo_url: dadosExistentes.ordem_bancaria_arquivo_url
-        });
-      }
-      div.querySelector('.pd-liquidado').addEventListener('input', () => renderTabelaOrdensBancariasParcela_(div));
-
-      const inputNovoLe = div.querySelector('.pd-le-novo-anexo');
-      div.querySelector('.pd-add-le').addEventListener('click', () => inputNovoLe.click());
-      inputNovoLe.addEventListener('change', async function () {
-        const arquivo = inputNovoLe.files[0];
-        if (!arquivo) return;
-        const notaEmpenho = (obterNotaEmpenho() || '').trim();
-        if (!notaEmpenho) { UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro'); inputNovoLe.value = ''; return; }
-        try {
-          if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
-          const base64 = await UI.lerArquivoBase64(arquivo);
-          const resultado = await Api.chamar('lerAnexoRecibo', {
-            tipo: 'nota_liquidacao', arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
-          });
-          div._notaLiquidacao = {
-            numero: resultado.numero_documento || '',
-            _base64: base64, _nome: arquivo.name, _tipo: arquivo.type
-          };
-          div.querySelector('.pd-liquidado').value = resultado.valor;
-          renderTabelaOrdensBancariasParcela_(div);
-        } catch (err) {
-          UI.toast(err.message, 'erro');
-        } finally {
-          inputNovoLe.value = '';
-        }
+    div._ordensBancarias = ((dadosExistentes && dadosExistentes.ordens_bancarias) || []).map(it => ({
+      numero_ob: it.numero_ob || '', valor: Number(it.valor) || 0,
+      arquivo_drive_id: it.arquivo_drive_id || '', arquivo_url: it.arquivo_url || ''
+    }));
+    // Compatibilidade (sessão 2026-08-06): se esta linha vem de um Recibo
+    // avulso que já tinha UMA Ordem Bancária no formato antigo (campo
+    // único, antes desta funcionalidade existir) e ainda não foi migrada
+    // pra um item da tabela, mostra ela como item herdado, em vez de
+    // "sumir" da tela.
+    if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url && !div._ordensBancarias.length) {
+      div._ordensBancarias.push({
+        numero_ob: '', valor: Number(dadosExistentes.valor_pago) || 0,
+        arquivo_drive_id: dadosExistentes.ordem_bancaria_arquivo_drive_id || '', arquivo_url: dadosExistentes.ordem_bancaria_arquivo_url
       });
-
-      const inputNovoOb = div.querySelector('.pd-ob-novo-anexo');
-      div.querySelector('.pd-add-ob').addEventListener('click', () => inputNovoOb.click());
-      inputNovoOb.addEventListener('change', async function () {
-        const arquivo = inputNovoOb.files[0];
-        if (!arquivo) return;
-        const notaEmpenho = (obterNotaEmpenho() || '').trim();
-        if (!notaEmpenho) { UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro'); inputNovoOb.value = ''; return; }
-        try {
-          if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
-          const base64 = await UI.lerArquivoBase64(arquivo);
-          const resultado = await Api.chamar('lerAnexoRecibo', {
-            tipo: 'ordem_bancaria', arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
-          });
-          // Duplicidade (sessão 2026-08-12, pedido do usuário): aviso na hora,
-          // sem esperar o Salvar - o backend também confere no salvamento
-          // (numeroObDuplicadoNaLista_, Recibos.gs), essa é só a versão rápida.
-          if (resultado.numero_documento && div._ordensBancarias.some(it => it.numero_ob === resultado.numero_documento)) {
-            UI.toast('A Ordem Bancária nº ' + resultado.numero_documento + ' já foi anexada a este Recibo.', 'erro');
-            return;
-          }
-          div._ordensBancarias.push({
-            numero_ob: resultado.numero_documento || '', valor: resultado.valor,
-            _base64: base64, _nome: arquivo.name, _tipo: arquivo.type
-          });
-          renderTabelaOrdensBancariasParcela_(div);
-        } catch (err) {
-          UI.toast(err.message, 'erro');
-        } finally {
-          inputNovoOb.value = '';
-        }
-      });
-      renderTabelaOrdensBancariasParcela_(div);
-    } else {
-      const anexoNl = ligarAnexoComOcr_({
-        inputEl: div.querySelector('.pd-notaLiquidacaoArquivo'), tipo: 'nota_liquidacao',
-        obterNotaEmpenho, valorInputEl: div.querySelector('.pd-liquidado')
-      });
-      if (dadosExistentes && dadosExistentes.nota_liquidacao_url) anexoNl.travar(dadosExistentes.valor_liquidado, true, dadosExistentes.nota_liquidacao_numero);
-
-      const anexoOb = ligarAnexoComOcr_({
-        inputEl: div.querySelector('.pd-ordemBancariaArquivo'), tipo: 'ordem_bancaria',
-        obterNotaEmpenho, valorInputEl: div.querySelector('.pd-pago')
-      });
-      if (dadosExistentes && dadosExistentes.ordem_bancaria_arquivo_url) anexoOb.travar(dadosExistentes.valor_pago, true);
     }
+    div.querySelector('.pd-liquidado').addEventListener('input', () => renderTabelaOrdensBancariasParcela_(div));
+
+    const inputNovoLe = div.querySelector('.pd-le-novo-anexo');
+    div.querySelector('.pd-add-le').addEventListener('click', () => inputNovoLe.click());
+    inputNovoLe.addEventListener('change', async function () {
+      const arquivo = inputNovoLe.files[0];
+      if (!arquivo) return;
+      const notaEmpenho = (obterNotaEmpenho() || '').trim();
+      if (!notaEmpenho) { UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro'); inputNovoLe.value = ''; return; }
+      try {
+        if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        const resultado = await Api.chamar('lerAnexoRecibo', {
+          tipo: 'nota_liquidacao', arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
+        });
+        // Duplicidade (sessão 2026-08-13, pedido do usuário): aviso na hora,
+        // olhando TODAS as parcelas na tela (não só esta linha) - o backend
+        // confere o processo inteiro de novo no salvamento
+        // (documentoDuplicadoNoProcesso_, Recibos.gs), essa é só a versão rápida.
+        if (resultado.numero_documento && numerosDocumentosAnexadosNaTela_(containerId).numerosLe.has(resultado.numero_documento)) {
+          UI.toast('A Nota de Liquidação nº ' + resultado.numero_documento + ' já foi anexada a este processo.', 'erro');
+          return;
+        }
+        div._notaLiquidacao = {
+          numero: resultado.numero_documento || '',
+          _base64: base64, _nome: arquivo.name, _tipo: arquivo.type
+        };
+        div.querySelector('.pd-liquidado').value = resultado.valor;
+        renderTabelaOrdensBancariasParcela_(div);
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      } finally {
+        inputNovoLe.value = '';
+      }
+    });
+
+    const inputNovoOb = div.querySelector('.pd-ob-novo-anexo');
+    div.querySelector('.pd-add-ob').addEventListener('click', () => inputNovoOb.click());
+    inputNovoOb.addEventListener('change', async function () {
+      const arquivo = inputNovoOb.files[0];
+      if (!arquivo) return;
+      const notaEmpenho = (obterNotaEmpenho() || '').trim();
+      if (!notaEmpenho) { UI.toast('Preencha a Nota de Empenho antes de anexar este documento.', 'erro'); inputNovoOb.value = ''; return; }
+      try {
+        if (arquivo.size > 8 * 1024 * 1024) throw new Error('Arquivo muito grande (máximo 8MB).');
+        const base64 = await UI.lerArquivoBase64(arquivo);
+        const resultado = await Api.chamar('lerAnexoRecibo', {
+          tipo: 'ordem_bancaria', arquivoBase64: base64, arquivoNome: arquivo.name, arquivoTipo: arquivo.type, notaEmpenhoEsperada: notaEmpenho
+        });
+        if (resultado.numero_documento && numerosDocumentosAnexadosNaTela_(containerId).numerosOb.has(resultado.numero_documento)) {
+          UI.toast('A Ordem Bancária nº ' + resultado.numero_documento + ' já foi anexada a este processo.', 'erro');
+          return;
+        }
+        div._ordensBancarias.push({
+          numero_ob: resultado.numero_documento || '', valor: resultado.valor,
+          _base64: base64, _nome: arquivo.name, _tipo: arquivo.type
+        });
+        renderTabelaOrdensBancariasParcela_(div);
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      } finally {
+        inputNovoOb.value = '';
+      }
+    });
+    renderTabelaOrdensBancariasParcela_(div);
   }
 
   /**
@@ -1163,20 +1209,13 @@ const TelaRecibos = (function () {
             valor_liquidado: UI.parseValorBr(div.querySelector('.pd-liquidado').value),
             valor_pago: UI.parseValorBr(div.querySelector('.pd-pago').value)
           };
-          if (div.dataset.multiOb === '1') {
-            // LE e OB tratadas por botão + tabela "Documentos anexados" nesta
-            // linha (sessão 2026-08-12) - ver montarPayloadNotaLiquidacao_/
-            // montarPayloadOrdensBancarias_, não há mais <input type="file">
-            // pra reler aqui.
-            Object.assign(parcela, montarPayloadNotaLiquidacao_(div));
-            parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
-          } else {
-            parcela.nota_liquidacao_numero = div.querySelector('.pd-notaLiquidacaoArquivo')._numeroDocumentoLido || '';
-            const nl = await lerAnexoDoInput_(div.querySelector('.pd-notaLiquidacaoArquivo'));
-            if (nl) Object.assign(parcela, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-            const ob = await lerAnexoDoInput_(div.querySelector('.pd-ordemBancariaArquivo'));
-            if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
-          }
+          // LE e OB tratadas por botão + tabela "Documentos anexados" em
+          // TODA linha (sessão 2026-08-13, unificado - antes só a de maior
+          // percentual) - ver montarPayloadNotaLiquidacao_/
+          // montarPayloadOrdensBancarias_, não há mais <input type="file">
+          // pra reler aqui.
+          Object.assign(parcela, montarPayloadNotaLiquidacao_(div));
+          parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
           return parcela;
         }));
         await Api.chamar('criarGrupoParcelaDivididaRecibo', { dadosBase, parcelas });
@@ -1370,26 +1409,15 @@ const TelaRecibos = (function () {
             valor_pago: UI.parseValorBr(div.querySelector('.pd-pago').value)
           };
           if (div.dataset.idExistente) parcela.id = div.dataset.idExistente;
-          if (div.dataset.multiOb === '1') {
-            // LE e OB tratadas por botão + tabela "Documentos anexados" nesta
-            // linha (sessão 2026-08-12) - ver montarPayloadNotaLiquidacao_/
-            // montarPayloadOrdensBancarias_, não há mais <input type="file">
-            // pra reler aqui (nem a flag dataset.removerExistente - vira
-            // removerNotaLiquidacaoArquivo direto quando div._notaLiquidacao
-            // é null mas já existia uma LE salva).
-            Object.assign(parcela, montarPayloadNotaLiquidacao_(div));
-            parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
-          } else {
-            const inputNl = div.querySelector('.pd-notaLiquidacaoArquivo');
-            parcela.nota_liquidacao_numero = inputNl._numeroDocumentoLido || '';
-            if (inputNl.dataset.removerExistente === '1') parcela.removerNotaLiquidacaoArquivo = true;
-            const nl = await lerAnexoDoInput_(inputNl);
-            if (nl) Object.assign(parcela, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
-            const inputOb = div.querySelector('.pd-ordemBancariaArquivo');
-            if (inputOb.dataset.removerExistente === '1') parcela.removerOrdemBancariaArquivo = true;
-            const ob = await lerAnexoDoInput_(inputOb);
-            if (ob) Object.assign(parcela, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
-          }
+          // LE e OB tratadas por botão + tabela "Documentos anexados" em
+          // TODA linha (sessão 2026-08-13, unificado - antes só a de maior
+          // percentual) - ver montarPayloadNotaLiquidacao_/
+          // montarPayloadOrdensBancarias_, não há mais <input type="file">
+          // pra reler aqui (nem a flag dataset.removerExistente - vira
+          // removerNotaLiquidacaoArquivo direto quando div._notaLiquidacao é
+          // null mas já existia uma LE salva).
+          Object.assign(parcela, montarPayloadNotaLiquidacao_(div));
+          parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
           return parcela;
         }));
         await Api.chamar('atualizarParcelasDivididasRecibo', { id: recibo.id, dadosBase: dados, parcelas });
