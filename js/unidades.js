@@ -201,7 +201,7 @@ const TelaUnidades = (function () {
             <span class="cartao-unidade-repasse-regular">Repasse Mensal Regular: ${UI.formatarMoeda(u.parcela_mensal_regular)}</span>
             <span class="cartao-unidade-repasse-total">Repasse Mensal Total: ${UI.formatarMoeda(u.parcela_mensal_total)}</span>
           </div>
-          <div class="cartao-unidade-meta">${UI.escaparHtml(u.tipo || '-')} · OSS ${UI.escaparHtml(u.oss || '-')} · ${UI.escaparHtml(u.cnpj || '-')}</div>
+          <div class="cartao-unidade-meta">${UI.escaparHtml(u.tipo || '-')} · OSS ${UI.escaparHtml(u.oss || '-')} · ${UI.escaparHtml(u.cnpj || '-')} · Contrato CEO ${UI.escaparHtml(u.contrato_ceo || '-')}</div>
           ${detalheTasHtml(u)}
         </div>
       </div>`).join('')}</div>`;
@@ -331,6 +331,7 @@ const TelaUnidades = (function () {
           <div class="campo"><label>OSS</label><input id="uOss" value="${UI.escaparHtml(unidade ? unidade.oss : '')}" /></div>
           <div class="campo"><label>CNPJ *</label><input id="uCnpj" value="${UI.escaparHtml(unidade ? unidade.cnpj : '')}" required placeholder="00.000.000/0000-00" /></div>
           <div class="campo"><label>Contrato de Gestão *</label><input id="uContrato" value="${UI.escaparHtml(unidade ? unidade.contrato_gestao : '')}" required /></div>
+          <div class="campo"><label>Contrato CEO</label><input id="uContratoCeo" value="${UI.escaparHtml(unidade ? unidade.contrato_ceo : '')}" placeholder="Ex.: 00871/2022" /></div>
           <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
           <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
           <div class="campo"><label>Ação</label><input id="uAcao" value="${UI.escaparHtml(unidade ? unidade.acao : '')}" /></div>
@@ -375,6 +376,7 @@ const TelaUnidades = (function () {
         oss: document.getElementById('uOss').value.trim(),
         cnpj: document.getElementById('uCnpj').value.trim(),
         contrato_gestao: document.getElementById('uContrato').value.trim(),
+        contrato_ceo: document.getElementById('uContratoCeo').value.trim(),
         valor_contrato_gestao: UI.parseValorBr(document.getElementById('uValorContratoGestaoTesouro').value),
         valor_contrato_gestao_sus: UI.parseValorBr(document.getElementById('uValorContratoGestaoSus').value),
         acao: document.getElementById('uAcao').value.trim(),
