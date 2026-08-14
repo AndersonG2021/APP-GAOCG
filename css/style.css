@@ -133,13 +133,28 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
   font-size: 13.5px;
   font-family: inherit;
 }
-.campo input.destaque-repeticao, .campo select.destaque-repeticao, .campo textarea.destaque-repeticao {
+/*
+ * Especificidade do ramo de <input> nas 3 regras abaixo repete DE PROPÓSITO
+ * os dois :not() da regra "normal" logo acima (linha 128) - achado real
+ * (sessão 2026-08-14, motivado pelo usuário reportar que o vermelho novo não
+ * aparecia): ".campo input.destaque-repeticao" (2 classes) tem especificidade
+ * MENOR que ".campo input:not([type=checkbox]):not([type=radio])" (3
+ * classes, por causa dos dois :not() - cada um conta a especificidade do que
+ * está dentro dele, é padrão CSS), então a borda cinza "normal" sempre
+ * vencia e o amarelo/vermelho NUNCA aparecia em campo <input> - nem o amarelo
+ * de template, nem o vermelho de valor monetário inválido, os dois já
+ * quebrados antes desta sessão. <select>/<textarea> nunca tiveram esse
+ * problema (a regra "normal" deles não tem :not() nenhum). O mesmo ajuste
+ * foi replicado em css/tema-novo.css (tema escuro tem sua própria regra
+ * "normal", com o mesmo problema).
+ */
+.campo input:not([type="checkbox"]):not([type="radio"]).destaque-repeticao, .campo select.destaque-repeticao, .campo textarea.destaque-repeticao {
   border-color: var(--amarelo); background: var(--amarelo-claro);
 }
 /* Campo monetário com texto que não vira número (ver UI.parseValorBr, js/app.js).
    Os campos de valor são type="text" + inputmode="decimal" pra aceitar o formato
    brasileiro ("1.234,56"), que o type="number" rejeitava silenciosamente. */
-.campo input.campo-invalido {
+.campo input:not([type="checkbox"]):not([type="radio"]).campo-invalido {
   border-color: var(--vermelho); background: var(--vermelho-claro);
 }
 /* Campo obrigatório do formulário de SOF ainda vazio (sessão 2026-08-14,
@@ -147,7 +162,7 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
    em js/sof.js. Some sozinho assim que o campo é preenchido (na mão ou por
    autopreenchimento de template/unidade); nunca convive com .destaque-repeticao
    no mesmo campo, porque um campo preenchido pelo template deixa de estar vazio. */
-.campo input.campo-obrigatorio-vazio, .campo select.campo-obrigatorio-vazio, .campo textarea.campo-obrigatorio-vazio,
+.campo input:not([type="checkbox"]):not([type="radio"]).campo-obrigatorio-vazio, .campo select.campo-obrigatorio-vazio, .campo textarea.campo-obrigatorio-vazio,
 .campo .editor-rico-area.campo-obrigatorio-vazio {
   border-color: var(--vermelho); background: var(--vermelho-claro);
 }

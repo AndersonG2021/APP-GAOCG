@@ -254,10 +254,26 @@ html[data-tema="novo"] .filtro-multiplo-busca:focus,
 html[data-tema="novo"] .rel-input:focus {
   outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-claro);
 }
-html[data-tema="novo"] .campo input.destaque-repeticao,
+/*
+ * Especificidade dos seletores de INPUT abaixo repete os dois :not() da regra
+ * "normal" de campo (linha ~238) DE PROPÓSITO - achado real (sessão
+ * 2026-08-14): sem eles, ".campo input.destaque-repeticao"/".campo
+ * input.campo-invalido"/".campo input.campo-obrigatorio-vazio" perdem em
+ * especificidade pra ".campo input:not([type=checkbox]):not([type=radio])"
+ * (2 :not() = 2 classes a mais), então o amarelo/vermelho de qualquer campo
+ * <input> nunca aparecia neste tema - a borda cinza "normal" sempre vencia,
+ * silenciosamente. <select>/<textarea> não tinham esse problema (a regra
+ * "normal" deles não tem :not() nenhum).
+ */
+html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]).destaque-repeticao,
 html[data-tema="novo"] .campo select.destaque-repeticao,
 html[data-tema="novo"] .campo textarea.destaque-repeticao { border-color: var(--amarelo); background: var(--amarelo-claro); }
-html[data-tema="novo"] .campo input.campo-invalido { border-color: var(--vermelho); background: var(--vermelho-claro); }
+html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]).campo-invalido { border-color: var(--vermelho); background: var(--vermelho-claro); }
+/* Campo obrigatório do formulário de SOF ainda vazio (sessão 2026-08-14) - ver .campo-obrigatorio-vazio em style.css/js/sof.js. */
+html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]).campo-obrigatorio-vazio,
+html[data-tema="novo"] .campo select.campo-obrigatorio-vazio,
+html[data-tema="novo"] .campo textarea.campo-obrigatorio-vazio,
+html[data-tema="novo"] .campo .editor-rico-area.campo-obrigatorio-vazio { border-color: var(--vermelho); background: var(--vermelho-claro); }
 html[data-tema="novo"] .campo .ajuda { color: var(--cinza-500); }
 html[data-tema="novo"] .select-pesquisavel-lista { background: var(--superficie); border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
 html[data-tema="novo"] .select-pesquisavel-opcao:hover, html[data-tema="novo"] .select-pesquisavel-opcao.destacada { background: var(--azul-claro); color: var(--azul-escuro); }
