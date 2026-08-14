@@ -96,7 +96,28 @@ body {
   justify-content: space-between;
   align-items: center;
 }
-#barraTopo .usuario-info { text-align: right; font-size: 12.5px; color: var(--cinza-500); cursor: pointer; }
+/*
+ * Borda + sombra (sessão 2026-08-14, pedido do usuário): antes só tinha
+ * cursor:pointer, sem nenhuma pista visual de que dava pra clicar (abre
+ * abrirModalPerfil, ver js/app.js) até passar o mouse. Mesma linguagem de
+ * "cartão clicável" já usada em .cartao-indicador/.cartao-sof/.cartao-unidade
+ * (borda sutil + sombra em repouso, borda mais escura + sombra mais forte no
+ * hover) - só com os tokens de cor prontos pra virar dark mode sozinha
+ * quando o tema mudar (ver css/tema-novo.css).
+ */
+#barraTopo .usuario-info {
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--cinza-500);
+  cursor: pointer;
+  padding: 6px 14px;
+  border: 1px solid var(--cinza-200);
+  border-radius: var(--raio);
+  background: var(--cinza-100);
+  box-shadow: var(--sombra);
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+#barraTopo .usuario-info:hover { border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
 #barraTopo .usuario-info strong { color: var(--cinza-900); font-size: 14px; display: block; }
 
 #conteudo { padding: 24px; flex: 1; overflow-y: auto; max-width: 1600px; margin: 0 auto; width: 100%; }
