@@ -370,14 +370,6 @@ const TelaSof = (function () {
     URL.revokeObjectURL(url);
   }
 
-  /** Abre HTML gerado em nova aba (Blob + URL de objeto) - revoga a URL depois de um tempo, não na hora, senão a aba nem termina de carregar o conteúdo antes dela sumir. */
-  function abrirDocumentoEmNovaAba_(html) {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
   async function abrirSofExistente(id) {
     if (abrindoLinha) return;
     abrindoLinha = true;
@@ -648,7 +640,6 @@ const TelaSof = (function () {
           <div id="sofFontesContainer" class="linhas-fonte"></div>
           <div class="linhas-fonte-rodape">
             <button type="button" class="botao" id="btnAdicionarFonte">+ Adicionar fonte</button>
-            <button type="button" class="botao" id="btnFonteTesSus" title="Adiciona TESOURO (objeto Contrato de Gestão TES) + SUS (objeto Contrato de Gestão SUS)">+ TES+SUS</button>
             <span class="linhas-fonte-total">Total geral: <strong id="sofFontesTotalGeral">R$ 0,00</strong></span>
           </div>
           <p class="ajuda">Preencha só os meses que se aplicam - pagamento único usa 1 mês, pagamento recorrente usa vários. Cada fonte tem seu próprio Objeto (ex.: TES/SUS), pra rastrear o valor atendido por objeto.</p>
@@ -710,7 +701,7 @@ const TelaSof = (function () {
       ${editando ? '<div id="secaoNotasEmpenho" style="border-top:1px solid var(--cinza-200);margin-top:16px;padding-top:12px"></div>' : ''}`;
 
     UI.abrirModal(editando ? 'Editar SOF' : 'Nova SOF', corpo,
-      `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnGerarDocumentoSei">Salvar e gerar documento SEI</button><button class="botao" id="btnEnviarSofSei" title="Salva a SOF e preenche o formulário de Incluir Documento num processo já aberto no SEI">Salvar e enviar ao SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
+      `<button class="botao" id="btnCancelarSof">Cancelar</button><button class="botao" id="btnEnviarSofSei" title="Salva a SOF e preenche o formulário de Incluir Documento num processo já aberto no SEI">Salvar e enviar ao SEI</button><button class="botao primario" id="btnSalvarSof">Salvar</button>`,
       { grande: true });
     // Duas limpezas no mesmo fechamento (aoFecharModal só guarda 1 callback
     // por vez - ver UI.abrirModal/aoFecharModal, js/app.js): liberar a trava
@@ -740,23 +731,6 @@ const TelaSof = (function () {
       linhasFontes.push({ fonte: '', objeto: '', codigo_poas: '', parcela_mensal: '', cronograma: [] });
       renderFontesFormulario();
     });
-    // "+ TES+SUS" (sessão 2026-07-29, pedido do usuário): atalho pro caso mais
-    // comum - uma SOF pedindo o orçamento do ano todo com Tesouro (Contrato de
-    // Gestão TES) e SUS (Contrato de Gestão SUS) numa linha cada. Se a única
-    // linha existente ainda estiver em branco (estado inicial), substitui;
-    // senão, só acrescenta as duas linhas às que já existirem.
-    document.getElementById('btnFonteTesSus').addEventListener('click', () => {
-      linhasFontes = lerLinhasFontesDoDom_();
-      const vazia = linhasFontes.length === 1 && !linhasFontes[0].fonte && !linhasFontes[0].objeto && !linhasFontes[0].parcela_mensal
-        && !(linhasFontes[0].cronograma || []).some(c => c.valor);
-      const novasLinhas = [
-        { fonte: 'TESOURO', objeto: 'CONTRATO DE GESTÃO (TES)', codigo_poas: '', parcela_mensal: '', cronograma: [] },
-        { fonte: 'SUS', objeto: 'CONTRATO DE GESTÃO (SUS)', codigo_poas: '', parcela_mensal: '', cronograma: [] }
-      ];
-      linhasFontes = vazia ? novasLinhas : linhasFontes.concat(novasLinhas);
-      renderFontesFormulario();
-    });
-
     renderManutencaoSeiFormulario_();
     document.getElementById('btnAdicionarLinhaManutencaoSei').addEventListener('click', () => {
       linhasManutencaoSei_ = lerLinhasManutencaoSeiDoDom_();
@@ -836,8 +810,7 @@ const TelaSof = (function () {
     });
 
     document.getElementById('btnCancelarSof').addEventListener('click', UI.fecharModal);
-    document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof, { gerarDocumento: false }));
-    document.getElementById('btnGerarDocumentoSei').addEventListener('click', () => salvarSof(sof, { gerarDocumento: true }));
+    document.getElementById('btnSalvarSof').addEventListener('click', () => salvarSof(sof));
     // "Salvar e enviar ao SEI" (sessão 2026-08-08): exige a extensão GAOCG SEI
     // Bridge instalada e o processo já aberto numa aba do sei.pe.gov.br - ver
     // js/sei-bridge.js e Extension/gaocg-sei-bridge/.
@@ -1043,7 +1016,7 @@ const TelaSof = (function () {
    *
    * Objeto (sessão 2026-07-29): campo próprio por linha de fonte (ex.:
    * "CONTRATO DE GESTÃO (TES)"), obrigatório - é o que amarra NE/Recibo ao
-   * objeto certo (ver botão "TES+SUS" em renderFontesFormulario). Input com
+   * objeto certo. Input com
    * <datalist> (sugestões da mesma lista de Objeto usada em todo o app),
    * mas aceita texto livre - não é um <select> fechado.
    *
@@ -1306,20 +1279,16 @@ const TelaSof = (function () {
     };
   }
 
-  /**
-   * Salva o SOF - opcoes.gerarDocumento (novo, sessão de fusão do formulário
-   * SEI) também monta/baixa/abre o documento HTML na sequência, disponível
-   * tanto na criação quanto na edição (antes só existia editando).
-   */
+  /** Salva o SOF - opcoes.enviarSei também monta o documento HTML e manda pra extensão do SEI na sequência (ver SeiBridge.enviarSof abaixo). */
   async function salvarSof(sofExistente, opcoes) {
     opcoes = opcoes || {};
     // Nada mudou (sessão 2026-08-13, pedido do usuário): editando uma SOF já
-    // existente, no botão "Salvar" puro (gerarDocumento/enviarSei pedem uma
-    // ação explícita à parte, então continuam rodando mesmo sem edição), só
-    // fecha o card em vez de validar + chamar o backend à toa - é o mesmo
-    // dirty-tracking que já decidia minimizar x fechar no clique fora (ver
-    // UI.modalFoiEditado, js/app.js).
-    if (sofExistente && !opcoes.gerarDocumento && !opcoes.enviarSei && !UI.modalFoiEditado()) {
+    // existente, no botão "Salvar" puro (enviarSei pede uma ação explícita à
+    // parte, então continua rodando mesmo sem edição), só fecha o card em vez
+    // de validar + chamar o backend à toa - é o mesmo dirty-tracking que já
+    // decidia minimizar x fechar no clique fora (ver UI.modalFoiEditado,
+    // js/app.js).
+    if (sofExistente && !opcoes.enviarSei && !UI.modalFoiEditado()) {
       UI.fecharModal();
       return;
     }
@@ -1389,21 +1358,16 @@ const TelaSof = (function () {
         }
       }
 
-      // Mesmo documento nos dois caminhos (baixar/imprimir e enviar ao SEI) -
-      // montarDocumentoSeiHtml_ continua sendo a única fonte do layout da SOF.
-      if (opcoes.gerarDocumento || opcoes.enviarSei) {
+      if (opcoes.enviarSei) {
+        // A SOF é salva primeiro e só então enviada, pra o que vai pro
+        // processo ser exatamente o que ficou gravado. montarDocumentoSeiHtml_
+        // continua sendo a única fonte do layout da SOF. SeiBridge mostra o
+        // próprio toast com o resultado (sucesso, extensão ausente, nenhuma
+        // aba do SEI aberta, etc.) - por isso o toast genérico abaixo não fala
+        // de SEI nesse caso.
         const sofCompleta = Object.assign({}, sofExistente, resposta, dados);
         const html = montarDocumentoSeiHtml_(sofCompleta);
-        if (opcoes.gerarDocumento) {
-          baixarArquivo(`SOF_SEI_${resposta.sof_numero || resposta.id}.html`, html, 'text/html;charset=utf-8');
-          abrirDocumentoEmNovaAba_(html);
-        }
-        // Envio ao SEI (sessão 2026-08-08): a SOF é salva primeiro e só então
-        // enviada, pra o que vai pro processo ser exatamente o que ficou
-        // gravado. SeiBridge mostra o próprio toast com o resultado (sucesso,
-        // extensão ausente, nenhuma aba do SEI aberta, etc.) - por isso o
-        // toast genérico abaixo não fala de SEI nesse caso.
-        if (opcoes.enviarSei) await SeiBridge.enviarSof(sofCompleta, html);
+        await SeiBridge.enviarSof(sofCompleta, html);
       }
 
       CacheAbas.invalidar('sof');
@@ -1411,8 +1375,7 @@ const TelaSof = (function () {
       Api.invalidarCache('obterTemplateSof');
       if (dadosNe) CacheAbas.invalidar('notasEmpenho');
       UI.toast(
-        opcoes.gerarDocumento ? 'SOF salva e documento gerado com sucesso.'
-          : opcoes.enviarSei ? 'SOF salva.'
+        opcoes.enviarSei ? 'SOF salva.'
           : (dadosNe ? 'SOF e Nota de Empenho salvos com sucesso.' : 'SOF salvo com sucesso.'),
         'sucesso'
       );
@@ -1945,7 +1908,9 @@ const TelaSof = (function () {
   // ver PROGRESS.md, sessão de fusão do formulário na criação). Os campos
   // ficam salvos no próprio SOF (via criarSof/atualizarSof) e o documento é
   // gerado como HTML autocontido (sem o timbre nem o rodapé de endereço da
-  // Secretaria, por pedido do usuário) pelo botão "Salvar e gerar documento SEI".
+  // Secretaria, por pedido do usuário) na hora de "Salvar e enviar ao SEI"
+  // (botão "Salvar e gerar documento SEI" existiu até 2026-08-14 - removido
+  // por não ter mais utilidade, pedido do usuário).
 
   const OPCOES_SEI_SOLICITACAO = [
     'CLASSIFICAÇÃO DA DESPESA',
@@ -2025,7 +1990,7 @@ const TelaSof = (function () {
 
   /**
    * Monta o HTML autocontido do documento "Criar SOF - SEI" - `sof` aqui já
-   * deve vir mesclado com os dados recém-salvos (ver salvarSof, opção gerarDocumento).
+   * deve vir mesclado com os dados recém-salvos (ver salvarSof, opção enviarSei).
    * Não reproduz a marcação bagunçada de spans aninhados do export original do
    * SEI - usa HTML/CSS limpo com o mesmo layout visual, sem o timbre (imagem)
    * nem o rodapé de endereço da Secretaria (pedido explícito do usuário).
