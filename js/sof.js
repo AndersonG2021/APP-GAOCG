@@ -2132,7 +2132,6 @@ const TelaSof = (function () {
 
   <p>Para os casos de LICITAÇÕES:</p>
   <p>Número do Contrato: ${UI.escaparHtml(sof.contrato || '')}</p>
-  <p>CEO E-fisco: ${UI.escaparHtml(sof.ceo || '')}</p>
 
   <p>Observações:</p>
   ${OBSERVACOES_SEI_.map(o => {
