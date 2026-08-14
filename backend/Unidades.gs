@@ -266,6 +266,7 @@ function criarUnidade(session, dados) {
     oss: sanitizeString_(dados.oss, 50),
     cnpj: cnpj,
     contrato_gestao: contratoGestao,
+    contrato_ceo: sanitizeString_(dados.contrato_ceo, 50),
     valor_contrato_gestao: toNumber_(dados.valor_contrato_gestao),
     valor_contrato_gestao_sus: toNumber_(dados.valor_contrato_gestao_sus),
     classificacao_orcamentaria: sanitizeString_(dados.classificacao_orcamentaria, 200),
@@ -294,7 +295,7 @@ function atualizarUnidade(session, id, dados) {
   var existente = findById_(sheet, id);
   if (!existente) return fail_('Unidade não encontrada.');
 
-  var campos = ['nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd'];
+  var campos = ['nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'contrato_ceo', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd'];
   var atualizado = Object.assign({}, existente);
   campos.forEach(function (campo) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = sanitizeString_(dados[campo], 200);
@@ -355,4 +356,113 @@ function reativarUnidade(session, id) {
   invalidarCacheUnidades_();
   bumpVersao_('unidades');
   return ok_({ id: id, ativo: true });
+}
+
+/**
+ * Preenche o Contrato CEO das unidades já cadastradas (sessão 2026-08-14,
+ * lista Unidade -> Contrato CEO recebida do usuário em conversa - não existe
+ * em nenhuma planilha/arquivo do repositório, só aqui).
+ *
+ * RODE UMA VEZ, manualmente, pelo editor do Apps Script (seletor de função
+ * "backfillContratoCeoUnidades_" → Executar), DEPOIS de:
+ *   1. criar a coluna "contrato_ceo" na aba Unidades (cabeçalho na linha 1,
+ *      em qualquer coluna livre - leitura/escrita é por NOME de coluna, não
+ *      por posição, ver getHeaders_ em Utils.gs);
+ *   2. colar Utils.gs/Unidades.gs/Relatorios.gs atualizados e dar "Nova
+ *      versão" no deploy.
+ *
+ * Casamento por nome NORMALIZADO (sem acento, sem espaço duplicado/nas
+ * pontas, minúsculo) - tolera as diferenças de espaço que já vinham na lista
+ * original ("Hosp. Pelópidas da Silveira " com espaço sobrando, por exemplo),
+ * mas não tenta adivinhar nome parecido: uma unidade que não bater
+ * EXATAMENTE (mesmo por uma letra só - ex.: singular/plural) fica de fora e
+ * entra no log de "não encontradas" pra conferência manual, nunca é
+ * preenchida "no chute". Idempotente - pode rodar de novo sem problema.
+ */
+function backfillContratoCeoUnidades_() {
+  var MAPA_CONTRATO_CEO_ = {
+    'Hosp. Dom Helder Câmara': '00871/2022',
+    'Hosp. Nossa Senhora das Graças (Alfa)': '01017/2022',
+    'Hosp. Miguel Arraes': '01390/2022',
+    'Hosp. Pelópidas da Silveira': '00872/2022',
+    'UPA São Lourenço': '00011/2022',
+    'UPAE Garanhuns': '45/2026',
+    'UPAE Salgueiro': '12/2026',
+    'UPAE Escada': '01108/2022',
+    'UPAE Carpina': '00961/2022',
+    'UPAE Petrolina': '44/2026',
+    'Hospital Ermirio Coutinho': '00546/2022',
+    'Hospital Silvio Magalhães': '00934/2022',
+    'UPA Cabo': '00127/2022',
+    'UPA Caruaru': '00176/2022',
+    'UPA Engenho Velho': '00001/2022',
+    'UPA Nova Descoberta': '00002/2022',
+    'UPA Paulista': '00007/2022',
+    'UPA Torrões': '00012/2022',
+    'UPA Caxangá': '00010/2022',
+    'UPA Imbiribeira': '00675/2021',
+    'UPAE Limoeiro': '13/2026',
+    'Hospital Brites de Albuquerque': '593/2023',
+    'Hospital do Sertão Eduardo Campos': '01652/2022',
+    'Hospital Regional Emilia Câmara': '01455/2018',
+    'Hospital João Murilo de Oliveira': '01805/2022',
+    'Hospital Regional Ruy de Barros Correia': '01222/2018',
+    'Hospital Mestre Vitalino': '42/2026',
+    'UPA Curado': '00006/2022',
+    'UPA Ibura': '00577/2022',
+    'UPAE Afogados da Ingazeira': '11/2026',
+    'UPAE Serra Talhada': '10/2026',
+    'Hospital Central de Paulista': '736/2026',
+    'UPAE Grande Recife': '139/2026',
+    'Hospital Regional Fernando Bezerra': '00579/2021',
+    'Hospital Dom Malan': '00022/2023',
+    'UPA Barra de Jangada': '0009/2022',
+    'UPA Olinda': '0003/2022',
+    'UPAE Ouricuri': '0860/2020',
+    'Hospital São Sebastião': '00723/2020',
+    'UPA Igarassu': '0008/2022',
+    'UPAE Arcoverde': '09/2026',
+    'UPAE Belo Jardim': '07/2026',
+    'UPAE Caruaru': '718/2020',
+    'UPAE Palmares': '1109/2022',
+    'Hospital da Mulher do Agreste': '151/2025',
+    // Recebido como "Carretas" (plural) - a unidade já cadastrada no app é
+    // "CARRETA DA MULHER PERNAMBUCANA" (singular, visto em tela nesta mesma
+    // sessão). Deixado aqui do jeito que veio de propósito: se não bater,
+    // aparece em "não encontradas" no log, em vez de eu decidir sozinho
+    // qual das duas grafias está certa.
+    'Carretas da Mulher Pernambucana': '01331/2024'
+  };
+
+  function normalizarNomeUnidade_(texto) {
+    return String(texto || '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos (marcas combinantes pos-NFD, U+0300-U+036F)
+      .replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  var sheet = getSheet_(SHEETS.UNIDADES);
+  var linhas = sheetToObjects_(sheet);
+  var porNomeNormalizado = {};
+  linhas.forEach(function (u) { porNomeNormalizado[normalizarNomeUnidade_(u.nome)] = u; });
+
+  var aplicadas = [];
+  var naoEncontradas = [];
+  Object.keys(MAPA_CONTRATO_CEO_).forEach(function (nome) {
+    var linha = porNomeNormalizado[normalizarNomeUnidade_(nome)];
+    if (!linha) { naoEncontradas.push(nome); return; }
+    var atualizado = Object.assign({}, linha, { contrato_ceo: MAPA_CONTRATO_CEO_[nome] });
+    delete atualizado._row;
+    updateObjectRow_(sheet, linha._row, atualizado);
+    aplicadas.push(linha.nome + ' -> ' + MAPA_CONTRATO_CEO_[nome]);
+  });
+
+  invalidarCacheUnidades_();
+  bumpVersao_('unidades');
+
+  Logger.log('Contrato CEO preenchido em ' + aplicadas.length + ' unidade(s):\n' + aplicadas.join('\n'));
+  if (naoEncontradas.length) {
+    Logger.log('\n⚠ NÃO encontrei unidade cadastrada com este nome (confira acentuação/' +
+      'singular-plural/abreviação e preencha manualmente pelo formulário da unidade):\n' +
+      naoEncontradas.join('\n'));
+  }
 }

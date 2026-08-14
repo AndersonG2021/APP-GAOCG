@@ -197,7 +197,7 @@ function montarLinhasUnidades_(session, filtros) {
       var totalTas = tas.reduce(function (soma, t) { return soma + toNumber_(t.valor_ta); }, 0);
       return {
         nome: u.nome || '', tipo: u.tipo || '', oss: u.oss || '', cnpj: u.cnpj || '',
-        contrato_gestao: u.contrato_gestao || '', ativo: toBool_(u.ativo) ? 'Sim' : 'Não',
+        contrato_gestao: u.contrato_gestao || '', contrato_ceo: u.contrato_ceo || '', ativo: toBool_(u.ativo) ? 'Sim' : 'Não',
         valor_contrato_gestao: toNumber_(u.valor_contrato_gestao),
         valor_contrato_gestao_sus: toNumber_(u.valor_contrato_gestao_sus),
         total_tas: totalTas,
@@ -289,6 +289,7 @@ var RELATORIO_CATALOGO_ = {
       { key: 'oss', rotulo: 'OSS', tipo: 'texto' },
       { key: 'cnpj', rotulo: 'CNPJ', tipo: 'texto' },
       { key: 'contrato_gestao', rotulo: 'Contrato de gestão', tipo: 'texto' },
+      { key: 'contrato_ceo', rotulo: 'Contrato CEO', tipo: 'texto' },
       { key: 'ativo', rotulo: 'Ativa', tipo: 'texto' },
       { key: 'valor_contrato_gestao', rotulo: 'C.G. Tesouro', tipo: 'moeda' },
       { key: 'valor_contrato_gestao_sus', rotulo: 'C.G. SUS', tipo: 'moeda' },

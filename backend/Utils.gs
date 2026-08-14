@@ -25,7 +25,13 @@ var HEADERS = {
   // valor_contrato_gestao_sus: novo (sessão 2026-07-27) - algumas unidades
   // têm repasse mensal recorrente em duas fontes (Tesouro e SUS), outras só
   // numa. valor_contrato_gestao (já existia) passa a significar "Tesouro".
-  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'valor_contrato_gestao', 'valor_contrato_gestao_sus', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
+  // contrato_ceo: novo (sessão 2026-08-14, pedido do usuário) - número do
+  // contrato no CEO E-fisco da unidade, distinto de contrato_gestao. Coluna
+  // nova na aba real - precisa ser criada na planilha (cabeçalho "contrato_ceo"
+  // em qualquer coluna livre) antes de colar este arquivo, senão o campo é
+  // aceito pelo formulário mas descartado silenciosamente ao salvar (mesmo
+  // mecanismo de mes_referencia, ver nota abaixo em NotasEmpenho).
+  Unidades: ['id', 'nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'contrato_ceo', 'valor_contrato_gestao', 'valor_contrato_gestao_sus', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd', 'ativo', 'criado_por', 'data_criacao'],
   ListasPersonalizadas: ['id', 'tipo_lista', 'valor', 'pausa_contagem_parado', 'ativo', 'criado_por', 'data_criacao'],
   SOF: ['id', 'unidade_id', 'oss_snapshot', 'cnpj_snapshot', 'contrato_snapshot', 'classificacao_orcamentaria_snapshot',
     'acao_snapshot', 'subacao_snapshot', 'gd_snapshot', 'divergente_da_unidade', 'tipo', 'sei', 'sof_numero',
