@@ -237,14 +237,14 @@ function itemDaLista_(escopo, rotulos) {
 
 /* ===================== Etapa 1: cadastro (best-effort) ===================== */
 
-async function preencherDocumento(documento) {
+async function preencherDocumento(documento, numeroProcesso) {
   if (!location.href.includes("procedimento_trabalhar")) {
     return { ok: false, erro: "Esta aba do SEI não está com um processo aberto. Abra o processo e tente de novo." };
   }
 
   // Guarda o conteúdo ANTES de qualquer automação: mesmo que tudo abaixo falhe
   // e o usuário faça o cadastro na mão, o conteúdo entra quando o editor abrir.
-  const agendou = await agendarConteudo_(documento);
+  const agendou = await agendarConteudo_(documento, numeroProcesso);
   // Liga a vigilância JÁ - o editor pode abrir dentro de um iframe, sem novo
   // carregamento desta página (ver comentário em iniciarVigilancia_).
   if (agendou) iniciarVigilancia_();
@@ -686,7 +686,7 @@ async function retomarEnvioPendente_() {
   await chrome.storage.local.remove(CHAVE_ENVIO_PENDENTE_).catch(() => {});
   avisarNaTela_("GAOCG: processo " + pendente.numeroProcesso + " encontrado. Criando o documento da SOF...");
   try {
-    await preencherDocumento(pendente.documento);
+    await preencherDocumento(pendente.documento, pendente.numeroProcesso);
   } catch (e) {
     avisarNaTela_("GAOCG: falha ao criar o documento - " + (e && e.message ? e.message : e));
   } finally {
@@ -696,7 +696,7 @@ async function retomarEnvioPendente_() {
 
 /* ===================== Etapa 2: conteúdo pendente ===================== */
 
-function agendarConteudo_(documento) {
+function agendarConteudo_(documento, numeroProcesso) {
   if (!documento || !documento.conteudoHtml) return Promise.resolve(false);
   return chrome.storage.local
     .set({
@@ -706,11 +706,42 @@ function agendarConteudo_(documento) {
         // Número da SOF como está no app - é o texto que será trocado pelo
         // número que o SEI gerar no modelo (ver numeroSofNoModelo_).
         marcadorNumero: documento.marcadorNumeroSof || "",
+        // Número do processo SEI (sessão 2026-08-14) - guardado só para,
+        // depois de descobrir o número que o SEI gerou pro modelo, saber sob
+        // qual chave devolvê-lo ao app (ver numerosSofCapturados_ abaixo).
+        numeroProcesso: numeroProcesso || "",
         criadoEm: Date.now()
       }
     })
     .then(() => true)
     .catch(() => false);
+}
+
+/** Só dígitos, mesma normalização de conferirProcesso_/digitos_ - chave estável independente de pontuação. */
+const CHAVE_NUMEROS_SOF_CAPTURADOS_ = "numerosSofCapturados";
+
+/**
+ * Guarda o número que o SEI gerou pro modelo (ex.: "173/2026"), pra o app
+ * poder perguntar por ele depois (sessão 2026-08-14, pedido do usuário: "a
+ * extensão devolver o valor da SOF que foi pega no SEI"). Fica esperando em
+ * chrome.storage.local, sob a chave do NÚMERO DO PROCESSO - o app não tem
+ * como saber esse número por conta própria, e é o único dado que ele tem à
+ * mão pra perguntar (ver SeiBridge.consultarNumeroSof, js/sei-bridge.js, e o
+ * handler CONSULTAR_NUMERO_SOF em background.js).
+ *
+ * Mescla em vez de sobrescrever a chave inteira - várias SOFs de processos
+ * diferentes podem ter passado por aqui na mesma máquina.
+ */
+async function guardarNumeroSofCapturado_(numeroProcesso, numeroSei) {
+  if (!numeroProcesso || !numeroSei) return;
+  const chave = digitos_(numeroProcesso);
+  if (!chave) return;
+  try {
+    const dados = await chrome.storage.local.get(CHAVE_NUMEROS_SOF_CAPTURADOS_);
+    const mapa = (dados && dados[CHAVE_NUMEROS_SOF_CAPTURADOS_]) || {};
+    mapa[chave] = { numero: numeroSei, capturadoEm: Date.now() };
+    await chrome.storage.local.set({ [CHAVE_NUMEROS_SOF_CAPTURADOS_]: mapa });
+  } catch (e) { /* melhor esforço - não trava o fluxo principal de inserir o conteúdo */ }
 }
 
 async function lerConteudoPendente_() {
@@ -911,6 +942,9 @@ async function aplicarConteudo_(corpoInicial, pendente) {
   if (numeroSei && pendente.marcadorNumero && pendente.marcadorNumero !== numeroSei) {
     html = html.split(pendente.marcadorNumero).join(numeroSei);
   }
+  // Guarda pro app poder buscar depois (sessão 2026-08-14) - não bloqueia o
+  // resto do fluxo se falhar.
+  if (numeroSei) guardarNumeroSofCapturado_(pendente.numeroProcesso, numeroSei).catch(() => {});
 
   // 3. Injeta e CONFERE. Se o modelo ainda vier por cima, tenta de novo - sem
   //    a conferência, a extensão avisava "inserido" com o modelo na tela.
@@ -1055,7 +1089,7 @@ if (window.top === window) {
       () => responder({ ok: true, parcial: true, aviso: "Preenchimento seguindo no SEI." }),
       10000
     );
-    preencherDocumento(message.documento)
+    preencherDocumento(message.documento, message.numeroProcesso)
       .then(resultado => { clearTimeout(limite); responder(resultado); })
       .catch(erro => { clearTimeout(limite); responder({ ok: false, erro: String(erro && erro.message ? erro.message : erro) }); });
     return true; // resposta assíncrona

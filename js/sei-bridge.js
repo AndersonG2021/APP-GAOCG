@@ -244,5 +244,30 @@ const SeiBridge = (function () {
     }
   }
 
-  return { enviarSof, extensaoDisponivel, prepararHtmlParaEditor_ };
+  /**
+   * Pergunta à extensão se ela já capturou, na tela do SEI, o número que o
+   * SEI gerou pra uma SOF enviada a este processo (sessão 2026-08-14, pedido
+   * do usuário). Só uma consulta - não abre nem mexe em nenhuma aba do SEI;
+   * a extensão responde com o que já tiver guardado (ver
+   * guardarNumeroSofCapturado_/CONSULTAR_NUMERO_SOF em
+   * Extension/gaocg-sei-bridge/content-sei.js e background.js).
+   *
+   * Devolve `{ ok: true, numero, capturadoEm }` quando encontra, ou
+   * `{ ok: false, motivo }` quando não (extensão ausente, processo sem
+   * envio, ou o envio ainda não chegou ao ponto de o SEI gerar o número -
+   * nenhum desses casos é um erro de verdade, então não usa toast aqui:
+   * quem chama decide como avisar o usuário).
+   */
+  async function consultarNumeroSof(numeroProcesso) {
+    if (!extensaoDisponivel()) return { ok: false, motivo: 'extensao_ausente' };
+    if (!numeroProcesso) return { ok: false, motivo: 'sem_processo' };
+    try {
+      const resposta = await enviarMensagem_({ type: 'CONSULTAR_NUMERO_SOF', numeroProcesso }, 8000);
+      return resposta && resposta.ok ? { ok: true, numero: resposta.numero, capturadoEm: resposta.capturadoEm } : { ok: false, motivo: 'nao_encontrado' };
+    } catch (e) {
+      return { ok: false, motivo: 'erro', erro: e.message };
+    }
+  }
+
+  return { enviarSof, extensaoDisponivel, consultarNumeroSof, prepararHtmlParaEditor_ };
 })();

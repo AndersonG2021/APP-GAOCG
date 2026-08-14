@@ -19,6 +19,12 @@
  *     autoEnviar: false                        // true = já clica em "Confirmar Dados"
  *   }
  * }
+ *
+ * Segundo tipo de mensagem externa, só consulta (sessão 2026-08-14):
+ * { type: "CONSULTAR_NUMERO_SOF", numeroProcesso: "00000.000000/2026-00" }
+ * -> { ok: true, numero: "173/2026", capturadoEm: <epoch ms> } ou { ok: false }
+ * se a extensão ainda não capturou o número gerado pelo SEI pra este processo
+ * (ver consultarNumeroSofCapturado_/guardarNumeroSofCapturado_ abaixo).
  */
 
 /**
@@ -241,9 +247,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+/** Só dígitos - mesma normalização usada pelo content script (digitos_ em content-sei.js), pra bater com a chave gravada por guardarNumeroSofCapturado_. */
+function digitosProcesso_(texto) {
+  return String(texto || "").replace(/\D/g, "");
+}
+
+/**
+ * "gostaria de saber se existe a possibilidade de a extensão devolver o
+ * valor da SOF que foi pega no SEI" (sessão 2026-08-14, pedido do usuário).
+ *
+ * O número (ex.: "173/2026") só existe depois que o SEI gera o modelo do
+ * documento - isso acontece bem depois do sendMessage de ENVIAR_DOCUMENTO já
+ * ter respondido (o editor abre em outra janela/aba, minutos depois). Por
+ * isso é um canal À PARTE, por consulta: o content script grava o número
+ * assim que descobre (ver guardarNumeroSofCapturado_, content-sei.js) e o
+ * app pergunta por ele quando quiser (botão "🔄 SEI" no campo Nº SOF, ver
+ * js/sof.js) - não precisa de aba do SEI aberta pra responder, é só ler o
+ * chrome.storage.local.
+ */
+async function consultarNumeroSofCapturado_(numeroProcesso) {
+  const chave = digitosProcesso_(numeroProcesso);
+  if (!chave) return { ok: false, erro: "Número do processo não informado." };
+  const dados = await chrome.storage.local.get("numerosSofCapturados");
+  const mapa = (dados && dados.numerosSofCapturados) || {};
+  const achado = mapa[chave];
+  if (!achado) return { ok: false };
+  return { ok: true, numero: achado.numero, capturadoEm: achado.capturadoEm };
+}
+
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
+      if (message && message.type === "CONSULTAR_NUMERO_SOF") {
+        sendResponse(await consultarNumeroSofCapturado_(message.numeroProcesso));
+        return;
+      }
+
       if (!message || message.type !== "ENVIAR_DOCUMENTO") {
         sendResponse({ ok: false, erro: "Tipo de mensagem não suportado." });
         return;
@@ -283,7 +322,11 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
       const resposta = await enviarParaAba(aba.id, {
         type: "PREENCHER_DOCUMENTO",
-        documento: message.documento
+        documento: message.documento,
+        // Repassado ao content script pra ele guardar o número gerado pelo
+        // SEI sob esta mesma chave (ver guardarNumeroSofCapturado_/
+        // CONSULTAR_NUMERO_SOF abaixo, sessão 2026-08-14).
+        numeroProcesso: numero
       });
       sendResponse(resposta);
     } catch (erro) {

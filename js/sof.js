@@ -523,6 +523,13 @@ const TelaSof = (function () {
     linhasManutencaoSei_ = parseManutencaoSei_(template.sei_manutencao_linhas);
     renderManutencaoSeiFormulario_();
 
+    // Os campos acima foram preenchidos por atribuição direta a .value/innerHTML,
+    // sem disparar input/change - o listener delegado em #formSof (ver
+    // abrirFormulario) não veria essas mudanças sozinho. Chamada explícita
+    // aqui reavalia o vermelho de "obrigatório vazio" pra tudo que o template
+    // acabou de preencher.
+    aplicarDestaqueObrigatorios_();
+
     UI.toast('Campos preenchidos com os dados do último SOF desse tipo - revise os destacados em amarelo.', 'aviso');
   }
 
@@ -577,7 +584,14 @@ const TelaSof = (function () {
         <h4 class="sei-secao-titulo">Identificação do processo</h4>
         <div class="grade-3">
           <div class="campo"><label>Número do Processo *</label><input id="sofSei" value="${v('sei')}" placeholder="0000000000.000000/0000-00" /></div>
-          <div class="campo"><label>Nº SOF *</label><input id="sofNumero" value="${v('sof_numero')}" placeholder="000/0000" /></div>
+          <div class="campo">
+            <label>Nº SOF *</label>
+            <div class="campo-linha-botao">
+              <input id="sofNumero" value="${sof ? v('sof_numero') : '000/0000'}" placeholder="000/0000" />
+              ${editando ? '<button type="button" class="botao" id="btnBuscarNumeroSofSei" title="Busca, na extensão GAOCG SEI Bridge, o número que o SEI gerou pra esta SOF no último envio ao processo">🔄 SEI</button>' : ''}
+            </div>
+            <p class="ajuda">O número oficial (ex.: 173/2026) é gerado pelo SEI só quando o documento é criado lá - fica "000/0000" até então.${editando ? ' O botão "SEI" traz o número já gerado, se o envio já tiver acontecido.' : ''}</p>
+          </div>
           <div class="campo"><label>DEA *</label>
             <select id="sofDea">
               <option value="">-</option>
@@ -704,6 +718,14 @@ const TelaSof = (function () {
     // (sessão 2026-08-12 - ver descartarArquivoNeNaoSalvo_).
     if (editando) UI.aoFecharModal(() => { EdicaoSimultanea.sairDaEdicao('SOF', sof.id); descartarArquivoNeNaoSalvo_(); });
 
+    // Destaque vermelho dos obrigatórios vazios (sessão 2026-08-14): estado
+    // inicial (tanto SOF nova quanto edição) + ao vivo, delegado no form
+    // inteiro - cobre digitação, seleção de <select> e o editor rico de
+    // Objeto da despesa (contenteditable dispara 'input' normalmente).
+    aplicarDestaqueObrigatorios_();
+    document.getElementById('formSof').addEventListener('input', aplicarDestaqueObrigatorios_);
+    document.getElementById('formSof').addEventListener('change', aplicarDestaqueObrigatorios_);
+
     renderFontesFormulario();
     // Preenchimento proporcional do cronograma (sessão 2026-08-12, pedido do
     // usuário) - dispara ao mudar Período-início/fim; a Parcela Mensal de
@@ -818,6 +840,40 @@ const TelaSof = (function () {
       try { await salvarSof(sof, { enviarSei: true }); } finally { this.disabled = false; }
     });
 
+    // "🔄 SEI" ao lado de Nº SOF (sessão 2026-08-14, pedido do usuário): traz o
+    // número que o SEI gerou no modelo do documento, se "Salvar e enviar ao
+    // SEI" já tiver rodado e o editor do SEI já tiver aberto (é nesse momento
+    // que a extensão descobre o número - ver numeroSofNoModelo_/
+    // guardarNumeroSofCapturado_, content-sei.js). Só consulta o que a
+    // extensão já capturou - não abre nem mexe em nenhuma aba do SEI.
+    const btnBuscarNumeroSof = document.getElementById('btnBuscarNumeroSofSei');
+    if (btnBuscarNumeroSof) {
+      btnBuscarNumeroSof.addEventListener('click', async function () {
+        const numeroProcesso = document.getElementById('sofSei').value.trim();
+        if (!numeroProcesso) { UI.toast('Preencha o Número do Processo antes de buscar.', 'erro'); return; }
+        this.disabled = true;
+        try {
+          const resposta = await SeiBridge.consultarNumeroSof(numeroProcesso);
+          if (!resposta.ok) {
+            UI.toast(
+              resposta.motivo === 'extensao_ausente'
+                ? 'Extensão GAOCG SEI Bridge não encontrada.'
+                : 'Ainda não encontrei um número gerado pelo SEI para este processo - use "Salvar e enviar ao SEI", espere o editor abrir no SEI e tente de novo.',
+              'aviso'
+            );
+            return;
+          }
+          const campoNumero = document.getElementById('sofNumero');
+          campoNumero.value = resposta.numero;
+          campoNumero.dispatchEvent(new Event('input', { bubbles: true }));
+          campoNumero.dispatchEvent(new Event('change', { bubbles: true }));
+          UI.toast('Número da SOF trazido do SEI: ' + resposta.numero + '. Revise e clique em Salvar.', 'sucesso');
+        } finally {
+          this.disabled = false;
+        }
+      });
+    }
+
     // Barra do editor "Objeto da despesa" (negrito). mousedown preventDefault
     // pra não perder a seleção ao clicar no botão; Ctrl+B já funciona nativo.
     document.querySelectorAll('#formSof .editor-rico-btn').forEach(btn => {
@@ -878,6 +934,14 @@ const TelaSof = (function () {
    * 2026-08-12, ver PROGRESS.md) - substitui qualquer valor já digitado nos
    * meses do intervalo, mesmo que o analista tenha ajustado à mão antes.
    * Meses fora do intervalo [início, fim] não são tocados (nem zerados).
+   *
+   * Regra do setor (sessão 2026-08-14, pedido do usuário): por cima do valor
+   * já calculado acima (cheio ou proporcional), o PRIMEIRO mês do período
+   * recebe 1 centavo A MAIS e o ÚLTIMO 1 centavo A MENOS - convenção do
+   * próprio setor, não é arredondamento. Ex.: parcela 100, período 01/01 a
+   * 15/03 -> Jan=100,01 · Fev=100 · Mar=49,99. Início e fim no mesmo mês
+   * cancelam os dois ajustes entre si (não existe "primeiro" x "último"
+   * distintos nesse caso) e o valor sai intacto, de propósito.
    */
   // 30 dias fixos pra TODO mês, 28 só pra fevereiro - NÃO é o calendário real
   // (março/maio/etc. têm 31 de verdade). Regra explícita do usuário (padrão
@@ -906,6 +970,15 @@ const TelaSof = (function () {
       cronograma[mesNumero] = Math.round((parcelaMensal / diasNoMes) * diasUsados * 100) / 100;
       cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
     }
+
+    // Regra do setor: +1 centavo no primeiro mês, -1 centavo no último (ver
+    // comentário do JSDoc acima). Sequencial na mesma chave quando início e
+    // fim caem no mesmo mês - os dois ajustes se cancelam.
+    const mesInicio = inicio.getMonth() + 1;
+    const mesFim = fim.getMonth() + 1;
+    if (cronograma.hasOwnProperty(mesInicio)) cronograma[mesInicio] = Math.round((cronograma[mesInicio] + 0.01) * 100) / 100;
+    if (cronograma.hasOwnProperty(mesFim)) cronograma[mesFim] = Math.round((cronograma[mesFim] - 0.01) * 100) / 100;
+
     return cronograma;
   }
 
@@ -1801,6 +1874,26 @@ const TelaSof = (function () {
         <span class="stepper-rotulo">${UI.escaparHtml(etapa)}</span>
       </div>`;
     }).join('')}</div>`;
+  }
+
+  /**
+   * Destaque vermelho ao vivo dos campos obrigatórios ainda vazios (sessão
+   * 2026-08-14, pedido do usuário) - complementa o amarelo de
+   * aplicarTemplateSof_ (campo repetido do modelo). Só ida: nunca troca o que
+   * o usuário já escolheu, só espelha o "vazio/preenchido" de cada campo em
+   * CAMPOS_OBRIGATORIOS na classe .campo-obrigatorio-vazio (CSS em
+   * style.css). Idempotente e barato (26 campos) - chamado toda vez que algo
+   * muda no formulário (delegado em #formSof, ver abrirFormulario) e também
+   * na mão depois de aplicarTemplateSof_ (que preenche campos por atribuição
+   * direta a .value, sem disparar input/change - o listener delegado não veria).
+   */
+  function aplicarDestaqueObrigatorios_() {
+    CAMPOS_OBRIGATORIOS.forEach(campo => {
+      const el = document.getElementById(campo.id);
+      if (!el) return;
+      const valor = (el.value !== undefined ? el.value : (el.textContent || '')).trim();
+      el.classList.toggle('campo-obrigatorio-vazio', !valor);
+    });
   }
 
   function validarCamposObrigatorios() {
