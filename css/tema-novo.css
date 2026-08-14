@@ -274,6 +274,21 @@ html[data-tema="novo"] .campo input:not([type="checkbox"]):not([type="radio"]).c
 html[data-tema="novo"] .campo select.campo-obrigatorio-vazio,
 html[data-tema="novo"] .campo textarea.campo-obrigatorio-vazio,
 html[data-tema="novo"] .campo .editor-rico-area.campo-obrigatorio-vazio { border-color: var(--vermelho); background: var(--vermelho-claro); }
+/*
+ * O <select> fechado fica legível (texto claro sobre o vermelho/amarelo
+ * translúcido acima), mas o MENU SUSPENSO é pintado pelo navegador/SO, fora
+ * do resto da página - achado real com print do usuário (sessão 2026-08-14,
+ * tema escuro): --vermelho-claro/--amarelo-claro são rgba(...) de baixa
+ * opacidade nesse tema, e o navegador compõe o menu contra um fundo claro
+ * por padrão, dando um rosa quase branco por trás de um texto quase branco
+ * (--cinza-900 no escuro) - ilegível. Cor sólida só nas <option>, decisão
+ * deliberada: a cor de destaque continua só no campo fechado, o menu aberto
+ * fica um menu normal e legível.
+ */
+html[data-tema="novo"] .campo select.destaque-repeticao option,
+html[data-tema="novo"] .campo select.campo-obrigatorio-vazio option {
+  background: var(--superficie); color: var(--cinza-900);
+}
 html[data-tema="novo"] .campo .ajuda { color: var(--cinza-500); }
 html[data-tema="novo"] .select-pesquisavel-lista { background: var(--superficie); border-color: var(--cinza-300); box-shadow: var(--sombra-forte); }
 html[data-tema="novo"] .select-pesquisavel-opcao:hover, html[data-tema="novo"] .select-pesquisavel-opcao.destacada { background: var(--azul-claro); color: var(--azul-escuro); }
