@@ -113,7 +113,7 @@ const TelaSof = (function () {
           <label style="align-self:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="sofFiltroSemNe" /> Sem NE emitida</label>
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosSof">Limpar filtros</button>
-          <button class="botao" id="btnExportarSof">Exportar CSV</button>
+          <button class="botao" id="btnGerarRelatorioSof">Gerar Relatório</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoSof">+ Nova SOF</button>
         </div>
@@ -129,7 +129,7 @@ const TelaSof = (function () {
       this.disabled = true;
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
-    document.getElementById('btnExportarSof').addEventListener('click', exportarCsv);
+    document.getElementById('btnGerarRelatorioSof').addEventListener('click', abrirGerarRelatorio);
     document.getElementById('sofFiltroSemNe').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     // Estas são as opções INICIAIS. A partir da primeira carga, todas as listas
     // passam a vir das facetas do backend (ver FACETAS_SOF_/aplicarResposta_):
@@ -350,24 +350,21 @@ const TelaSof = (function () {
     document.getElementById('sofPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
   }
 
-  async function exportarCsv() {
-    const resposta = await Api.chamar('listarSof', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    const colunas = ['id', 'unidade_id', 'sei', 'sof_numero', 'periodo_inicio', 'periodo_fim', 'andamento', 'objeto', 'total_solicitado', 'possui_ne'];
-    const linhas = [colunas.concat('fontes').join(';')].concat(resposta.items.map(s => {
-      const valores = colunas.map(c => `"${String(s[c] === undefined ? '' : s[c]).replace(/"/g, '""')}"`);
-      const fontesTexto = (s.fontes || []).map(f => `${f.fonte}:${Number(f.total_solicitado || 0).toFixed(2)}`).join(';');
-      valores.push(`"${fontesTexto.replace(/"/g, '""')}"`);
-      return valores.join(';');
-    }));
-    baixarArquivo('sof.csv', linhas.join('\n'));
-  }
-
-  function baixarArquivo(nome, conteudo, mimeType) {
-    const blob = new Blob(['﻿' + conteudo], { type: mimeType || 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = nome; a.click();
-    URL.revokeObjectURL(url);
+  /**
+   * "Gerar Relatório" (sessão 2026-08-14, pedido do usuário): substitui o
+   * antigo "Exportar CSV" (despejava colunas cruas da planilha, sem rótulo/
+   * formatação/totais). Escolha de colunas + agrupamento + as 4 saídas
+   * (tela/PDF/CSV/Sheets), com os filtros já aplicados na tela. Modal
+   * compartilhado com Unidades/Recibos/Notas de Empenho
+   * (TelaRelatorios.abrirParaTela, js/relatorios.js).
+   */
+  function abrirGerarRelatorio() {
+    return TelaRelatorios.abrirParaTela({
+      fonte: 'sof',
+      titulo: 'Gerar Relatório de SOF',
+      obterFiltros: filtrosAtuais,
+      ajuda: 'O relatório usa os filtros aplicados na tela (todas as páginas, não só a visível). Sem filtro, entram todos os processos.'
+    });
   }
 
   async function abrirSofExistente(id) {

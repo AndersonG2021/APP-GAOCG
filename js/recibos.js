@@ -136,7 +136,6 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Nº Processo</label><input id="recFiltroNumeroProcesso" placeholder="Nº Processo" /></div>
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
-          <button class="botao" id="btnExportarRec">Exportar CSV</button>
           <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
@@ -155,7 +154,6 @@ const TelaRecibos = (function () {
       this.disabled = true;
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
-    document.getElementById('btnExportarRec').addEventListener('click', exportarCsv);
     document.getElementById('btnGerarRelatorioRec').addEventListener('click', abrirGerarRelatorio);
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_REC_/aplicarResposta_). Substitui o estreitamento
@@ -509,10 +507,10 @@ const TelaRecibos = (function () {
    * Modal compartilhado com Unidades e Notas de Empenho
    * (TelaRelatorios.abrirParaTela, js/relatorios.js).
    *
-   * Diferente do "Exportar CSV" ao lado, que despeja as colunas cruas da
-   * planilha (inclusive ids e URLs de anexo) sem formatação nem totais: o
-   * relatório traz colunas com rótulo, moeda formatada, subtotais por grupo e
-   * total geral.
+   * Substituiu de vez o antigo "Exportar CSV" (sessão 2026-08-14, pedido do
+   * usuário) - aquele despejava as colunas cruas da planilha (inclusive ids e
+   * URLs de anexo) sem formatação nem totais; este traz colunas com rótulo,
+   * moeda formatada, subtotais por grupo e total geral.
    *
    * Os filtros vão via `filtrosAtuais` (a função, não o resultado) pra serem
    * lidos no clique em "Gerar" - se o analista mexer num filtro com o modal
@@ -525,18 +523,6 @@ const TelaRecibos = (function () {
       obterFiltros: filtrosAtuais,
       ajuda: 'O relatório usa os filtros aplicados na tela (todas as páginas, não só a visível). Sem filtro, entram todos os recibos.'
     });
-  }
-
-  async function exportarCsv() {
-    const resposta = await Api.chamar('listarRecibos', Object.assign({ page: 1, pageSize: 100000 }, filtrosAtuais()));
-    const colunas = ['id', 'unidade_id', 'competencia', 'status', 'valor_liquidado', 'valor_pago', 'numero_processo',
-      'ordem_bancaria', 'nota_liquidacao_url', 'ordem_bancaria_arquivo_url', 'parcela_dividida_grupo_id',
-      'percentual_parcela_dividida', 'origem'];
-    const linhas = [colunas.join(';')].concat(resposta.items.map(r => colunas.map(c => `"${String(r[c] === undefined ? '' : r[c]).replace(/"/g, '""')}"`).join(';')));
-    const blob = new Blob(['﻿' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'recibos.csv'; a.click();
-    URL.revokeObjectURL(url);
   }
 
   async function abrirReciboExistente(id) {
