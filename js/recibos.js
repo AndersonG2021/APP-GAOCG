@@ -1105,14 +1105,22 @@ const TelaRecibos = (function () {
         </table>
       </div>
       ${(le || itens.length) ? '' : '<p class="ajuda">Nenhum documento anexado ainda.</p>'}`;
+    // Confirmação antes de apagar (sessão 2026-08-14, pedido do usuário) -
+    // remove só do estado local aqui (instantâneo, sem chamada de rede) - a
+    // remoção de verdade na planilha só acontece quando o analista clicar
+    // "Salvar" (montarPayloadNotaLiquidacao_/montarPayloadOrdensBancarias_,
+    // já existentes), o mesmo padrão "editar local, salvar em lote" já usado
+    // em toda a tela - não é uma chamada nova por clique, então não pesa.
     const botaoRemoverLe = alvo.querySelector('[data-acao="remover-le"]');
     if (botaoRemoverLe) botaoRemoverLe.addEventListener('click', () => {
+      if (!confirm('Apagar esta Nota de Liquidação?')) return;
       div._notaLiquidacao = null;
       div.querySelector('.pd-liquidado').value = '';
       renderTabelaOrdensBancariasParcela_(div);
     });
     alvo.querySelectorAll('[data-indice-ob]').forEach(botao => {
       botao.addEventListener('click', () => {
+        if (!confirm('Apagar esta Ordem Bancária?')) return;
         itens.splice(Number(botao.dataset.indiceOb), 1);
         renderTabelaOrdensBancariasParcela_(div);
       });

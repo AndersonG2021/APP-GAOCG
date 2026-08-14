@@ -128,10 +128,25 @@ const UI = (function () {
     // qualquer campo do corpo (não importa a tela) marca o modal como
     // "editado" - é só isso que decide se um clique fora minimiza (editado)
     // ou fecha de vez (nada mexido ainda), sem precisar de nenhuma tela
-    // rastrear isso por conta própria.
+    // rastrear isso por conta própria. Também é o que UI.modalFoiEditado()
+    // expõe pra "Salvar" pular validação+rede quando nada mudou (sessão
+    // 2026-08-13).
+    //
+    // O 'click' em <button> (sessão 2026-08-14, achado real, bug relatado
+    // pelo usuário) é tão necessário quanto input/change: apagar uma
+    // OB/LE, remover uma linha de parcela/fonte etc. são ações que mutam
+    // estado só via JS (array.splice/div.remove()), disparadas por clique
+    // num <button> - nenhuma delas dispara input OU change. Sem esse
+    // terceiro listener, modalFoiEditado() continuava false depois dessas
+    // ações, "Salvar" caía no atalho de "nada mudou" (ver
+    // salvarReciboEdicao, js/recibos.js) e só fechava o modal - a remoção
+    // nunca chegava a ser mandada pro backend, mas já tinha sumido da tela,
+    // então reabrir mostrava tudo de volta, como se nada tivesse sido
+    // apagado.
     const corpoEl = el.querySelector('.modal-corpo');
     corpoEl.addEventListener('input', () => { modalSujo_ = true; }, { once: true });
     corpoEl.addEventListener('change', () => { modalSujo_ = true; }, { once: true });
+    corpoEl.addEventListener('click', e => { if (e.target.closest('button')) modalSujo_ = true; }, { once: true });
 
     modalTituloAtivo_ = titulo;
     const overlay = document.getElementById('sobreposicaoModal');
