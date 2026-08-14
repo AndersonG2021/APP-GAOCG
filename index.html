@@ -7,24 +7,26 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
   <!--
-    "Novo visual" (sessão 2026-08-13) - roda em PARALELO ao style.css acima,
-    nunca no lugar dele (ver css/tema-novo.css). Continua carregado mesmo com
-    o tema antigo ativo porque é o próprio controle no topo que liga o novo
-    visual (js/tema.js).
+    "Novo visual" (sessão 2026-08-13) roda em PARALELO ao style.css acima,
+    nunca no lugar dele (ver css/tema-novo.css) - só faz efeito com
+    data-tema="novo" em <html>. Escolha entre "Atual"/"Novo" existiu como
+    período de transição e foi removida (sessão 2026-08-14, pedido do
+    usuário): data-tema="novo" agora é fixo, aplicado abaixo sem depender de
+    preferência salva.
   -->
   <link rel="stylesheet" href="css/tema-novo.css" />
   <script>
-    // Aplica o tema salvo ANTES do <body> ser montado, pra nunca piscar um
-    // visual e trocar pro outro - por isso é um script síncrono aqui (não
-    // "defer" como os demais), e repete a mesma leitura de localStorage que
-    // js/tema.js faz (esse só carrega tarde demais pra evitar o flash).
+    // data-tema="novo" precisa estar em <html> ANTES do parser chegar no
+    // <body>, pra nunca piscar o visual antigo por uma fração de segundo -
+    // por isso é um script síncrono aqui (não "defer" como os demais). Só o
+    // modo de cor (claro/escuro/sistema) ainda é preferência do usuário,
+    // salva em localStorage (ver js/tema.js).
     (function () {
+      document.documentElement.setAttribute('data-tema', 'novo');
       try {
-        var visual = localStorage.getItem('gaocg_tema_visual') || 'antigo';
         var modoCor = localStorage.getItem('gaocg_tema_modo_cor') || 'sistema';
-        document.documentElement.setAttribute('data-tema', visual);
         if (modoCor !== 'sistema') document.documentElement.setAttribute('data-modo-cor', modoCor);
-      } catch (e) { /* localStorage indisponível (modo privado etc.) - fica no tema antigo. */ }
+      } catch (e) { /* localStorage indisponível (modo privado etc.) - fica no modo sistema. */ }
     })();
   </script>
 </head>
