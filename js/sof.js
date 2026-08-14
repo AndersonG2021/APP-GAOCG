@@ -885,6 +885,11 @@ const TelaSof = (function () {
     });
 
     ['sofUnidade', 'sofOss', 'sofObjeto'].forEach(id => UI.tornarPesquisavel(id));
+    // Só agora o <input> visível de cada select pesquisável existe de fato -
+    // reaplica o destaque de obrigatório vazio pra ele também (ver comentário
+    // em aplicarDestaqueObrigatorios_ acima sobre por que isso não dava pra
+    // fazer numa chamada só).
+    aplicarDestaqueObrigatorios_();
 
     if (editando) {
       await renderNotasEmpenho(sof, notasPromise);
@@ -1892,7 +1897,19 @@ const TelaSof = (function () {
       const el = document.getElementById(campo.id);
       if (!el) return;
       const valor = (el.value !== undefined ? el.value : (el.textContent || '')).trim();
-      el.classList.toggle('campo-obrigatorio-vazio', !valor);
+      const vazio = !valor;
+      el.classList.toggle('campo-obrigatorio-vazio', vazio);
+      // UI.tornarPesquisavel (sofUnidade/sofOss/sofObjeto) esconde o <select>
+      // de verdade (display:none) e mostra um <input> próprio por cima -
+      // achado real (sessão 2026-08-14): o vermelho ia pro <select> escondido
+      // e nunca aparecia na tela, porque quem o usuário vê é esse input
+      // separado. Espelha a mesma classe nele quando o wrapper já existir
+      // (tornarPesquisavel roda DEPOIS da 1ª chamada desta função - ver
+      // segunda chamada logo após o ['sofUnidade',...].forEach abaixo).
+      if (el.tagName === 'SELECT' && el.nextElementSibling && el.nextElementSibling.classList.contains('select-pesquisavel')) {
+        const proxy = el.nextElementSibling.querySelector('.select-pesquisavel-input');
+        if (proxy) proxy.classList.toggle('campo-obrigatorio-vazio', vazio);
+      }
     });
   }
 
