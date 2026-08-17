@@ -138,7 +138,8 @@ const Dashboard = (function () {
         ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`, 'ciano')}
       </div>
 
-      ${painelGraficosHtml_()}`;
+      ${painelGraficosHtml_()}
+      ${painelPrazosHtml_()}`;
 
     // Card 1: Recibos da competência, com todos os status EXCETO "PAGO"
     // (o filtro de status é "incluir X", então mandamos todos menos PAGO).
@@ -152,6 +153,60 @@ const Dashboard = (function () {
     document.getElementById('dashCardUnidades').addEventListener('click', () => App.navegarPara('unidades'));
 
     configurarGraficos_();
+    carregarPrazosContratuais_();
+  }
+
+  // ===== Prazos contratuais das Unidades (sessão 2026-08-14, pedido do
+  // usuário) - painel no canto inferior do Dashboard, ordenado do prazo mais
+  // próximo de vencer pro mais longo. Prazo final = fim dos 10 anos do C.G.
+  // (Contrato Regular) ou fim do instrumento temporário (TAC/Termo de
+  // Compromisso/Contrato Emergencial) - nunca o "próximo T.A.", que é só uma
+  // renovação intermediária, não um fim de prazo. Cálculo compartilhado com
+  // o card de Unidades - ver UI.calcularPrazoContratoUnidade (js/app.js).
+  //
+  // Busca todas as unidades ATIVAS separado de obterDashboard (que só
+  // devolve agregados, não a lista) - reaproveita listarUnidades com
+  // cache:true, mesmo padrão já usado em SOF/Recibos pra popular filtros.
+  function painelPrazosHtml_() {
+    return `
+      <div class="painel">
+        <div class="dash-painel-cabecalho"><h3>Prazos contratuais das Unidades</h3></div>
+        <div id="dashPrazosArea"><p class="estado-vazio">Carregando…</p></div>
+      </div>`;
+  }
+
+  async function carregarPrazosContratuais_() {
+    const area = document.getElementById('dashPrazosArea');
+    if (!area) return;
+    try {
+      const resposta = await Api.chamar('listarUnidades', { pageSize: 100000, somenteAtivas: true }, { cache: true });
+      const linhas = resposta.items
+        .map(u => ({ unidade: u, prazo: UI.calcularPrazoContratoUnidade(u) }))
+        // Sem prazo calculável (Situação/data ainda não preenchida) vai pro
+        // fim da lista - Infinity nunca perde de um número real de dias.
+        .sort((a, b) => (a.prazo ? a.prazo.diasPrazoFinal : Infinity) - (b.prazo ? b.prazo.diasPrazoFinal : Infinity));
+      area.innerHTML = tabelaPrazosHtml_(linhas);
+    } catch (e) {
+      area.innerHTML = `<p class="estado-vazio">Não foi possível carregar os prazos. ${UI.escaparHtml(e.message || '')}</p>`;
+    }
+  }
+
+  function tabelaPrazosHtml_(linhas) {
+    if (!linhas.length) return '<p class="estado-vazio">Nenhuma unidade ativa cadastrada.</p>';
+    const corpo = linhas.map(({ unidade: u, prazo }) => {
+      if (!prazo) {
+        return `<tr><td>${UI.escaparHtml(u.nome)}</td><td>-</td><td>-</td><td><span class="selo cinza">Prazo não informado</span></td></tr>`;
+      }
+      const dias = prazo.diasPrazoFinal;
+      const textoDias = dias >= 0 ? `${dias} dia(s)` : `vencido há ${Math.abs(dias)} dia(s)`;
+      return `<tr>
+        <td>${UI.escaparHtml(u.nome)}</td>
+        <td>${UI.escaparHtml(prazo.situacao)}</td>
+        <td>${UI.formatarDataBr(prazo.dataPrazoFinalIso)}</td>
+        <td><span class="selo ${UI.corAlertaPrazo(dias)}">${textoDias}</span></td>
+      </tr>`;
+    }).join('');
+    return `<table class="tabela"><thead><tr><th>Unidade</th><th>Situação do Contrato</th><th>Prazo final</th><th>Dias restantes</th></tr></thead><tbody>${corpo}</tbody></table>`;
   }
 
   // ===== Painel de gráficos (Parte 2 do redesign, 2026-07-28) =====

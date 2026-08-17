@@ -564,6 +564,11 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-unidade-repasse-regular { font-weight: 700; font-size: 13.5px; color: var(--verde); }
 .cartao-unidade-repasse-total { font-size: 12px; font-weight: 600; color: var(--cinza-700); }
 .cartao-unidade-meta { font-size: 12.5px; color: var(--cinza-700); margin: 6px 0; overflow-wrap: break-word; }
+/* Contador(es) de prazo contratual (sessão 2026-08-14) - sempre visível no
+   card, fora do bloco de detalhe que só abre ao clicar (ver renderCards,
+   js/unidades.js). Sem Situação do Contrato preenchida, prazoContratoHtml_
+   devolve string vazia e esta div nem chega a existir. */
+.cartao-unidade-prazo { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
 .cartao-unidade-detalhe { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cinza-200); font-size: 13px; }
 .cartao-unidade-detalhe-linha { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; color: var(--cinza-700); }
 .cartao-unidade-detalhe-linha span:first-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
