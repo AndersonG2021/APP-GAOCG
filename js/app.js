@@ -1043,61 +1043,80 @@ const App = (function () {
     navegarPara('dashboard');
   }
 
+  /**
+   * "Minha conta" (sessão 2026-08-14, pedido do usuário) - um único botão
+   * "Salvar Alterações" no rodapé salva nome e senha juntos. Os campos de
+   * senha começam desabilitados; "Alterar senha" só os libera (não salva
+   * nada sozinho) - some depois de clicado, já que seu trabalho acabou.
+   * Salvar Alterações só chama alterarMinhaSenha se os campos foram
+   * preenchidos (nada digitado = não pediu pra trocar senha, mesmo com os
+   * campos liberados) - e só chama alterarMeuNome se o nome realmente
+   * mudou, mesmo princípio de "não salvar à toa" já usado em todo card do
+   * app (ver UI.modalFoiEditado).
+   */
   function abrirModalPerfil() {
     const usuario = Auth.usuario();
     const corpo = `
-      <form id="formMeuNome">
-        <div class="campo"><label>Nome exibido na aplicação *</label><input id="meuNome" value="${UI.escaparHtml(usuario.nome)}" required /></div>
-        <p id="nomeErro" class="erro-campo oculto"></p>
-      </form>
+      <div class="campo"><label>Nome exibido na aplicação *</label><input id="meuNome" value="${UI.escaparHtml(usuario.nome)}" required /></div>
       <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
       <div class="campo"><label>Perfil</label><input value="${UI.escaparHtml(UI.rotuloPerfil(usuario.perfil))}" disabled /></div>
-      <button type="button" class="botao" id="btnSalvarNome">Salvar nome</button>
       <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
-      <h4 style="margin:0 0 8px">Alterar senha</h4>
-      <form id="formTrocarSenha">
-        <div class="campo"><label>Senha atual *</label><input id="senhaAtual" type="password" required /></div>
-        <div class="campo"><label>Nova senha *</label><input id="senhaNova" type="password" required /></div>
-        <div class="campo"><label>Confirmar nova senha *</label><input id="senhaNovaConfirmacao" type="password" required /></div>
-        <p id="perfilErro" class="erro-campo oculto"></p>
-      </form>`;
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h4 style="margin:0">Alterar senha</h4>
+        <button type="button" class="botao" id="btnAlterarSenha">Alterar senha</button>
+      </div>
+      <div class="campo"><label>Senha atual</label><input id="senhaAtual" type="password" disabled /></div>
+      <div class="campo"><label>Nova senha</label><input id="senhaNova" type="password" disabled /></div>
+      <div class="campo"><label>Confirmar nova senha</label><input id="senhaNovaConfirmacao" type="password" disabled /></div>
+      <p id="perfilErro" class="erro-campo oculto"></p>`;
 
     UI.abrirModal('Minha conta', corpo,
-      `<button class="botao" id="btnFecharPerfil">Fechar</button><button class="botao primario" id="btnSalvarSenha">Alterar senha</button>`,
+      `<button class="botao" id="btnFecharPerfil">Fechar</button><button class="botao primario" id="btnSalvarAlteracoes">Salvar Alterações</button>`,
       { pequeno: true });
 
     document.getElementById('btnFecharPerfil').addEventListener('click', UI.fecharModal);
 
-    document.getElementById('btnSalvarNome').addEventListener('click', async () => {
-      const erroEl = document.getElementById('nomeErro');
+    document.getElementById('btnAlterarSenha').addEventListener('click', function () {
+      ['senhaAtual', 'senhaNova', 'senhaNovaConfirmacao'].forEach(id => { document.getElementById(id).disabled = false; });
+      document.getElementById('senhaAtual').focus();
+      this.remove(); // já liberou os campos - não tem mais função aqui.
+    });
+
+    document.getElementById('btnSalvarAlteracoes').addEventListener('click', async () => {
+      // Nada mudou: só fecha, sem chamar o backend à toa (mesmo
+      // dirty-tracking usado em todo card do app - ver UI.modalFoiEditado).
+      if (!UI.modalFoiEditado()) { UI.fecharModal(); return; }
+
+      const erroEl = document.getElementById('perfilErro');
       erroEl.classList.add('oculto');
+
       const novoNome = document.getElementById('meuNome').value.trim();
       if (!novoNome) { UI.mostrarErro(erroEl, 'Informe o nome.'); return; }
 
-      try {
-        await Api.chamar('alterarMeuNome', { novoNome });
-        Auth.atualizarNomeLocal(novoNome);
-        document.getElementById('nomeUsuarioTopo').textContent = novoNome;
-        UI.toast('Nome atualizado com sucesso.', 'sucesso');
-      } catch (err) {
-        UI.mostrarErro(erroEl, err.message);
-      }
-    });
-
-    document.getElementById('btnSalvarSenha').addEventListener('click', async () => {
-      const erroEl = document.getElementById('perfilErro');
-      erroEl.classList.add('oculto');
       const senhaAtual = document.getElementById('senhaAtual').value;
       const senhaNova = document.getElementById('senhaNova').value;
       const senhaNovaConfirmacao = document.getElementById('senhaNovaConfirmacao').value;
-
-      if (!senhaAtual || !senhaNova) { UI.mostrarErro(erroEl, 'Informe a senha atual e a nova senha.'); return; }
-      if (senhaNova.length < 6) { UI.mostrarErro(erroEl, 'A nova senha deve ter pelo menos 6 caracteres.'); return; }
-      if (senhaNova !== senhaNovaConfirmacao) { UI.mostrarErro(erroEl, 'A confirmação não confere com a nova senha.'); return; }
+      // Campo liberado mas deixado em branco não conta como "quis trocar" -
+      // só entra em jogo se algo foi de fato digitado.
+      const querTrocarSenha = !!(senhaAtual || senhaNova || senhaNovaConfirmacao);
+      if (querTrocarSenha) {
+        if (!senhaAtual || !senhaNova) { UI.mostrarErro(erroEl, 'Informe a senha atual e a nova senha.'); return; }
+        if (senhaNova.length < 6) { UI.mostrarErro(erroEl, 'A nova senha deve ter pelo menos 6 caracteres.'); return; }
+        if (senhaNova !== senhaNovaConfirmacao) { UI.mostrarErro(erroEl, 'A confirmação não confere com a nova senha.'); return; }
+      }
 
       try {
-        await Api.chamar('alterarMinhaSenha', { senhaAtual, novaSenha: senhaNova });
-        UI.toast('Senha alterada com sucesso.', 'sucesso');
+        // Senha primeiro: se a senha atual estiver errada, o nome não chega
+        // a ser alterado - evita salvar só metade do que foi pedido.
+        if (querTrocarSenha) {
+          await Api.chamar('alterarMinhaSenha', { senhaAtual, novaSenha: senhaNova });
+        }
+        if (novoNome !== usuario.nome) {
+          await Api.chamar('alterarMeuNome', { novoNome });
+          Auth.atualizarNomeLocal(novoNome);
+          document.getElementById('nomeUsuarioTopo').textContent = novoNome;
+        }
+        UI.toast('Alterações salvas com sucesso.', 'sucesso');
         UI.fecharModal();
       } catch (err) {
         UI.mostrarErro(erroEl, err.message);
