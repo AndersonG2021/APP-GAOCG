@@ -463,6 +463,95 @@ const UI = (function () {
     return d.toLocaleString('pt-BR');
   }
 
+  /** "aaaa-mm-dd" -> "dd/mm/aaaa", sem hora - só a data (formatarData acima inclui hora). */
+  function formatarDataBr(iso) {
+    if (!iso) return '';
+    const [ano, mes, dia] = String(iso).split('-');
+    return dia && mes && ano ? `${dia}/${mes}/${ano}` : String(iso);
+  }
+
+  /** Date -> "aaaa-mm-dd" em horário LOCAL (não usa toISOString, que converte pra UTC e pode voltar um dia no fuso do Brasil). */
+  function dataParaIsoLocal_(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  const SITUACOES_CONTRATO_TEMPORARIAS_ = ['TAC', 'Termo de Compromisso', 'Contrato Emergencial'];
+
+  /**
+   * Prazos contratuais de uma Unidade (sessão 2026-08-14, pedido do usuário)
+   * - função ÚNICA, compartilhada entre o card de Unidades (js/unidades.js)
+   * e a tabela nova do Dashboard (js/dashboard.js), pra nunca desalinharem
+   * (mesma classe de bug já vista neste app com o <style> duplicado do
+   * documento SEI - ver js/sei-bridge.js).
+   *
+   * Contexto de negócio: um Contrato de Gestão (C.G.) regular dura até 10
+   * anos, com um Termo Aditivo de prorrogação a cada 2 anos a partir da
+   * assinatura (marcos em âncora+2/+4/+6/+8 anos - âncora+10 é o FIM do
+   * contrato, não mais um T.A.). Depois do marco de +8 anos não sobra T.A.
+   * nenhum a fazer nos 2 anos finais - diasProximoTa sai null nesse período.
+   * TAC/Termo de Compromisso/Contrato Emergencial são instrumentos
+   * temporários (pontes usadas quando os 10 anos acabam e a nova seleção
+   * pública da OSS ainda não terminou): o prazo final é a própria
+   * data_final_instrumento informada, sem cálculo de T.A.
+   *
+   * Devolve null quando não há dado suficiente pra calcular (sem Situação
+   * do Contrato escolhida, ou faltando a data que aquele tipo exige).
+   */
+  function calcularPrazoContratoUnidade(unidade) {
+    const situacao = unidade && unidade.situacao_contrato;
+    if (!situacao) return null;
+    const ehTemporaria = SITUACOES_CONTRATO_TEMPORARIAS_.indexOf(situacao) !== -1;
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    // "T00:00:00" (sem "Z"): força o parse em horário LOCAL, não UTC - uma
+    // data "aaaa-mm-dd" pura vira meia-noite UTC, que no fuso do Brasil
+    // (UTC-3) já é o dia anterior à noite, um bug clássico de off-by-one.
+    const parseDataLocal = iso => { const d = new Date(iso + 'T00:00:00'); return isNaN(d.getTime()) ? null : d; };
+
+    if (ehTemporaria) {
+      const fim = parseDataLocal(unidade.data_final_instrumento);
+      if (!fim) return null;
+      const dias = Math.round((fim - hoje) / 86400000);
+      return {
+        situacao, ehTemporaria,
+        diasProximoTa: null,
+        diasPrazoFinal: dias,
+        dataPrazoFinalIso: dataParaIsoLocal_(fim),
+        rotuloPrazoFinal: `Fim do instrumento (${situacao})`
+      };
+    }
+
+    // Contrato Regular.
+    const inicio = parseDataLocal(unidade.data_inicial_instrumento);
+    if (!inicio) return null;
+
+    const marcosTa = [2, 4, 6, 8].map(anos => { const d = new Date(inicio.getTime()); d.setFullYear(d.getFullYear() + anos); return d; });
+    const fimContrato = new Date(inicio.getTime()); fimContrato.setFullYear(fimContrato.getFullYear() + 10);
+    const proximoTa = marcosTa.find(d => d >= hoje) || null;
+
+    return {
+      situacao, ehTemporaria,
+      diasProximoTa: proximoTa ? Math.round((proximoTa - hoje) / 86400000) : null,
+      diasPrazoFinal: Math.round((fimContrato - hoje) / 86400000),
+      dataPrazoFinalIso: dataParaIsoLocal_(fimContrato),
+      rotuloPrazoFinal: 'Fim do Contrato de Gestão (10 anos)'
+    };
+  }
+
+  /**
+   * Cor de alerta (nomes de classe .selo já existentes, ver css/style.css)
+   * pra um número de dias restantes - limiares padrão 60/180, ajustáveis
+   * aqui num lugar só se o usuário pedir outros números.
+   */
+  function corAlertaPrazo(dias) {
+    if (dias === null || dias === undefined) return 'cinza';
+    if (dias <= 60) return 'vermelho';
+    if (dias <= 180) return 'amarelo';
+    return 'verde';
+  }
+
   const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
   /** Gera a lista de competências (formato "mmm.aa", ex.: "mar.26") de 24 meses atrás a 6 meses à frente. */
@@ -907,7 +996,8 @@ const UI = (function () {
 
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, modalFoiEditado, mostrarErro, lerArquivoBase64,
-    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
+    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, formatarDataBr, calcularPrazoContratoUnidade, corAlertaPrazo,
+    listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, aplicarFacetas, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };

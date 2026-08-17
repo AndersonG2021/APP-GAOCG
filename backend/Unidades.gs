@@ -267,6 +267,13 @@ function criarUnidade(session, dados) {
     cnpj: cnpj,
     contrato_gestao: contratoGestao,
     contrato_ceo: sanitizeString_(dados.contrato_ceo, 50),
+    // Situação do Contrato / prazos (sessão 2026-08-14): datas são texto
+    // "aaaa-mm-dd" puro (mesmo padrão de data_vencimento em UnidadesTA) - o
+    // cálculo de dias restantes/próximo T.A. é feito no frontend
+    // (UI.calcularPrazoContratoUnidade, js/app.js), não aqui.
+    situacao_contrato: sanitizeString_(dados.situacao_contrato, 50),
+    data_inicial_instrumento: sanitizeString_(dados.data_inicial_instrumento, 10),
+    data_final_instrumento: sanitizeString_(dados.data_final_instrumento, 10),
     valor_contrato_gestao: toNumber_(dados.valor_contrato_gestao),
     valor_contrato_gestao_sus: toNumber_(dados.valor_contrato_gestao_sus),
     classificacao_orcamentaria: sanitizeString_(dados.classificacao_orcamentaria, 200),
@@ -295,7 +302,7 @@ function atualizarUnidade(session, id, dados) {
   var existente = findById_(sheet, id);
   if (!existente) return fail_('Unidade não encontrada.');
 
-  var campos = ['nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'contrato_ceo', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd'];
+  var campos = ['nome', 'tipo', 'oss', 'cnpj', 'contrato_gestao', 'contrato_ceo', 'situacao_contrato', 'data_inicial_instrumento', 'data_final_instrumento', 'classificacao_orcamentaria', 'acao', 'subacao', 'gd'];
   var atualizado = Object.assign({}, existente);
   campos.forEach(function (campo) {
     if (dados.hasOwnProperty(campo)) atualizado[campo] = sanitizeString_(dados[campo], 200);

@@ -5,6 +5,13 @@
 
 const TelaUnidades = (function () {
   const OPCOES_TIPO = ['UPA', 'UPAE', 'Hospital', 'Carreta', 'Outro'];
+  // Situação do Contrato (sessão 2026-08-14, pedido do usuário) - ver
+  // UI.calcularPrazoContratoUnidade (js/app.js) pra como cada uma vira
+  // contador no card.
+  const OPCOES_SITUACAO_CONTRATO = ['Contrato Regular', 'TAC', 'Termo de Compromisso', 'Contrato Emergencial'];
+  function situacaoContratoEhTemporaria_(situacao) {
+    return situacao === 'TAC' || situacao === 'Termo de Compromisso' || situacao === 'Contrato Emergencial';
+  }
   let unidades = [];
   let todasUnidades = []; // sem filtro nenhum - só pra popular o dropdown do filtro "Unidade", separado da lista filtrada exibida nos cartões
   let linhasTas = [];
@@ -139,13 +146,6 @@ const TelaUnidades = (function () {
     document.getElementById('uniPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
   }
 
-  /** "dd/mm/aaaa" a partir de uma data ISO ("aaaa-mm-dd") - só pro aviso de T.A. vencido no card. */
-  function formatarDataBr_(iso) {
-    if (!iso) return '';
-    const [ano, mes, dia] = String(iso).split('-');
-    return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
-  }
-
   function linhaTaDetalheHtml_(t) {
     const rotulo = `${t.objeto_ta || '-'} (T.A. ${t.numero_ta || '-'})`;
     return `
@@ -153,7 +153,7 @@ const TelaUnidades = (function () {
         <span title="${UI.escaparHtml(rotulo)}">${UI.escaparHtml(rotulo)}</span>
         <span>${UI.formatarMoeda(t.valor_ta)}</span>
       </div>
-      ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento não regular encerrado em ${formatarDataBr_(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`;
+      ${t.vencido ? `<p class="ajuda cartao-unidade-ta-vencido">⚠ Pagamento não regular encerrado em ${UI.formatarDataBr(t.data_vencimento)} - remova este T.A. se não for mais válido.</p>` : ''}`;
   }
 
   /**
@@ -181,6 +181,27 @@ const TelaUnidades = (function () {
       </div>`;
   }
 
+  /**
+   * Contador(es) de prazo contratual do card (sessão 2026-08-14, pedido do
+   * usuário) - toda a conta vem de UI.calcularPrazoContratoUnidade
+   * (js/app.js), compartilhada com a tabela nova do Dashboard. Sem Situação
+   * do Contrato preenchida (cadastro antigo, ainda não migrado) não mostra
+   * nada - não é erro, só falta preencher.
+   */
+  function prazoContratoHtml_(unidade) {
+    const prazo = UI.calcularPrazoContratoUnidade(unidade);
+    if (!prazo) return '';
+    const textoDias = dias => dias >= 0 ? `${dias} dia(s)` : `vencido há ${Math.abs(dias)} dia(s)`;
+    const proximoTaHtml = prazo.diasProximoTa !== null
+      ? `<span class="selo ${UI.corAlertaPrazo(prazo.diasProximoTa)}">Próximo T.A. em ${textoDias(prazo.diasProximoTa)}</span>`
+      : '';
+    return `
+      <div class="cartao-unidade-prazo">
+        ${proximoTaHtml}
+        <span class="selo ${UI.corAlertaPrazo(prazo.diasPrazoFinal)}">${UI.escaparHtml(prazo.rotuloPrazoFinal)}: ${textoDias(prazo.diasPrazoFinal)}</span>
+      </div>`;
+  }
+
   function renderCards() {
     const alvo = document.getElementById('listaUnidades');
     if (!unidades.length) {
@@ -202,6 +223,7 @@ const TelaUnidades = (function () {
             <span class="cartao-unidade-repasse-total">Repasse Mensal Total: ${UI.formatarMoeda(u.parcela_mensal_total)}</span>
           </div>
           <div class="cartao-unidade-meta">${UI.escaparHtml(u.tipo || '-')} · OSS ${UI.escaparHtml(u.oss || '-')} · ${UI.escaparHtml(u.cnpj || '-')} · Contrato CEO ${UI.escaparHtml(u.contrato_ceo || '-')}</div>
+          ${prazoContratoHtml_(u)}
           ${detalheTasHtml(u)}
         </div>
       </div>`).join('')}</div>`;
@@ -338,6 +360,23 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Subação</label><input id="uSubacao" value="${UI.escaparHtml(unidade ? unidade.subacao : '')}" /></div>
           <div class="campo"><label>G.D.</label><input id="uGd" value="${UI.escaparHtml(unidade ? unidade.gd : '')}" /></div>
         </div>
+        <div class="grade-2">
+          <div class="campo"><label>Situação do Contrato</label>
+            <select id="uSituacaoContrato">
+              <option value="">-</option>
+              ${OPCOES_SITUACAO_CONTRATO.map(s => `<option ${unidade && unidade.situacao_contrato === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <div></div>
+          <div class="campo ${unidade && unidade.situacao_contrato ? '' : 'oculto'}" id="uCampoDataInicial">
+            <label>Data Inicial do Instrumento Contratual</label>
+            <input type="date" id="uDataInicialInstrumento" value="${unidade ? unidade.data_inicial_instrumento || '' : ''}" />
+          </div>
+          <div class="campo ${unidade && situacaoContratoEhTemporaria_(unidade.situacao_contrato) ? '' : 'oculto'}" id="uCampoDataFinal">
+            <label>Data final deste Instrumento Contratual</label>
+            <input type="date" id="uDataFinalInstrumento" value="${unidade ? unidade.data_final_instrumento || '' : ''}" />
+          </div>
+        </div>
         <div class="campo">
           <label>Termos Aditivos (T.A.)</label>
           <div id="tasContainer" class="linhas-fonte"></div>
@@ -351,6 +390,14 @@ const TelaUnidades = (function () {
 
     UI.abrirModal(editando ? 'Editar unidade' : 'Nova unidade', corpo, rodape);
     document.getElementById('btnCancelarUnidade').addEventListener('click', UI.fecharModal);
+
+    // Data Inicial aparece assim que qualquer Situação é escolhida; Data
+    // Final só nos 3 tipos temporários (mesmo padrão de mostrar/esconder
+    // campo por change já usado no Tipo de pagamento do T.A., acima).
+    document.getElementById('uSituacaoContrato').addEventListener('change', function () {
+      document.getElementById('uCampoDataInicial').classList.toggle('oculto', !this.value);
+      document.getElementById('uCampoDataFinal').classList.toggle('oculto', !situacaoContratoEhTemporaria_(this.value));
+    });
 
     renderTasFormulario();
     document.getElementById('btnAdicionarTa').addEventListener('click', () => {
@@ -377,6 +424,13 @@ const TelaUnidades = (function () {
         cnpj: document.getElementById('uCnpj').value.trim(),
         contrato_gestao: document.getElementById('uContrato').value.trim(),
         contrato_ceo: document.getElementById('uContratoCeo').value.trim(),
+        situacao_contrato: document.getElementById('uSituacaoContrato').value,
+        // Zera a data que não se aplica à Situação escolhida - o campo pode
+        // estar oculto mas ainda ter um valor digitado antes de trocar de
+        // tipo (mesmo cuidado de data_vencimento em substituirTasDaUnidade_,
+        // backend/Unidades.gs, pra não sobrar lixo órfão).
+        data_inicial_instrumento: document.getElementById('uSituacaoContrato').value ? document.getElementById('uDataInicialInstrumento').value : '',
+        data_final_instrumento: situacaoContratoEhTemporaria_(document.getElementById('uSituacaoContrato').value) ? document.getElementById('uDataFinalInstrumento').value : '',
         valor_contrato_gestao: UI.parseValorBr(document.getElementById('uValorContratoGestaoTesouro').value),
         valor_contrato_gestao_sus: UI.parseValorBr(document.getElementById('uValorContratoGestaoSus').value),
         acao: document.getElementById('uAcao').value.trim(),
