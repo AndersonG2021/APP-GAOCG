@@ -290,6 +290,8 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .selo.amarelo { background: var(--amarelo-claro); color: var(--amarelo); }
 .selo.vermelho { background: var(--vermelho-claro); color: var(--vermelho); }
 .selo.cinza { background: var(--cinza-200); color: var(--cinza-700); }
+/* Perfil Administrador do Aplicativo (sessão 2026-08-14) - mesma família de --roxo já usada no ícone "Processos parados" do Dashboard. */
+.selo.roxo { background: var(--roxo-claro); color: var(--roxo); }
 
 /* Status editável direto na listagem de Recibos (sessão 2026-08-07) - mesma
    forma de "selo" de sempre, só que é um <select> de verdade por baixo. */
@@ -569,6 +571,13 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
    js/unidades.js). Sem Situação do Contrato preenchida, prazoContratoHtml_
    devolve string vazia e esta div nem chega a existir. */
 .cartao-unidade-prazo { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+
+/* ===== Cards de Sugestões (sessão 2026-08-14) ===== */
+.cartao-sugestao { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 16px; margin-bottom: 12px; cursor: pointer; transition: box-shadow .12s ease; }
+.cartao-sugestao:hover { box-shadow: var(--sombra-forte); }
+.cartao-sugestao-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cartao-sugestao-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cartao-sugestao-feedback { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--cinza-200); font-size: 13px; color: var(--cinza-700); white-space: pre-wrap; overflow-wrap: anywhere; }
 .cartao-unidade-detalhe { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cinza-200); font-size: 13px; }
 .cartao-unidade-detalhe-linha { display: flex; flex-wrap: nowrap; justify-content: space-between; gap: 4px 10px; padding: 3px 0; color: var(--cinza-700); }
 .cartao-unidade-detalhe-linha span:first-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

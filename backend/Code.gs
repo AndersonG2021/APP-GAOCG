@@ -111,6 +111,13 @@ function handleRequest_(params) {
       case 'assumirEdicao': return jsonOut_(assumirEdicao(session, params.tipoProcesso, params.processoId));
       case 'liberarEdicao': return jsonOut_(liberarEdicao(session, params.tipoProcesso, params.processoId));
 
+      // Sugestões (sessão 2026-08-14)
+      case 'listarSugestoes': return jsonOut_(listarSugestoes(session));
+      case 'criarSugestao': return jsonOut_(criarSugestao(session, params.data));
+      case 'atualizarSugestao': return jsonOut_(atualizarSugestao(session, params.id, params.data));
+      case 'marcarSugestaoEmAnalise': return jsonOut_(marcarSugestaoEmAnalise(session, params.id));
+      case 'responderSugestao': return jsonOut_(responderSugestao(session, params.id, params.feedback));
+
       // Dashboard (Funcionalidade 8)
       case 'obterDashboard': return jsonOut_(obterDashboard(session, params));
       case 'obterGraficoDashboard': return jsonOut_(obterGraficoDashboard(session, params));

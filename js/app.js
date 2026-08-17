@@ -463,6 +463,18 @@ const UI = (function () {
     return d.toLocaleString('pt-BR');
   }
 
+  /**
+   * Rótulo exibido de um perfil (sessão 2026-08-14: 3 perfis agora, não mais
+   * só gerente/analista) - função única, pra não repetir o mapeamento em
+   * cada tela que mostra perfil (js/usuarios.js, topbar/"Minha conta" aqui
+   * mesmo).
+   */
+  function rotuloPerfil(perfil) {
+    if (perfil === 'administrador') return 'Administrador';
+    if (perfil === 'gerente') return 'Gerente';
+    return 'Analista';
+  }
+
   /** "aaaa-mm-dd" -> "dd/mm/aaaa", sem hora - só a data (formatarData acima inclui hora). */
   function formatarDataBr(iso) {
     if (!iso) return '';
@@ -996,7 +1008,7 @@ const UI = (function () {
 
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, modalFoiEditado, mostrarErro, lerArquivoBase64,
-    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, formatarDataBr, calcularPrazoContratoUnidade, corAlertaPrazo,
+    formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, formatarDataBr, rotuloPerfil, calcularPrazoContratoUnidade, corAlertaPrazo,
     listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, aplicarFacetas, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
@@ -1012,6 +1024,7 @@ const App = (function () {
     unidades: () => TelaUnidades.render(),
     listas: () => TelaListas.render(),
     logAuditoria: () => TelaLogAuditoria.render(),
+    sugestoes: () => TelaSugestoes.render(),
     usuarios: () => TelaUsuarios.render()
   };
 
@@ -1025,9 +1038,8 @@ const App = (function () {
     document.getElementById('telaLogin').classList.add('oculto');
     document.getElementById('appShell').classList.remove('oculto');
     document.getElementById('nomeUsuarioTopo').textContent = usuario.nome;
-    document.getElementById('perfilUsuarioTopo').textContent =
-      usuario.perfil === 'gerente' ? 'Gerente' : 'Analista';
-    document.querySelectorAll('.somente-gerente').forEach(el => el.classList.toggle('oculto', usuario.perfil !== 'gerente'));
+    document.getElementById('perfilUsuarioTopo').textContent = UI.rotuloPerfil(usuario.perfil);
+    document.querySelectorAll('.somente-gerente').forEach(el => el.classList.toggle('oculto', !Auth.ehGerente()));
     navegarPara('dashboard');
   }
 
@@ -1039,7 +1051,7 @@ const App = (function () {
         <p id="nomeErro" class="erro-campo oculto"></p>
       </form>
       <div class="campo"><label>Login</label><input value="${UI.escaparHtml(usuario.login)}" disabled /></div>
-      <div class="campo"><label>Perfil</label><input value="${usuario.perfil === 'gerente' ? 'Gerente' : 'Analista'}" disabled /></div>
+      <div class="campo"><label>Perfil</label><input value="${UI.escaparHtml(UI.rotuloPerfil(usuario.perfil))}" disabled /></div>
       <button type="button" class="botao" id="btnSalvarNome">Salvar nome</button>
       <hr style="border:none;border-top:1px solid var(--cinza-200);margin:16px 0" />
       <h4 style="margin:0 0 8px">Alterar senha</h4>

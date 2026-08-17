@@ -1,13 +1,41 @@
 /**
- * GAOCG App - Gestão de Usuários (Funcionalidade 9), exclusiva do perfil gerente.
+ * GAOCG App - Gestão de Usuários (Funcionalidade 9), exclusiva dos perfis
+ * gerente e administrador (ver requireGerente_ logo abaixo).
  */
 
+/**
+ * Perfis válidos, em ordem crescente de acesso. 'administrador' foi
+ * acrescentado na sessão 2026-08-14 (pedido do usuário: "Administrador do
+ * Aplicativo" com acesso a tudo) - ver requireGerente_/requireAdministrador_
+ * e perfilValidado_ abaixo.
+ */
+var PERFIS_VALIDOS_ = ['analista', 'gerente', 'administrador'];
+
+/**
+ * gerente OU administrador (Administrador herda tudo que Gerente tem, e
+ * mais - ver requireAdministrador_ para as ações exclusivas dele). Mantido
+ * com esse nome porque é chamado de vários outros arquivos (Recibos.gs,
+ * ListasPersonalizadas.gs) - trocar o nome exigiria mexer em todos.
+ */
 function requireGerente_(session) {
-  if (!session || session.perfil !== 'gerente') {
+  if (!session || (session.perfil !== 'gerente' && session.perfil !== 'administrador')) {
     throw new Error('Acesso restrito ao perfil gerente.');
   }
 }
 
+/** Exclusivo do Administrador do Aplicativo - nem Gerente passa aqui. */
+function requireAdministrador_(session) {
+  if (!session || session.perfil !== 'administrador') {
+    throw new Error('Acesso restrito ao Administrador do Aplicativo.');
+  }
+}
+
+/**
+ * A conta do Administrador do Aplicativo fica invisível na tela de Usuários
+ * pra quem não for administrador também (sessão 2026-08-14, pedido do
+ * usuário) - Gerente continua vendo/gerenciando Analista/Gerente
+ * normalmente, só não enxerga que existe um Administrador.
+ */
 function listarUsuarios(session) {
   requireGerente_(session);
   var rows = sheetToObjects_(getSheet_(SHEETS.USUARIOS)).map(function (u) {
@@ -15,7 +43,33 @@ function listarUsuarios(session) {
     delete u.senha_hash;
     return u;
   });
+  if (session.perfil !== 'administrador') {
+    rows = rows.filter(function (u) { return u.perfil !== 'administrador'; });
+  }
   return ok_(rows);
+}
+
+/**
+ * Valida o perfil pedido: precisa ser um dos PERFIS_VALIDOS_ (qualquer outra
+ * coisa cai em 'analista' - mesmo comportamento de antes pra valor
+ * desconhecido/ausente). Só um Administrador pode PROMOVER alguém a
+ * Administrador OU mexer no perfil de quem já É Administrador (rebaixar
+ * inclusive) - perfilAtual (opcional, undefined em criarUsuario) cobre esse
+ * 2º caso, senão um Gerente comum, chamando atualizarUsuario direto (sem
+ * passar pela tela, que já esconde essa opção), conseguiria rebaixar uma
+ * conta de Administrador pra analista/gerente sem ninguém barrar. Devolve
+ * { perfil, erro }: erro preenchido quando a troca não é permitida - aí NADA
+ * é gravado (silenciosamente cair pra 'analista' seria o mesmo bug que já
+ * aconteceu antes com o perfil binário: "sucesso" na tela sem o que foi
+ * pedido de fato acontecer).
+ */
+function perfilValidado_(session, perfilPedido, perfilAtual) {
+  var perfil = PERFIS_VALIDOS_.indexOf(perfilPedido) !== -1 ? perfilPedido : 'analista';
+  var envolveAdministrador = perfil === 'administrador' || perfilAtual === 'administrador';
+  if (envolveAdministrador && session.perfil !== 'administrador') {
+    return { erro: 'Só um Administrador do Aplicativo pode definir ou alterar esse perfil.' };
+  }
+  return { perfil: perfil };
 }
 
 function criarUsuario(session, dados) {
@@ -25,7 +79,9 @@ function criarUsuario(session, dados) {
   var nome = sanitizeString_(dados.nome, 200);
   var login = sanitizeString_(dados.login, 100);
   var senha = String(dados.senha || '');
-  var perfil = dados.perfil === 'gerente' ? 'gerente' : 'analista';
+  var perfilResultado = perfilValidado_(session, dados.perfil);
+  if (perfilResultado.erro) return fail_(perfilResultado.erro);
+  var perfil = perfilResultado.perfil;
 
   if (!nome || !login || !senha) return fail_('Preencha nome, login e senha.');
   if (senha.length < 6) return fail_('A senha deve ter pelo menos 6 caracteres.');
@@ -63,7 +119,11 @@ function atualizarUsuario(session, id, dados) {
 
   var atualizado = Object.assign({}, existente);
   if (dados.hasOwnProperty('nome')) atualizado.nome = sanitizeString_(dados.nome, 200);
-  if (dados.hasOwnProperty('perfil')) atualizado.perfil = dados.perfil === 'gerente' ? 'gerente' : 'analista';
+  if (dados.hasOwnProperty('perfil')) {
+    var perfilResultado = perfilValidado_(session, dados.perfil, existente.perfil);
+    if (perfilResultado.erro) return fail_(perfilResultado.erro);
+    atualizado.perfil = perfilResultado.perfil;
+  }
 
   var rowIndex = existente._row;
   delete atualizado._row;

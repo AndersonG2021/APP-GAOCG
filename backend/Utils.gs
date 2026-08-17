@@ -17,7 +17,8 @@ var SHEETS = {
   EDICOES_EM_ANDAMENTO: 'EdicoesEmAndamento',
   CONTADORES: 'Contadores',
   RELATORIOS_MODELOS: 'RelatoriosModelos',
-  RECIBOS_ORDENS_BANCARIAS: 'RecibosOrdensBancarias'
+  RECIBOS_ORDENS_BANCARIAS: 'RecibosOrdensBancarias',
+  SUGESTOES: 'Sugestoes'
 };
 
 var HEADERS = {
@@ -125,7 +126,11 @@ var HEADERS = {
   // numero_ob é extraído por OCR do próprio PDF (REGEX_NUMERO_OB_DOCUMENTO).
   // A aba é criada sob demanda por getSheetOrdensBancariasRecibo_ (Recibos.gs)
   // se ainda não existir - não precisa criar à mão.
-  RecibosOrdensBancarias: ['id', 'recibo_id', 'numero_ob', 'valor', 'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao']
+  RecibosOrdensBancarias: ['id', 'recibo_id', 'numero_ob', 'valor', 'arquivo_drive_id', 'arquivo_url', 'criado_por', 'data_criacao'],
+  // Sugestões (sessão 2026-08-14, pedido do usuário) - a aba é criada sob
+  // demanda por getSheetSugestoes_ (Sugestoes.gs), mesmo padrão de
+  // RecibosOrdensBancarias/RelatoriosModelos - não precisa criar à mão.
+  Sugestoes: ['id', 'usuario_id', 'texto', 'status', 'feedback_administrador', 'respondido_por', 'data_criacao', 'data_atualizacao', 'data_resposta']
 };
 
 /**

@@ -67,6 +67,7 @@
         <button data-tela="unidades">Unidades</button>
         <button data-tela="listas">Listas Personalizadas</button>
         <button data-tela="logAuditoria">Log de Auditoria</button>
+        <button data-tela="sugestoes">Sugestões</button>
         <button data-tela="usuarios" class="somente-gerente oculto">Usuários</button>
       </nav>
     </aside>
@@ -102,7 +103,7 @@
   <div id="dockModais" class="dock-modais"></div>
 
   <!--
-    defer: os 15 arquivos são baixados em PARALELO durante o parse do HTML e
+    defer: os 16 arquivos são baixados em PARALELO durante o parse do HTML e
     executados na ordem declarada, logo antes do DOMContentLoaded - em vez de
     um download bloqueante atrás do outro. A ordem entre eles continua
     garantida (é isso que `defer` promete), então as dependências de carga
@@ -123,6 +124,7 @@
   <script defer src="js/notas-empenho.js"></script>
   <script defer src="js/recibos.js"></script>
   <script defer src="js/log-auditoria.js"></script>
+  <script defer src="js/sugestoes.js"></script>
   <script defer src="js/relatorios.js"></script>
   <script defer src="js/dashboard.js"></script>
   <script defer src="js/tema.js"></script>
