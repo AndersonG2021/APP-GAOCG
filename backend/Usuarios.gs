@@ -177,6 +177,45 @@ function reativarUsuario(session, id) {
   return ok_({ id: id, ativo: true });
 }
 
+/**
+ * Promove um usuário já cadastrado a Administrador do Aplicativo, direto na
+ * planilha - só existe pra destravar o PRIMEIRO Administrador (sessão
+ * 2026-08-14). Como só um Administrador pode conceder esse perfil
+ * (perfilValidado_ acima) e ninguém tem esse perfil ainda logo depois do
+ * deploy, ninguém consegue virar o primeiro pela tela - alguém precisa
+ * rodar isto uma vez, manualmente. Depois do primeiro, promover qualquer
+ * outro usuário já pode ser feito normalmente pela tela de Usuários.
+ *
+ * RODE UMA VEZ, manualmente, pelo editor do Apps Script: troque
+ * 'SEU_LOGIN_AQUI' abaixo pelo login de quem deve virar o primeiro
+ * Administrador, escolha "bootstrapPrimeiroAdministrador_" no seletor de
+ * função e clique Executar. Depois, Exibir > Registros pra confirmar.
+ */
+function bootstrapPrimeiroAdministrador_() {
+  var LOGIN_DO_ADMINISTRADOR_ = 'SEU_LOGIN_AQUI'; // <<< troque aqui antes de rodar
+
+  var sheet = getSheet_(SHEETS.USUARIOS);
+  var linhas = sheetToObjects_(sheet);
+  var usuario = linhas.filter(function (u) {
+    return String(u.login).toLowerCase() === LOGIN_DO_ADMINISTRADOR_.toLowerCase();
+  })[0];
+  if (!usuario) {
+    Logger.log('Nenhum usuário com login "' + LOGIN_DO_ADMINISTRADOR_ + '" encontrado - confira o login (ou troque a constante LOGIN_DO_ADMINISTRADOR_ no topo da função) e rode de novo.');
+    return;
+  }
+  if (usuario.perfil === 'administrador') {
+    Logger.log('"' + usuario.nome + '" (login ' + usuario.login + ') já é Administrador do Aplicativo - nada a fazer.');
+    return;
+  }
+
+  var atualizado = Object.assign({}, usuario, { perfil: 'administrador' });
+  delete atualizado._row;
+  updateObjectRow_(sheet, usuario._row, atualizado);
+  invalidarCacheUsuario_(usuario.id);
+  bumpVersao_('usuarios');
+  Logger.log('Pronto: "' + usuario.nome + '" (login ' + usuario.login + ') agora é Administrador do Aplicativo.');
+}
+
 function redefinirSenha(session, id, novaSenha) {
   requireGerente_(session);
   if (!novaSenha || String(novaSenha).length < 6) {
