@@ -50,6 +50,7 @@ function handleRequest_(params) {
       case 'criarUsuario': return jsonOut_(criarUsuario(session, params.data));
       case 'atualizarUsuario': return jsonOut_(atualizarUsuario(session, params.id, params.data));
       case 'inativarUsuario': return jsonOut_(inativarUsuario(session, params.id));
+      case 'reativarUsuario': return jsonOut_(reativarUsuario(session, params.id));
       case 'redefinirSenha': return jsonOut_(redefinirSenha(session, params.id, params.novaSenha));
       case 'alterarMinhaSenha': return jsonOut_(alterarMinhaSenha(session, params.senhaAtual, params.novaSenha));
       case 'alterarMeuNome': return jsonOut_(alterarMeuNome(session, params.novoNome));

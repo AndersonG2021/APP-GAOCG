@@ -92,6 +92,31 @@ function inativarUsuario(session, id) {
   return ok_({ id: id, ativo: false });
 }
 
+/**
+ * Reativa um usuário inativado - mesmo padrão de reativarUnidade
+ * (Unidades.gs). Existe como ação própria (em vez do frontend chamar
+ * atualizarUsuario com { ativo: true }) porque atualizarUsuario só lida com
+ * os campos que ele conhece via dados.hasOwnProperty (nome/perfil) - um
+ * campo "ativo" ali seria ignorado silenciosamente, e o botão "Reativar"
+ * pareceria funcionar (toast de sucesso) sem realmente mudar nada na
+ * planilha. Também limpa data_inativacao, que fica só como o registro da
+ * ÚLTIMA inativação.
+ */
+function reativarUsuario(session, id) {
+  requireGerente_(session);
+  var sheet = getSheet_(SHEETS.USUARIOS);
+  var existente = findById_(sheet, id);
+  if (!existente) return fail_('Usuário não encontrado.');
+
+  var atualizado = Object.assign({}, existente, { ativo: true, data_inativacao: '' });
+  var rowIndex = existente._row;
+  delete atualizado._row;
+  updateObjectRow_(sheet, rowIndex, atualizado);
+  invalidarCacheUsuario_(id);
+  bumpVersao_('usuarios');
+  return ok_({ id: id, ativo: true });
+}
+
 function redefinirSenha(session, id, novaSenha) {
   requireGerente_(session);
   if (!novaSenha || String(novaSenha).length < 6) {
