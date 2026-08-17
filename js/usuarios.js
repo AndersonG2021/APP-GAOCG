@@ -30,6 +30,12 @@ const TelaUsuarios = (function () {
     renderTabela();
   }
 
+  /** azul (Gerente) e cinza (Analista) já existiam; roxo é novo, só pro Administrador do Aplicativo. */
+  const CORES_PERFIL_ = { administrador: 'roxo', gerente: 'azul' };
+  function seloPerfilHtml_(perfil) {
+    return `<span class="selo ${CORES_PERFIL_[perfil] || 'cinza'}">${UI.escaparHtml(UI.rotuloPerfil(perfil))}</span>`;
+  }
+
   function renderTabela() {
     const alvo = document.getElementById('listaUsuarios');
     alvo.innerHTML = `
@@ -39,7 +45,7 @@ const TelaUsuarios = (function () {
           <tr data-id="${u.id}">
             <td>${UI.escaparHtml(u.nome)}</td>
             <td>${UI.escaparHtml(u.login)}</td>
-            <td>${u.perfil === 'gerente' ? '<span class="selo azul">Gerente</span>' : '<span class="selo cinza">Analista</span>'}</td>
+            <td>${seloPerfilHtml_(u.perfil)}</td>
             <td>${u.ativo ? '<span class="selo verde">Ativo</span>' : '<span class="selo cinza">Inativo</span>'}</td>
           </tr>`).join('')}
         </tbody>
@@ -60,7 +66,9 @@ const TelaUsuarios = (function () {
           <select id="usPerfil">
             <option value="analista" ${usuario && usuario.perfil === 'analista' ? 'selected' : ''}>Analista</option>
             <option value="gerente" ${usuario && usuario.perfil === 'gerente' ? 'selected' : ''}>Gerente</option>
+            ${Auth.ehAdministrador() ? `<option value="administrador" ${usuario && usuario.perfil === 'administrador' ? 'selected' : ''}>Administrador do Aplicativo</option>` : ''}
           </select>
+          ${!Auth.ehAdministrador() ? '<p class="ajuda">Só um Administrador do Aplicativo pode conceder o perfil de Administrador.</p>' : ''}
         </div>
         <p id="usErro" class="erro-campo oculto"></p>
       </form>`;

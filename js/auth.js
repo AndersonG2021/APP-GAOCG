@@ -57,9 +57,19 @@ const Auth = (function () {
     } catch (e) { /* sessão inválida, ignora */ }
   }
 
+  /**
+   * Administrador do Aplicativo (sessão 2026-08-14) herda tudo que Gerente
+   * tem - por isso conta aqui também, em vez de virar uma checagem paralela
+   * que cada tela precisaria lembrar de somar à de Gerente. Ações
+   * exclusivas do Administrador (ver ehAdministrador) usam o helper à parte.
+   */
   function ehGerente() {
-    return !!usuarioAtual && usuarioAtual.perfil === 'gerente';
+    return !!usuarioAtual && (usuarioAtual.perfil === 'gerente' || usuarioAtual.perfil === 'administrador');
   }
 
-  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, atualizarNomeLocal };
+  function ehAdministrador() {
+    return !!usuarioAtual && usuarioAtual.perfil === 'administrador';
+  }
+
+  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, ehAdministrador, atualizarNomeLocal };
 })();
