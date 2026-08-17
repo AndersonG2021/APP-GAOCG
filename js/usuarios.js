@@ -77,10 +77,15 @@ const TelaUsuarios = (function () {
 
     if (editando) {
       document.getElementById('btnToggleUsuario').addEventListener('click', async () => {
+        // reativarUsuario é ação própria, não atualizarUsuario com
+        // { ativo: true } - esse endpoint só lida com nome/perfil, então um
+        // campo "ativo" ali era ignorado em silêncio e o usuário continuava
+        // inativo mesmo com o toast de sucesso (ver reativarUsuario,
+        // backend/Usuarios.gs).
         if (usuario.ativo) {
           await Api.chamar('inativarUsuario', { id: usuario.id });
         } else {
-          await Api.chamar('atualizarUsuario', { id: usuario.id, data: { ativo: true } });
+          await Api.chamar('reativarUsuario', { id: usuario.id });
         }
         CacheAbas.invalidar('usuarios');
         UI.toast('Usuário atualizado.', 'sucesso');
