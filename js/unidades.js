@@ -52,6 +52,11 @@ const TelaUnidades = (function () {
           <button class="botao" id="btnGerarRelatorioUni">Gerar Relatório</button>
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
+        <p class="ajuda legenda-prazo-unidades">
+          Cor do prazo do contrato no card: <span class="selo verde">Verde</span> tranquilo, mais de 180 dias ·
+          <span class="selo amarelo">Amarelo</span> atenção, até 180 dias ·
+          <span class="selo vermelho">Vermelho</span> urgente, até 60 dias ou já vencido
+        </p>
         <div id="listaUnidades"></div>
         <div class="paginacao" id="paginacaoUni"></div>
       </div>`;
