@@ -169,6 +169,12 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
     if (filtroInicial && filtroInicial.competencia) UI.definirValoresFiltroMultiplo('recFiltroCompetencia', filtroInicial.competencia);
     if (filtroInicial && filtroInicial.status) UI.definirValoresFiltroMultiplo('recFiltroStatus', filtroInicial.status);
+    // unidade_id/objeto (Dashboard, painel "Processos do mês" - Metas de
+    // Processos): clique numa linha da tabela de metas já navega pra Recibos
+    // com Unidade+Objeto+Competência pré-filtrados, mesmo padrão de
+    // pré-seleção usado por competencia/status acima.
+    if (filtroInicial && filtroInicial.unidade_id) UI.definirValoresFiltroMultiplo('recFiltroUnidade', filtroInicial.unidade_id);
+    if (filtroInicial && filtroInicial.objeto) UI.definirValoresFiltroMultiplo('recFiltroObjeto', filtroInicial.objeto);
     // statusExceto (Dashboard, card de Recibos): seleciona todos os status
     // conhecidos MENOS os informados - é como o filtro múltiplo (que é
     // "incluir X") expressa um "status diferente de PAGO".

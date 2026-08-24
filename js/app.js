@@ -1022,6 +1022,7 @@ const App = (function () {
     notasEmpenho: (opts) => TelaNotasEmpenho.render(opts),
     recibos: (opts) => TelaRecibos.render(opts),
     unidades: () => TelaUnidades.render(),
+    metasProcessos: () => TelaMetasProcessos.render(),
     listas: () => TelaListas.render(),
     logAuditoria: () => TelaLogAuditoria.render(),
     sugestoes: () => TelaSugestoes.render(),

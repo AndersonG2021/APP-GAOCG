@@ -482,7 +482,12 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-indicador.acento-vermelho { border-top-color: var(--vermelho); }
 .cartao-indicador.acento-roxo { border-top-color: var(--roxo); }
 .cartao-indicador.acento-ciano { border-top-color: var(--ciano); }
-.cartao-indicador-seta { color: var(--cinza-300); }
+.cartao-indicador-seta { color: var(--cinza-300); display: inline-flex; transition: transform .15s ease; }
+/* Card "Processos do mês" (Metas de Processos, sessão 2026-08-24): usa o
+   mesmo slot .cartao-indicador-seta, mas com um chevron que gira ao expandir
+   em vez de navegar pra outra tela - ver cartaoMetasHtml_/configurarPainelMetas_
+   em js/dashboard.js. */
+.cartao-indicador-seta.aberta { transform: rotate(180deg); }
 .cartao-indicador-delta { font-size: 11.5px; color: var(--cinza-500); margin-top: 6px; overflow-wrap: anywhere; }
 .cartao-indicador-delta.positivo { color: var(--verde); }
 .cartao-indicador-delta.negativo { color: var(--vermelho); }

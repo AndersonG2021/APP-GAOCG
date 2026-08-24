@@ -2808,9 +2808,79 @@ Executar. Olhar o retorno no log de execução (View → Logs, ou o painel de
 execução) para conferir `preenchidas`/`sem_cronograma_no_documento`/
 `sem_arquivo`/`com_erro`.
 
+## Metas Mensais de Processos - painel "Processos do mês" no Dashboard (2026-08-24)
+
+Pedido: uma forma de ver, no Dashboard, quantos processos são esperados por
+mês (separados por unidade e objeto) já chegaram e quantos ainda faltam,
+filtrável por unidade/objeto/estado - alimentada por uma meta que é um
+**padrão mensal recorrente** (cadastra uma vez, vale todo mês até editar),
+não um lançamento por competência. Desenho fechado antes de codar (a pedido
+do usuário) em `docs/ESPECIFICACAO_METAS_PROCESSOS.md` - ver esse documento
+para o detalhe completo do modelo de dados/cálculo/interação; aqui só o
+resumo do que foi implementado e os desvios do desenho original (seção 10
+do documento).
+
+**Modelo de dados (nova aba `MetasProcessos`):** uma linha por combinação
+Unidade+Objeto (`unidade_id`, `objeto`, `quantidade_esperada`, `ativo`,
+`criado_por`, `data_criacao` - sem competência própria, sem
+`alterado_por`/`data_alteracao`: seguiu o mesmo padrão de auditoria de
+`Unidades`/`ListasPersonalizadas`, não o de `LogAuditoria`, que hoje só cobre
+SOF/Recibo). Restrição de unicidade: não pode haver duas metas **ativas**
+para a mesma combinação Unidade+Objeto. Aba **criada sob demanda** na
+primeira escrita (`getSheetMetasProcessos_`, `backend/MetasProcessos.gs`),
+mesmo padrão de `RecibosOrdensBancarias`/`RelatoriosModelos`/`Sugestoes` - não
+precisa ser criada à mão, e a leitura (`obterDashboard`) não quebra se ela
+ainda não existir.
+
+**Cálculo (`dashboardMetasProcessos_`, `backend/Dashboard.gs`):** para a
+competência selecionada, por meta ativa - `chegado` = contagem de Recibos não
+excluídos da mesma competência+unidade+objeto (independente do status de
+pagamento); `falta` = `max(esperado-chegado,0)`; `excedente` =
+`max(chegado-esperado,0)`. Devolve TODOS os itens de uma vez (sem filtro
+server-side de unidade/objeto/estado) mais `sem_meta` (combinações com Recibo
+na competência mas sem meta ativa correspondente - aviso, não entra nos
+totais).
+
+**Dashboard (`js/dashboard.js`):** 6º card na grade de indicadores
+("Processos do mês", cor roxo, antes sem uso). Diferente dos outros cards
+clicáveis, este **não navega pra outra tela** - clique expande/recolhe (com
+um chevron que gira, `.cartao-indicador-seta.aberta`) um painel no próprio
+Dashboard com filtros de Unidade/Objeto (múltipla escolha) + Estado
+(Chegado/Falta) e uma tabela ordenada por Falta decrescente. Os filtros
+operam **só no cliente** (sobre o array já carregado, sem round-trip) - lista
+pequena o bastante (uma linha por combinação Unidade+Objeto) pra não valer a
+complexidade de mandar os filtros pro backend. Painel recolhido por padrão a
+cada `carregar()` (troca de competência/"Atualizar"). Clique numa linha da
+tabela navega pra Recibos já filtrado por Unidade+Objeto+Competência - exigiu
+estender `js/recibos.js` (`filtroInicial.unidade_id`/`objeto`, que antes só
+existia pra competência/status).
+
+**Tela de manutenção (`js/metas-processos.js`, novo menu "Metas de
+Processos"):** CRUD completo (criar/editar/pausar/reativar, mesmo padrão de
+`js/unidades.js`/`js/listas.js`) **e** importação em lote (botão "Importar
+lista": cola `Unidade;Objeto;Quantidade` uma combinação por linha, aceita `;`
+ou tab; faz upsert por combinação - atualiza se já existe meta ativa, cria se
+não existe; mostra o resultado linha a linha antes do usuário confiar - ver
+`importarMetasProcessosLote`, `backend/MetasProcessos.gs`). Pedido do usuário:
+as duas formas de cadastro (manual e lote) disponíveis permanentemente, não
+só numa carga inicial.
+
+**Desvios do desenho original decididos ao codar** (ver seção 10 do
+documento de especificação para o detalhe completo): filtros do painel do
+Dashboard viraram client-side (o desenho original previa parâmetros
+`unidadeIds`/`objetos`/`estado` em `obterDashboard`); `MetasProcessos` não
+tem `alterado_por`/`data_alteracao` (nenhuma outra aba auxiliar do app tem
+esse par); a aba é criada sob demanda em vez de exigir criação manual.
+
+**Passo manual:** colar `backend/MetasProcessos.gs` (novo) + a versão
+atualizada de `backend/Utils.gs`, `backend/Contadores.gs`,
+`backend/Versoes.gs`, `backend/Dashboard.gs` e `backend/Code.gs` no editor do
+Apps Script, reimplantar (Nova versão). A aba `MetasProcessos` nasce sozinha
+na primeira meta cadastrada - não precisa criar à mão.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
 - Frontend (`js/`, `css/`, `index.html`) só atualiza no site publicado depois de **commitado e enviado (`git push`) pro GitHub** - editar os arquivos locais não é suficiente (incidente real: sessão 2026-07-23, usuário testou o formulário novo de SOF e "não apareceu nada" porque o commit/push ainda não tinha sido feito, só o backend já estava colado/reimplantado). Depois do push, o GitHub Pages ainda pode levar até ~10 min pra refletir (`Cache-Control: max-age=600`) - hard refresh (Ctrl+Shift+R) ajuda a confirmar se já propagou.
 - Padrão de trabalho: planejar cada fase (plan mode) → implementar frontend → passar trecho de backend pronto pro usuário colar → usuário testa → ajustar.
-- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Contadores.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Relatorios.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs` — todos os `.gs` do backend agora estão cobertos (`Relatorios.gs` é novo, sessão 2026-07-28, ainda a ser colado pelo usuário; `Contadores.gs` coletado pela primeira vez em 2026-07-18). Sempre que precisar editar um `.gs`, conferir se a cópia local está atualizada antes (cópias antigas do histórico do git podem estar desatualizadas).
+- `/backend` tem cópia de referência de `Auth.gs`, `Code.gs`, `Contadores.gs`, `Dashboard.gs`, `EdicoesEmAndamento.gs`, `ListasPersonalizadas.gs`, `LogAuditoria.gs`, `MetasProcessos.gs`, `NotasEmpenho.gs`, `Recibos.gs`, `Relatorios.gs`, `Sof.gs`, `Unidades.gs`, `Usuarios.gs`, `Utils.gs` — todos os `.gs` do backend agora estão cobertos (`MetasProcessos.gs` é novo, sessão 2026-08-24, ainda a ser colado pelo usuário; `Relatorios.gs` novo desde 2026-07-28; `Contadores.gs` coletado pela primeira vez em 2026-07-18). Sempre que precisar editar um `.gs`, conferir se a cópia local está atualizada antes (cópias antigas do histórico do git podem estar desatualizadas).

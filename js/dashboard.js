@@ -19,9 +19,22 @@ const Dashboard = (function () {
   const ICONE_ALERTA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
   const ICONE_PREDIO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M6 21V7l6-4 6 4v14"/><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1"/></svg>';
   const ICONE_SETA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+  // Metas de Processos (docs/ESPECIFICACAO_METAS_PROCESSOS.md, sessão 2026-08-24).
+  const ICONE_METAS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+  // Mesmo chevron (para baixo) já usado no cabeçalho do filtro de múltipla
+  // escolha (criarFiltroMultiplo, js/app.js) - reaproveitado aqui pra sinalizar
+  // "expande no lugar", diferente da seta ICONE_SETA usada nos cards que navegam
+  // para outra tela.
+  const ICONE_CHEVRON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   const MESES_ABREV_PT_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
   let mapaUsuarios_ = {};
+  // Itens crus do painel "Processos do mês" (dados.metas_processos.itens),
+  // guardados pra os filtros de Unidade/Objeto/Estado re-renderizarem a
+  // tabela na hora, sem round-trip ao backend (lista já é pequena - uma
+  // linha por combinação Unidade+Objeto).
+  let metasItensAtuais_ = [];
+  let metasAbertoAtual_ = false;
 
   async function carregarMapaUsuarios_() {
     try {
@@ -107,7 +120,7 @@ const Dashboard = (function () {
 
   function renderConteudo(dados) {
     const r = dados.recibos, ne = dados.notas_empenho, atendido = dados.sof_atendido,
-      uni = dados.unidades;
+      uni = dados.unidades, metas = dados.metas_processos;
 
     // --- Card 1: Recibos criados x pagos na competência ---
     const deltaRecibos = variacaoPercentual_(r.total_recibos, r.total_recibos_competencia_anterior);
@@ -134,8 +147,10 @@ const Dashboard = (function () {
         ${cartaoIndicadorHtml_('dashCardSaldoBaixo', ICONE_ALERTA, ne.total_saldo_abaixo_20, 'NEs com saldo abaixo de 20% da parcela', '<div class="cartao-indicador-delta">Clique para ver as Notas de Empenho</div>', 'vermelho')}
         ${cartaoIndicadorHtml_('dashCardSaldoNe', ICONE_ALERTA, UI.formatarMoeda(ne.saldo_disponivel), 'Saldo disponível em Notas de Empenho', ne.total_sem_saldo > 0 ? `<div class="cartao-indicador-delta negativo">${ne.total_sem_saldo} sem saldo</div>` : '', 'vermelho')}
         ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`, 'ciano')}
+        ${cartaoMetasHtml_(metas)}
       </div>
 
+      ${painelMetasDetalheHtml_()}
       ${painelGraficosHtml_()}
       ${painelPrazosHtml_()}`;
 
@@ -148,8 +163,154 @@ const Dashboard = (function () {
     document.getElementById('dashCardSaldoNe').addEventListener('click', () => App.navegarPara('notasEmpenho'));
     document.getElementById('dashCardUnidades').addEventListener('click', () => App.navegarPara('unidades'));
 
+    configurarPainelMetas_(metas);
     configurarGraficos_();
     carregarPrazosContratuais_();
+  }
+
+  // ===== Card "Processos do mês" (Metas de Processos, sessão 2026-08-24) =====
+  // Diferente dos outros cards clicáveis do Dashboard, este NÃO navega para
+  // outra tela - clicar nele expande/recolhe um painel com filtros + tabela
+  // no próprio Dashboard (pedido do usuário: "só apareça quando o card for
+  // clicado"). Por isso usa um chevron (ICONE_CHEVRON) em vez da seta
+  // ICONE_SETA dos demais, e fica recolhido por padrão a cada carregamento.
+  function cartaoMetasHtml_(m) {
+    const semMetaCadastrada = !m.itens.length;
+    const valor = semMetaCadastrada ? '—' : `${m.total_chegado} <span style="font-size:15px;font-weight:600;color:var(--cinza-500)">de ${m.total_esperado}</span>`;
+    const pct = m.total_esperado > 0 ? Math.min(Math.round((m.total_chegado / m.total_esperado) * 100), 100) : 0;
+    const linhaFalta = semMetaCadastrada
+      ? '<div class="cartao-indicador-delta">Nenhuma meta cadastrada ainda</div>'
+      : (m.total_falta > 0
+        ? `<div class="cartao-indicador-delta negativo">${m.total_falta} processo(s) ainda esperado(s)</div>`
+        : '<div class="cartao-indicador-delta positivo">Tudo chegou ✓</div>');
+    const barraHtml = semMetaCadastrada ? '' : `<div class="cartao-indicador-barra"><div class="cartao-indicador-barra-preenchimento" style="width:${pct}%"></div></div>`;
+    return `
+      <div class="cartao-indicador clicavel acento-roxo" id="dashCardMetas">
+        <div class="cartao-indicador-topo">
+          <span class="cartao-indicador-icone roxo">${ICONE_METAS}</span>
+          <span class="cartao-indicador-seta" id="dashMetasChevron">${ICONE_CHEVRON}</span>
+        </div>
+        <div class="valor">${valor}</div>
+        <div class="rotulo">Processos do mês ${UI.escaparHtml(m.competencia)}</div>
+        ${barraHtml}
+        ${linhaFalta}
+      </div>`;
+  }
+
+  function painelMetasDetalheHtml_() {
+    return `
+      <div class="painel oculto" id="dashMetasDetalhe">
+        <div class="barra-filtros">
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
+            <div id="dashMetasFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="dashMetasFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
+          </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Objeto</label>
+            <div id="dashMetasFiltroObjeto"></div><button type="button" class="filtro-multiplo-x" data-alvo="dashMetasFiltroObjeto" title="Limpar filtro de Objeto">&times;</button>
+          </div>
+          <div class="campo"><label>Estado</label>
+            <select id="dashMetasFiltroEstado">
+              <option value="">Todos</option>
+              <option value="chegado">Chegado</option>
+              <option value="falta">Falta</option>
+            </select>
+          </div>
+          <span style="flex:1"></span>
+          <a href="#" id="dashMetasVerTodas" style="font-size:12.5px;color:var(--azul);text-decoration:none;font-weight:600;align-self:center">Gerenciar metas →</a>
+        </div>
+        <div id="dashMetasTabela"></div>
+        <div id="dashMetasAviso"></div>
+      </div>`;
+  }
+
+  function configurarPainelMetas_(m) {
+    metasItensAtuais_ = m.itens || [];
+    const cardEl = document.getElementById('dashCardMetas');
+    const detalheEl = document.getElementById('dashMetasDetalhe');
+    const chevronEl = document.getElementById('dashMetasChevron');
+    if (!cardEl || !detalheEl) return;
+
+    // Recolhido por padrão a cada `carregar()` (troca de competência, botão
+    // Atualizar) - metasAbertoAtual_ só é reaproveitado se o usuário nunca
+    // fechou o painel manualmente entre um carregamento e outro.
+    detalheEl.classList.toggle('oculto', !metasAbertoAtual_);
+    chevronEl.classList.toggle('aberta', metasAbertoAtual_);
+
+    cardEl.addEventListener('click', () => {
+      metasAbertoAtual_ = detalheEl.classList.contains('oculto');
+      detalheEl.classList.toggle('oculto', !metasAbertoAtual_);
+      chevronEl.classList.toggle('aberta', metasAbertoAtual_);
+    });
+
+    const unidadesOpcoes = [];
+    const unidadesVistas = new Set();
+    const objetosOpcoes = [];
+    const objetosVistos = new Set();
+    metasItensAtuais_.forEach(item => {
+      if (!unidadesVistas.has(item.unidade_id)) { unidadesVistas.add(item.unidade_id); unidadesOpcoes.push({ valor: item.unidade_id, rotulo: item.unidade_nome }); }
+      if (!objetosVistos.has(item.objeto)) { objetosVistos.add(item.objeto); objetosOpcoes.push(item.objeto); }
+    });
+    UI.criarFiltroMultiplo('dashMetasFiltroUnidade', unidadesOpcoes, renderTabelaMetas_);
+    UI.criarFiltroMultiplo('dashMetasFiltroObjeto', objetosOpcoes, renderTabelaMetas_);
+    UI.ligarLimpezaFiltros('#dashMetasDetalhe', null, renderTabelaMetas_);
+    document.getElementById('dashMetasFiltroEstado').addEventListener('change', renderTabelaMetas_);
+    document.getElementById('dashMetasVerTodas').addEventListener('click', e => { e.preventDefault(); App.navegarPara('metasProcessos'); });
+
+    renderTabelaMetas_();
+    renderAvisoSemMeta_(m.sem_meta || []);
+  }
+
+  /** Filtra metasItensAtuais_ em memória (sem chamada ao backend) e redesenha só a tabela. */
+  function renderTabelaMetas_() {
+    const alvo = document.getElementById('dashMetasTabela');
+    if (!alvo) return;
+    const unidadeIds = UI.valoresFiltroMultiplo('dashMetasFiltroUnidade');
+    const objetos = UI.valoresFiltroMultiplo('dashMetasFiltroObjeto');
+    const estado = document.getElementById('dashMetasFiltroEstado').value;
+
+    const itens = metasItensAtuais_
+      .filter(it => !unidadeIds.length || unidadeIds.indexOf(it.unidade_id) !== -1)
+      .filter(it => !objetos.length || objetos.indexOf(it.objeto) !== -1)
+      .filter(it => !estado || it.estado === estado)
+      .slice()
+      .sort((a, b) => b.falta - a.falta);
+
+    if (!itens.length) {
+      alvo.innerHTML = '<p class="estado-vazio">Nenhuma meta cadastrada para este filtro ainda.</p>';
+      return;
+    }
+    alvo.innerHTML = `
+      <table class="tabela">
+        <thead><tr><th>Unidade</th><th>Objeto</th><th>Esperado</th><th>Chegado</th><th>Falta</th></tr></thead>
+        <tbody>${itens.map(it => `
+          <tr data-unidade="${it.unidade_id}" data-objeto="${UI.escaparHtml(it.objeto)}">
+            <td>${UI.escaparHtml(it.unidade_nome)}</td>
+            <td>${UI.escaparHtml(it.objeto)}</td>
+            <td>${it.esperado}</td>
+            <td>${it.chegado}</td>
+            <td>${it.excedente > 0
+              ? `<span class="selo azul">excedente +${it.excedente}</span>`
+              : it.falta > 0
+                ? `<span class="selo vermelho">falta ${it.falta}</span>`
+                : '<span class="selo verde">completo</span>'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    alvo.querySelectorAll('tr[data-unidade]').forEach(tr => {
+      tr.addEventListener('click', () => App.navegarPara('recibos', {
+        competencia: [document.getElementById('dashCompetencia').value],
+        unidade_id: [tr.dataset.unidade],
+        objeto: [tr.dataset.objeto]
+      }));
+    });
+  }
+
+  function renderAvisoSemMeta_(semMeta) {
+    const alvo = document.getElementById('dashMetasAviso');
+    if (!alvo) return;
+    if (!semMeta.length) { alvo.innerHTML = ''; return; }
+    const itens = semMeta.map(s => `${UI.escaparHtml(s.unidade_nome)} — ${UI.escaparHtml(s.objeto)} (${s.quantidade})`).join('; ');
+    alvo.innerHTML = `<div class="aviso-edicao-simultanea"><p>Chegou sem meta cadastrada: ${itens}.</p></div>`;
   }
 
   // ===== Prazos contratuais das Unidades (sessão 2026-08-14, pedido do

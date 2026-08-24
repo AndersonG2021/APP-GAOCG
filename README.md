@@ -34,6 +34,7 @@ A especificação original (documento de requisitos e modelo de dados que orient
   LogAuditoria.gs   Log de auditoria
   EdicoesEmAndamento.gs   Aviso de edição simultânea
   Dashboard.gs      Indicadores
+  MetasProcessos.gs Metas Mensais de Processos (padrão mensal por Unidade+Objeto, painel "Processos do mês" no Dashboard)
   appsscript.json   Manifesto do projeto Apps Script
 
 /css/style.css       Estilos (CSS puro, sem framework), layout responsivo
@@ -47,7 +48,7 @@ RELATORIO_LENTIDAO_SOF.md   Diagnóstico de performance (referenciado a partir d
 
 **Arquivos de backend que existem no projeto do Apps Script mas não estão neste repositório:** `Contadores.gs` (geração de IDs sequenciais) e a rotina original de bootstrap da planilha (`configurarPlanilha`, historicamente em `Seed.gs`) nunca foram coletados aqui - ver [`PROGRESS.md`](PROGRESS.md), seção "Referências úteis", para o estado exato de cada um. Ao editar qualquer `.gs` que não esteja em `/backend`, peça o conteúdo atual de quem tem acesso ao editor do Apps Script antes de propor mudanças - o editor do Apps Script é sempre a fonte da verdade de que roda de verdade.
 
-**Desvio documentado em relação à estrutura sugerida na especificação original:** os arquivos de frontend ficam na raiz do repositório (`index.html`, `css/`, `js/`) em vez de dentro de `/frontend`, para manter continuidade com o layout já publicado no GitHub Pages deste repositório. Também foram adicionados módulos de frontend não previstos na especificação original (`js/usuarios.js`, `js/listas.js`, `js/edicao-simultanea.js`, `js/dashboard.js`, `js/log-auditoria.js`, `js/unidades.js`), um por tela/funcionalidade.
+**Desvio documentado em relação à estrutura sugerida na especificação original:** os arquivos de frontend ficam na raiz do repositório (`index.html`, `css/`, `js/`) em vez de dentro de `/frontend`, para manter continuidade com o layout já publicado no GitHub Pages deste repositório. Também foram adicionados módulos de frontend não previstos na especificação original (`js/usuarios.js`, `js/listas.js`, `js/edicao-simultanea.js`, `js/dashboard.js`, `js/log-auditoria.js`, `js/unidades.js`, `js/metas-processos.js`), um por tela/funcionalidade.
 
 ## Passo a passo de implantação
 
@@ -55,7 +56,7 @@ RELATORIO_LENTIDAO_SOF.md   Diagnóstico de performance (referenciado a partir d
 
 1. Crie uma planilha Google Sheets nova e vazia (ex.: "GAOCG - Banco de Dados").
 2. Menu **Extensões > Apps Script**. Isso cria um projeto de script vinculado (bound script) à planilha.
-3. Apague o conteúdo padrão de `Code.gs` do editor do Apps Script e cole, em arquivos `.gs` separados, o conteúdo de cada arquivo em `/backend` deste repositório (um arquivo de script por `.gs`: `Code`, `Utils`, `Auth`, `Usuarios`, `Unidades`, `ListasPersonalizadas`, `Sof`, `NotasEmpenho`, `Recibos`, `LogAuditoria`, `EdicoesEmAndamento`, `Dashboard`).
+3. Apague o conteúdo padrão de `Code.gs` do editor do Apps Script e cole, em arquivos `.gs` separados, o conteúdo de cada arquivo em `/backend` deste repositório (um arquivo de script por `.gs`: `Code`, `Utils`, `Auth`, `Usuarios`, `Unidades`, `ListasPersonalizadas`, `Sof`, `NotasEmpenho`, `Recibos`, `LogAuditoria`, `EdicoesEmAndamento`, `Dashboard`, `MetasProcessos`).
 4. Copie também o conteúdo de `backend/appsscript.json` para o manifesto do projeto (no editor: ícone de engrenagem > "Mostrar arquivo de manifesto `appsscript.json`"); habilite o serviço avançado **Drive API** (Serviços (+) → Drive API), usado pela leitura por OCR dos anexos de Recibo.
 5. **`Contadores.gs`** (geração de IDs sequenciais) e a rotina de bootstrap da planilha (histórica `Seed.gs`/`configurarPlanilha`) não estão neste repositório (ver nota acima) — reconstrua-os a partir do projeto Apps Script já em produção, ou peça a quem tem acesso a ele. `Contadores.gs` precisa de uma entrada no mapa `PREFIXOS_ID` por aba com id sequencial (`SOF`, `Recibos`, `Unidades`, `NotasEmpenho`, `SofFontes`, `UnidadesTA`, `Usuarios`, `ListasPersonalizadas`, `LogAuditoria`, entre outras — ver `proximoId_` em `Utils.gs`).
 6. Rode a rotina de bootstrap (cria as abas do `modelo_dados_gaocg.md` com os cabeçalhos corretos, a aba de controle `Contadores` e um usuário gerente inicial) e depois **troque a senha desse usuário inicial no primeiro acesso** (crie um usuário definitivo e inative o inicial, ou redefina a senha dele pela tela de Usuários). Depois de colar `ListasPersonalizadas.gs`, rode também `semearListaOSS()` e `semearListaObjetos()` uma vez, pra popular as listas de OSS/Objeto a partir do que já estiver cadastrado em Unidades/SOF/Recibos (sem isso, o campo Objeto — obrigatório — aparece vazio nos formulários).
