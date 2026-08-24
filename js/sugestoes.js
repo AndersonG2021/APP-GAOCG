@@ -105,9 +105,8 @@ const TelaSugestoes = (function () {
 
   /**
    * Administrador abrindo uma "Aguardando análise" pela 1ª vez: marca "Em
-   * análise" ANTES de montar o modal (mesmo princípio de
-   * marcarSofVisualizado/marcarReciboVisualizado - a visualização já conta),
-   * silencioso pra não travar a abertura do modal esperando essa chamada.
+   * análise" ANTES de montar o modal - a visualização já conta -, silencioso
+   * pra não travar a abertura do modal esperando essa chamada.
    */
   async function abrirDetalhe_(sugestao) {
     const usuarioLogado = Auth.usuario();

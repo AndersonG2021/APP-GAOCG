@@ -246,10 +246,9 @@ const TelaSof = (function () {
     const pct = percentualAndamento(s);
     const fontesTexto = (s.fontes || []).map(f => f.fonte).filter(Boolean).join(', ');
     return `
-      <div class="cartao-sof ${s.destacar_parado ? 'parado' : ''}" data-id="${s.id}">
+      <div class="cartao-sof" data-id="${s.id}">
         <div class="cartao-sof-topo">
           <div class="cartao-sof-topo-acoes">
-            ${s.destacar_parado ? `<span class="selo amarelo">${s.dias_parado} dia(s) parado</span>` : ''}
             <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
           </div>
         </div>
@@ -316,8 +315,6 @@ const TelaSof = (function () {
       await Api.chamar('atualizarSof', { id: sof.id, data: { andamento: etapa } });
       CacheAbas.invalidar('sof');
       sof.andamento = etapa;
-      sof.dias_parado = 0;
-      sof.destacar_parado = false;
       rerenderCartaoSof_(sof);
       UI.toast('Andamento atualizado.', 'sucesso');
     } catch (err) {
@@ -372,8 +369,7 @@ const TelaSof = (function () {
     abrindoLinha = true;
     marcarCartaoCarregando(id, true);
     try {
-      // O card já tem tudo que obterSof devolveria (fontes, total, destaque de
-      // "parado" - listarSof calcula os 3 pra montar o próprio card), então
+      // O card já tem tudo que obterSof devolveria (fontes, total), então
       // reaproveita "itens" em vez de pedir de novo ao backend - mesmo padrão
       // já usado em abrirReciboExistente (js/recibos.js).
       const sof = itens.find(s => s.id === id);
@@ -382,7 +378,6 @@ const TelaSof = (function () {
       // checa conflito de edição simultânea em paralelo - ver
       // EdicaoSimultanea/PROGRESS.md (seção de Performance).
       const edicaoPromise = EdicaoSimultanea.iniciarEdicao('SOF', id);
-      Api.chamar('marcarSofVisualizado', { id }, { silencioso: true }).catch(() => {});
       // silencioso: a seção de Notas de Empenho pode aparecer um instante
       // depois do resto do formulário, sem travar a tela toda com o spinner
       // global enquanto isso.

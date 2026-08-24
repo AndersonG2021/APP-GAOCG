@@ -1,6 +1,6 @@
 /**
  * GAOCG App - Administração das opções (globais) de "andamento" (SOF) e
- * "status" (Recibo) (Funcionalidades 3, 4 e 8 - pausa_contagem_parado).
+ * "status" (Recibo) (Funcionalidades 3, 4 e 8).
  */
 
 const TelaListas = (function () {
@@ -16,11 +16,6 @@ const TelaListas = (function () {
     { tipo: 'OSS', id: 'tabOss', rotulo: 'OSS' },
     { tipo: 'OBJETO', id: 'tabObjeto', rotulo: 'Objeto' }
   ];
-
-  /** OSS e Objeto não têm o conceito de "pausa contagem parado" (exclusivo de Andamento/Status). */
-  function temPausa() {
-    return tipoAtual === 'ANDAMENTO_SOF' || tipoAtual === 'STATUS_RECIBO';
-  }
 
   async function render() {
     document.getElementById('conteudo').innerHTML = `
@@ -60,14 +55,12 @@ const TelaListas = (function () {
       return;
     }
     const gerente = Auth.ehGerente();
-    const pausa = temPausa();
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Valor</th>${pausa ? '<th>Pausa contagem "parado"</th>' : ''}${gerente ? '<th></th>' : ''}</tr></thead>
+        <thead><tr><th>Valor</th>${gerente ? '<th></th>' : ''}</tr></thead>
         <tbody>${opcoes.map(o => `
           <tr data-id="${o.id}">
             <td>${UI.escaparHtml(o.valor)}</td>
-            ${pausa ? `<td>${o.pausa_contagem_parado ? '<span class="selo amarelo">Sim - espera externa</span>' : '<span class="selo cinza">Não</span>'}</td>` : ''}
             ${gerente ? `<td class="tabela-acoes">
               <button type="button" class="botao-icone editar" data-acao="editar" title="Editar">${ICONE_LAPIS}</button>
               <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
@@ -108,14 +101,9 @@ const TelaListas = (function () {
 
   /** opcaoExistente omitido = criação; passado = edição (reaproveita atualizarOpcao). */
   function abrirFormulario(opcaoExistente) {
-    const pausa = temPausa();
     const corpo = `
       <form id="formOpcao">
         <div class="campo"><label>Texto da opção *</label><input id="opValor" required value="${opcaoExistente ? UI.escaparHtml(opcaoExistente.valor) : ''}" /></div>
-        ${pausa ? `<div class="campo">
-          <label><input type="checkbox" id="opPausa" ${opcaoExistente && opcaoExistente.pausa_contagem_parado ? 'checked' : ''} /> Representa espera externa conhecida (pausa a contagem de "parado")</label>
-          <p class="ajuda">Ex.: "AGUARDANDO AUTORIZAÇÃO CPF", "AGUARDANDO DISPONIBILIDADE ORÇAMENTÁRIA".</p>
-        </div>` : ''}
         <p id="opErro" class="erro-campo oculto"></p>
       </form>`;
     UI.abrirModal((opcaoExistente ? 'Editar opção' : 'Nova opção') + ' - ' + (ABAS.find(a => a.tipo === tipoAtual) || {}).rotulo, corpo,
@@ -132,13 +120,12 @@ const TelaListas = (function () {
       erroEl.classList.add('oculto');
       const valor = document.getElementById('opValor').value.trim();
       if (!valor) { UI.mostrarErro(erroEl, 'Informe o texto da opção.'); return; }
-      const pausaContagemParado = document.getElementById('opPausa') ? document.getElementById('opPausa').checked : false;
       try {
         if (opcaoExistente) {
-          await Api.chamar('atualizarOpcao', { id: opcaoExistente.id, data: { valor, pausa_contagem_parado: pausaContagemParado } });
+          await Api.chamar('atualizarOpcao', { id: opcaoExistente.id, data: { valor } });
           UI.toast('Opção atualizada.', 'sucesso');
         } else {
-          await Api.chamar('criarOpcao', { data: { tipo_lista: tipoAtual, valor, pausa_contagem_parado: pausaContagemParado } });
+          await Api.chamar('criarOpcao', { data: { tipo_lista: tipoAtual, valor } });
           UI.toast('Opção criada.', 'sucesso');
         }
         Api.invalidarCache('listarOpcoes');

@@ -280,8 +280,6 @@ table.tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.tabela th, table.tabela td { padding: 8px 10px; border-bottom: 1px solid var(--cinza-200); text-align: left; white-space: nowrap; }
 table.tabela th { background: var(--cinza-100); font-weight: 600; color: var(--cinza-700); position: sticky; top: 0; }
 table.tabela tbody tr:hover { background: var(--cinza-100); cursor: pointer; }
-table.tabela tbody tr.linha-parada { background: var(--amarelo-claro); }
-table.tabela tbody tr.linha-parada:hover { background: #fef3c7; }
 table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transition: opacity .1s ease; }
 
 .selo { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
@@ -290,7 +288,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .selo.amarelo { background: var(--amarelo-claro); color: var(--amarelo); }
 .selo.vermelho { background: var(--vermelho-claro); color: var(--vermelho); }
 .selo.cinza { background: var(--cinza-200); color: var(--cinza-700); }
-/* Perfil Administrador do Aplicativo (sessão 2026-08-14) - mesma família de --roxo já usada no ícone "Processos parados" do Dashboard. */
+/* Perfil Administrador do Aplicativo (sessão 2026-08-14). */
 .selo.roxo { background: var(--roxo-claro); color: var(--roxo); }
 
 /* Status editável direto na listagem de Recibos (sessão 2026-08-07) - mesma
@@ -515,7 +513,6 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
   transition: box-shadow .12s ease;
 }
 .cartao-sof:hover { box-shadow: var(--sombra-forte); }
-.cartao-sof.parado { border-left-color: var(--amarelo); background: var(--amarelo-claro); }
 .cartao-sof.carregando { opacity: 0.55; pointer-events: none; transition: opacity .1s ease; }
 .botao-icone {
   display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;

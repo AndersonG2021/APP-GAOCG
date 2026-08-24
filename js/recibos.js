@@ -359,7 +359,7 @@ const TelaRecibos = (function () {
 
   function linhaReciboHtml_(r) {
     const unidade = unidades.find(u => u.id === r.unidade_id);
-    return `<tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
+    return `<tr data-id="${r.id}">
       <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
       <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
       <td>${UI.escaparHtml(r.objeto || '-')}</td>
@@ -368,7 +368,7 @@ const TelaRecibos = (function () {
       <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
       <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r))}">!</span>` : ''}</td>
       <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
-      <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+      <td>${celulaStatusHtml_(r)}</td>
       <td>${UI.escaparHtml(r.observacao || '-')}</td>
     </tr>`;
   }
@@ -399,7 +399,6 @@ const TelaRecibos = (function () {
     const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
     const primeira = ordenadas[0];
     const unidade = unidades.find(u => u.id === primeira.unidade_id);
-    const algumParado = ordenadas.some(r => r.destacar_parado);
     return `
       <div class="cartao-grupo-recibo">
         <div class="cartao-grupo-recibo-cabecalho">
@@ -408,20 +407,19 @@ const TelaRecibos = (function () {
             ${primeira.numero_processo ? `Nº Processo ${UI.escaparHtml(primeira.numero_processo)}` : ''}
             ${primeira.competencia ? ` · Competência ${UI.escaparHtml(primeira.competencia)}` : ''}
           </span>
-          ${algumParado ? '<span class="selo amarelo">Parado</span>' : ''}
         </div>
         ${primeira.observacao ? `<p class="cartao-grupo-recibo-observacao">💬 ${UI.escaparHtml(primeira.observacao)}</p>` : ''}
         <div class="tabela-reforcos-wrap">
           <table class="tabela">
             <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
             <tbody>${ordenadas.map(r => `
-              <tr data-id="${r.id}" class="${r.destacar_parado ? 'linha-parada' : ''}">
+              <tr data-id="${r.id}">
                 <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
                 <td>${r.percentual_parcela_dividida !== '' && r.percentual_parcela_dividida !== undefined ? UI.escaparHtml(String(r.percentual_parcela_dividida)) + '%' : '-'}</td>
                 <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
                 <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r, ordenadas))}">!</span>` : ''}</td>
                 <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
-                <td>${celulaStatusHtml_(r)}${r.destacar_parado ? ' <span class="selo amarelo">Parado</span>' : ''}</td>
+                <td>${celulaStatusHtml_(r)}</td>
               </tr>`).join('')}</tbody>
           </table>
         </div>
@@ -536,9 +534,6 @@ const TelaRecibos = (function () {
       // checa conflito de edição simultânea em paralelo - ver
       // EdicaoSimultanea/PROGRESS.md (seção de Performance).
       const edicaoPromise = EdicaoSimultanea.iniciarEdicao('Recibo', id);
-      // marcarReciboVisualizado é só informativo (tira o destaque de "parado")
-      // e não precisa bloquear a abertura do formulário - ver RELATORIO_LENTIDAO_SOF.md.
-      Api.chamar('marcarReciboVisualizado', { id }, { silencioso: true }).catch(() => {});
       await abrirFormularioEdicao(recibo);
       EdicaoSimultanea.tratarConflito(edicaoPromise, 'Recibo', id);
     } finally {

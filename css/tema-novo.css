@@ -300,7 +300,6 @@ html[data-tema="novo"] .painel { background: var(--superficie); box-shadow: var(
 html[data-tema="novo"] table.tabela th { background: var(--superficie-2); color: var(--cinza-700); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 html[data-tema="novo"] table.tabela th, html[data-tema="novo"] table.tabela td { border-bottom-color: var(--cinza-200); }
 html[data-tema="novo"] table.tabela tbody tr:hover { background: var(--superficie-2); }
-html[data-tema="novo"] table.tabela tbody tr.linha-parada { background: var(--amarelo-claro); }
 html[data-tema="novo"] .cartao-grupo-recibo { background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200); border-left: 3px solid var(--azul); }
 html[data-tema="novo"] .cartao-grupo-recibo-cabecalho { background: var(--azul-claro); }
 html[data-tema="novo"] .cartao-grupo-recibo-titulo { color: var(--azul-escuro); }
@@ -350,13 +349,12 @@ html[data-tema="novo"] .dash-subtitulo { color: var(--cinza-700); }
 html[data-tema="novo"] .dash-item-lista:hover { background: var(--superficie-2); }
 
 /* ===== Cards de SOF / Notas de Empenho / Unidades - a borda colorida de 4px
-   vira um contorno fino neutro (o estado "parado"/"alerta" continua se
-   destacando pelo fundo tingido, sem depender só de uma faixa de cor). ===== */
+   vira um contorno fino neutro (o estado "alerta" continua se destacando
+   pelo fundo tingido, sem depender só de uma faixa de cor). ===== */
 html[data-tema="novo"] .cartao-sof, html[data-tema="novo"] .cartao-ne, html[data-tema="novo"] .cartao-unidade {
   background: var(--superficie); box-shadow: var(--sombra); border: 1px solid var(--cinza-200); border-left: 1px solid var(--cinza-200);
 }
 html[data-tema="novo"] .cartao-sof:hover, html[data-tema="novo"] .cartao-ne:hover, html[data-tema="novo"] .cartao-unidade:hover { box-shadow: var(--sombra-forte); border-color: var(--cinza-300); }
-html[data-tema="novo"] .cartao-sof.parado { border-left: 1px solid var(--amarelo); background: var(--amarelo-claro); }
 html[data-tema="novo"] .cartao-ne.alerta { border-left: 1px solid var(--vermelho); background: var(--vermelho-claro); }
 html[data-tema="novo"] .cartao-unidade.inativa { border-left-color: var(--cinza-200); }
 html[data-tema="novo"] .cartao-sof-titulo, html[data-tema="novo"] .cartao-ne-numero { color: var(--cinza-900); font-family: var(--fonte-mono); font-size: 19px; letter-spacing: -.01em; }
