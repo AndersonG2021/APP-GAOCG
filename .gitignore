@@ -7,3 +7,12 @@ graphify-out/
 # privada não tem por que ir pro repositório - só serve pra gerar uma chave
 # nova algum dia, o que não deveria ser necessário).
 Extension/gaocg-sei-bridge/*.pem
+
+# clasp (sessão 2026-08-24, pedido do usuário: deploy do backend via clasp em
+# vez de colar manualmente no editor) - liga o backend/ local ao projeto real
+# do Apps Script pelo scriptId. Não é segredo por si só (só funciona
+# combinado com o login OAuth de quem roda o clasp, guardado à parte em
+# ~/.clasprc.json, fora do repo), mas é config de máquina/pessoa, não do
+# projeto - cada dev que for usar clasp aqui cria o seu a partir de
+# backend/.clasp.json.example.
+backend/.clasp.json
