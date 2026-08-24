@@ -961,22 +961,24 @@ const UI = (function () {
   // checkbox, desfazendo o que as facetas tinham acabado de definir.
 
   /**
-   * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>")
-   * e o botão maior de "Limpar filtros" (se existir, via seu id) de uma barra
-   * de filtros recém-renderizada.
+   * Liga os botões "x" individuais (marcados com data-alvo="<id do filtro>",
+   * tanto de filtro de múltipla escolha quanto de campo de Busca livre - ver
+   * .busca-livre-x abaixo) e o botão maior de "Limpar filtros" (se existir,
+   * via seu id) de uma barra de filtros recém-renderizada.
    *
-   * `aoLimpar` roda depois do botão "Limpar filtros" (limpa tudo) - recarrega
-   * lendo o estado atual de todos os campos, já que nesse ponto todos foram
-   * zerados mesmo.
+   * `aoLimpar` roda depois do botão "Limpar filtros" (limpa tudo, inclusive
+   * Busca livre - ver querySelectorAll('input[type=text]...') abaixo) -
+   * recarrega lendo o estado atual de todos os campos, já que nesse ponto
+   * todos foram zerados mesmo.
    *
    * `aoLimparIndividual(idCampo)` (opcional, senão cai em `aoLimpar`) roda
-   * depois de um "x" individual. Só o campo `idCampo` foi limpo - nenhum
-   * outro widget é tocado aqui. É responsabilidade de quem implementa
-   * `aoLimparIndividual` recarregar usando o último filtro realmente
-   * aplicado com só esse campo zerado por cima (não o estado ao vivo dos
-   * outros campos, que pode ter seleções ainda não confirmadas em
-   * "Filtrar") - ver aoLimparFiltroIndividual_/CHAVE_POR_FILTRO_ em
-   * js/sof.js para o padrão usado por cada tela.
+   * depois de um "x" individual (múltipla escolha OU Busca livre). Só o
+   * campo `idCampo` foi limpo - nenhum outro widget é tocado aqui. É
+   * responsabilidade de quem implementa `aoLimparIndividual` recarregar
+   * usando o último filtro realmente aplicado com só esse campo zerado por
+   * cima (não o estado ao vivo dos outros campos, que pode ter seleções
+   * ainda não confirmadas em "Filtrar") - ver aoLimparFiltroIndividual_/
+   * CHAVE_POR_FILTRO_ em js/sof.js para o padrão usado por cada tela.
    */
   function ligarLimpezaFiltros(raizOuSeletor, botaoLimparTodosId, aoLimpar, aoLimparIndividual) {
     const raiz = typeof raizOuSeletor === 'string' ? document.querySelector(raizOuSeletor) : raizOuSeletor;
@@ -988,6 +990,21 @@ const UI = (function () {
         const tinhaSelecao = valoresFiltroMultiplo(btn.dataset.alvo).length > 0;
         limparFiltroMultiplo(btn.dataset.alvo);
         if (!tinhaSelecao) return;
+        if (aoLimparIndividual) aoLimparIndividual(btn.dataset.alvo);
+        else if (aoLimpar) aoLimpar();
+      });
+    });
+    // "x" do campo de Busca livre (sessão 2026-08-24, pedido do usuário) -
+    // mesma linguagem visual do "x" dos filtros de múltipla escolha
+    // (.filtro-multiplo-x), mas limpando um <input> de texto comum
+    // (data-alvo aponta pro id do <input>, não de um filtro-multiplo).
+    raiz.querySelectorAll('.busca-livre-x').forEach(btn => {
+      const input = document.getElementById(btn.dataset.alvo);
+      if (!input) return;
+      btn.addEventListener('click', () => {
+        if (!input.value) return;
+        input.value = '';
+        input.focus();
         if (aoLimparIndividual) aoLimparIndividual(btn.dataset.alvo);
         else if (aoLimpar) aoLimpar();
       });

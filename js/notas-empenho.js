@@ -40,7 +40,9 @@ const TelaNotasEmpenho = (function () {
       <div class="painel">
         <p class="ajuda">Cada card agrupa a Nota de Empenho original e seus reforços pelo número. O valor atual já desconta o que foi liquidado nos Recibos vinculados a essa NE.</p>
         <div class="barra-filtros">
-          <div class="campo"><label>Busca livre</label><input id="neBusca" placeholder="número, SEI, valor..." /></div>
+          <div class="campo campo-busca-livre"><label>Busca livre</label>
+            <input type="text" id="neBusca" placeholder="número, SEI, valor..." /><button type="button" class="busca-livre-x" data-alvo="neBusca" title="Limpar busca livre">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
             <div id="neFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
@@ -125,7 +127,7 @@ const TelaNotasEmpenho = (function () {
   const CHAVE_POR_FILTRO_ = {
     neFiltroUnidade: 'unidade_id', neFiltroOss: 'oss', neFiltroObjeto: 'objeto',
     neFiltroTipoUnidade: 'tipo_unidade', neFiltroDea: 'dea', neFiltroFonte: 'fonte',
-    neFiltroAno: 'ano', neFiltroCompetencia: 'competencia'
+    neFiltroAno: 'ano', neFiltroCompetencia: 'competencia', neBusca: 'busca'
   };
 
   /**
@@ -137,7 +139,8 @@ const TelaNotasEmpenho = (function () {
     const chave = CHAVE_POR_FILTRO_[idCampo];
     if (!chave) return;
     const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
-    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    // Busca livre zera pra string vazia (é texto, não lista de valores como os demais).
+    const filtros = Object.assign({}, aplicado, { [chave]: chave === 'busca' ? '' : [] });
     paginaAtual = 1;
     carregarComFiltros_(filtros);
   }

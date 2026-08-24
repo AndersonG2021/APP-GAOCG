@@ -88,7 +88,9 @@ const TelaSof = (function () {
       <h2 class="titulo-tela">SOF</h2>
       <div class="painel">
         <div class="barra-filtros">
-          <div class="campo"><label>Busca livre</label><input id="sofBusca" placeholder="unidade, SEI, valor..." /></div>
+          <div class="campo campo-busca-livre"><label>Busca livre</label>
+            <input type="text" id="sofBusca" placeholder="unidade, SEI, valor..." /><button type="button" class="busca-livre-x" data-alvo="sofBusca" title="Limpar busca livre">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
             <div id="sofFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="sofFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
@@ -179,7 +181,7 @@ const TelaSof = (function () {
   const CHAVE_POR_FILTRO_ = {
     sofFiltroUnidade: 'unidade_id', sofFiltroOss: 'oss', sofFiltroObjeto: 'objeto',
     sofFiltroTipoUnidade: 'tipo_unidade', sofFiltroDea: 'dea', sofFiltroFonte: 'fonte',
-    sofFiltroAno: 'ano'
+    sofFiltroAno: 'ano', sofBusca: 'busca'
   };
 
   /**
@@ -195,7 +197,8 @@ const TelaSof = (function () {
     const chave = CHAVE_POR_FILTRO_[idCampo];
     if (!chave) return;
     const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
-    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    // Busca livre zera pra string vazia (é texto, não lista de valores como os demais).
+    const filtros = Object.assign({}, aplicado, { [chave]: chave === 'busca' ? '' : [] });
     paginaAtual = 1;
     carregarComFiltros_(filtros);
   }

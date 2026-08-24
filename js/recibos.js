@@ -103,7 +103,9 @@ const TelaRecibos = (function () {
       <div class="grade-indicadores" id="recIndicadores"></div>
       <div class="painel">
         <div class="barra-filtros">
-          <div class="campo"><label>Busca livre</label><input id="recBusca" placeholder="processo, ordem bancária, valor..." /></div>
+          <div class="campo campo-busca-livre"><label>Busca livre</label>
+            <input type="text" id="recBusca" placeholder="processo, ordem bancária, valor..." /><button type="button" class="busca-livre-x" data-alvo="recBusca" title="Limpar busca livre">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
             <div id="recFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
@@ -220,7 +222,7 @@ const TelaRecibos = (function () {
   const CHAVE_POR_FILTRO_ = {
     recFiltroUnidade: 'unidade_id', recFiltroOss: 'oss', recFiltroObjeto: 'objeto',
     recFiltroTipoUnidade: 'tipo_unidade', recFiltroDea: 'dea', recFiltroCompetencia: 'competencia',
-    recFiltroAno: 'ano', recFiltroFonte: 'fonte', recFiltroStatus: 'status'
+    recFiltroAno: 'ano', recFiltroFonte: 'fonte', recFiltroStatus: 'status', recBusca: 'busca'
   };
 
   /**
@@ -232,7 +234,8 @@ const TelaRecibos = (function () {
     const chave = CHAVE_POR_FILTRO_[idCampo];
     if (!chave) return;
     const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
-    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    // Busca livre zera pra string vazia (é texto, não lista de valores como os demais).
+    const filtros = Object.assign({}, aplicado, { [chave]: chave === 'busca' ? '' : [] });
     paginaAtual = 1;
     carregarComFiltros_(filtros);
   }

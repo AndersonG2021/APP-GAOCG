@@ -35,7 +35,9 @@ const TelaUnidades = (function () {
       <h2 class="titulo-tela">Unidades</h2>
       <div class="painel">
         <div class="barra-filtros">
-          <div class="campo"><label>Busca livre</label><input id="uniBusca" placeholder="nome, OSS, CNPJ..." /></div>
+          <div class="campo campo-busca-livre"><label>Busca livre</label>
+            <input type="text" id="uniBusca" placeholder="nome, OSS, CNPJ..." /><button type="button" class="busca-livre-x" data-alvo="uniBusca" title="Limpar busca livre">&times;</button>
+          </div>
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Unidade</label>
             <div id="uniFiltroUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="uniFiltroUnidade" title="Limpar filtro de Unidade">&times;</button>
           </div>
@@ -88,19 +90,21 @@ const TelaUnidades = (function () {
     };
   }
 
-  /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
-  const CHAVE_POR_FILTRO_ = { uniFiltroUnidade: 'unidade_id', uniFiltroTipo: 'tipo', uniFiltroOss: 'oss' };
+  /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo (ou de Busca livre) da barra - ver aoLimparFiltroIndividual_. */
+  const CHAVE_POR_FILTRO_ = { uniFiltroUnidade: 'unidade_id', uniFiltroTipo: 'tipo', uniFiltroOss: 'oss', uniBusca: 'busca' };
 
   /**
-   * "x" individual de um filtro: recarrega usando o último filtro realmente
-   * aplicado (ultimoFiltroJson), só com este campo zerado por cima - ver
-   * mesma função em js/sof.js para a explicação completa.
+   * "x" individual de um filtro (múltipla escolha ou Busca livre): recarrega
+   * usando o último filtro realmente aplicado (ultimoFiltroJson), só com
+   * este campo zerado por cima - ver mesma função em js/sof.js para a
+   * explicação completa. Busca livre zera pra string vazia (é texto, não
+   * lista de valores como os demais).
    */
   function aoLimparFiltroIndividual_(idCampo) {
     const chave = CHAVE_POR_FILTRO_[idCampo];
     if (!chave) return;
     const aplicado = ultimoFiltroJson ? JSON.parse(ultimoFiltroJson) : {};
-    const filtros = Object.assign({}, aplicado, { [chave]: [] });
+    const filtros = Object.assign({}, aplicado, { [chave]: chave === 'busca' ? '' : [] });
     paginaAtual = 1;
     carregarComFiltros_(filtros);
   }
