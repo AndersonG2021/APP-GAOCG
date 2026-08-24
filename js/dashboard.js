@@ -315,9 +315,10 @@ const Dashboard = (function () {
 
   // ===== Prazos contratuais das Unidades (sessão 2026-08-14, pedido do
   // usuário) - painel no canto inferior do Dashboard, ordenado do prazo mais
-  // próximo de vencer pro mais longo. Prazo final = fim dos 10 anos do C.G.
-  // (Contrato Regular) ou fim do instrumento temporário (TAC/Termo de
-  // Compromisso/Contrato Emergencial) - nunca o "próximo T.A.", que é só uma
+  // próximo de vencer pro mais longo. A ordenação usa sempre o Prazo final =
+  // fim dos 10 anos do C.G. (Contrato Regular) ou fim do instrumento
+  // temporário (TAC/Termo de Compromisso/Contrato Emergencial) - nunca o
+  // "próximo T.A." (coluna própria, sessão 2026-08-24), que é só uma
   // renovação intermediária, não um fim de prazo. Cálculo compartilhado com
   // o card de Unidades - ver UI.calcularPrazoContratoUnidade (js/app.js).
   //
@@ -352,18 +353,27 @@ const Dashboard = (function () {
     if (!linhas.length) return '<p class="estado-vazio">Nenhuma unidade ativa cadastrada.</p>';
     const corpo = linhas.map(({ unidade: u, prazo }) => {
       if (!prazo) {
-        return `<tr><td>${UI.escaparHtml(u.nome)}</td><td>-</td><td>-</td><td><span class="selo cinza">Prazo não informado</span></td></tr>`;
+        return `<tr><td>${UI.escaparHtml(u.nome)}</td><td>-</td><td>-</td><td>-</td><td><span class="selo cinza">Prazo não informado</span></td></tr>`;
       }
       const dias = prazo.diasPrazoFinal;
       const textoDias = dias >= 0 ? `${dias} dia(s)` : `vencido há ${Math.abs(dias)} dia(s)`;
+      // Próximo T.A. (sessão 2026-08-24, pedido do usuário): só existe pra
+      // Contrato Regular dentro dos 8 primeiros anos - instrumento temporário
+      // (TAC/Termo de Compromisso/Contrato Emergencial) e os 2 anos finais
+      // do C.G. não têm T.A. pendente (ver UI.calcularPrazoContratoUnidade).
+      const diasTa = prazo.diasProximoTa;
+      const proximoTaHtml = diasTa === null
+        ? '-'
+        : `<span class="selo ${UI.corAlertaPrazo(diasTa)}">${diasTa >= 0 ? `${diasTa} dia(s)` : `vencido há ${Math.abs(diasTa)} dia(s)`}</span>`;
       return `<tr>
         <td>${UI.escaparHtml(u.nome)}</td>
         <td>${UI.escaparHtml(prazo.situacao)}</td>
+        <td>${proximoTaHtml}</td>
         <td>${UI.formatarDataBr(prazo.dataPrazoFinalIso)}</td>
         <td><span class="selo ${UI.corAlertaPrazo(dias)}">${textoDias}</span></td>
       </tr>`;
     }).join('');
-    return `<table class="tabela"><thead><tr><th>Unidade</th><th>Situação do Contrato</th><th>Prazo final</th><th>Dias restantes</th></tr></thead><tbody>${corpo}</tbody></table>`;
+    return `<table class="tabela"><thead><tr><th>Unidade</th><th>Situação do Contrato</th><th>Próximo T.A.</th><th>Prazo final</th><th>Dias restantes</th></tr></thead><tbody>${corpo}</tbody></table>`;
   }
 
   // ===== Painel de gráficos (Parte 2 do redesign, 2026-07-28) =====
