@@ -367,6 +367,18 @@ const TelaRecibos = (function () {
     return motivos.join(' e ') || 'Divergência de valores';
   }
 
+  /**
+   * Texto "Fulano · dd/mm/aaaa" (+ "· +N observação(ões)" se houver mais de
+   * uma) sobre a observação mais recente de um Recibo/grupo - usado tanto na
+   * tabela (tooltip) quanto no card de parcela dividida (linha visível
+   * embaixo do texto), pra não duplicar a montagem em dois lugares.
+   */
+  function metaUltimaObservacao_(r) {
+    if (!r.ultima_observacao) return '';
+    const extra = r.observacoes_count > 1 ? ` · +${r.observacoes_count - 1} observação(ões)` : '';
+    return `${r.ultima_observacao.autor_nome} · ${UI.formatarData(r.ultima_observacao.data)}${extra}`;
+  }
+
   function linhaReciboHtml_(r) {
     const unidade = unidades.find(u => u.id === r.unidade_id);
     return `<tr data-id="${r.id}">
@@ -379,7 +391,7 @@ const TelaRecibos = (function () {
       <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r))}">!</span>` : ''}</td>
       <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
       <td>${celulaStatusHtml_(r)}</td>
-      <td>${r.observacoes_count ? `💬 ${r.observacoes_count}` : '-'}</td>
+      <td>${r.ultima_observacao ? `<span title="${UI.escaparHtml(metaUltimaObservacao_(r))}">${UI.escaparHtml(r.ultima_observacao.texto)}</span>` : '-'}</td>
     </tr>`;
   }
 
@@ -404,8 +416,9 @@ const TelaRecibos = (function () {
    * Observações (sessão 2026-08-26, comentários com autor+data) são
    * compartilhadas pelo grupo - todas as parcelas de um mesmo processo
    * dividido têm a MESMA lista (ver chaveObservacaoRecibo_, backend/Recibos.gs)
-   * - por isso só a contagem aparece 1x no cabeçalho, igual Unidade/Objeto; a
-   * lista completa (com quem escreveu e quando) mora no modal de edição.
+   * - por isso só a mais recente aparece 1x no cabeçalho (com autor/data e
+   * "+N" se houver mais), igual Unidade/Objeto; a thread completa (com quem
+   * escreveu e quando cada uma) mora no modal de edição.
    */
   function cartaoGrupoReciboHtml_(linhasDoGrupo) {
     const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
@@ -420,7 +433,7 @@ const TelaRecibos = (function () {
             ${primeira.competencia ? ` · Competência ${UI.escaparHtml(primeira.competencia)}` : ''}
           </span>
         </div>
-        ${primeira.observacoes_count ? `<p class="cartao-grupo-recibo-observacao">💬 ${primeira.observacoes_count} observação(ões) - abra o processo pra ver</p>` : ''}
+        ${primeira.ultima_observacao ? `<p class="cartao-grupo-recibo-observacao">💬 ${UI.escaparHtml(primeira.ultima_observacao.texto)}<br><span class="cartao-grupo-recibo-observacao-meta">${UI.escaparHtml(metaUltimaObservacao_(primeira))}</span></p>` : ''}
         <div class="tabela-reforcos-wrap">
           <table class="tabela">
             <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>

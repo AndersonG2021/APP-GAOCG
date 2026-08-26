@@ -317,6 +317,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .cartao-grupo-recibo-titulo { font-weight: 700; color: var(--azul-escuro); font-size: 13.5px; }
 .cartao-grupo-recibo-meta { font-size: 12px; color: var(--cinza-700); }
 .cartao-grupo-recibo-observacao { margin: 0; padding: 6px 14px; font-size: 12px; color: var(--cinza-700); background: var(--cinza-100); border-bottom: 1px solid var(--cinza-200); overflow-wrap: break-word; }
+.cartao-grupo-recibo-observacao-meta { font-size: 11px; color: var(--cinza-500); }
 .cartao-grupo-recibo table.tabela th { position: static; }
 
 /* ===== Observações de Recibo (comentários com autor+data, sessão 2026-08-26) ===== */
