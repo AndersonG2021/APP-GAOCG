@@ -325,8 +325,7 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 .observacao-recibo-texto { font-size: 13px; color: var(--cinza-900); white-space: pre-wrap; overflow-wrap: break-word; }
 .observacao-recibo-rodape { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
 .observacao-recibo-acoes { display: flex; gap: 4px; flex-shrink: 0; }
-.observacao-recibo-nova { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.observacao-recibo-nova .botao { align-self: flex-end; }
+.observacao-recibo-nova { margin-top: 4px; }
 
 .paginacao { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--cinza-500); }
 .paginacao .botoes { display: flex; gap: 6px; }

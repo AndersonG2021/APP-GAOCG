@@ -1252,9 +1252,11 @@ const TelaRecibos = (function () {
   // antigo campo único "Observação" (um texto só, sem autoria). Qualquer
   // usuário autenticado cria; só o próprio autor OU um Gerente/Administrador
   // edita/exclui uma já existente (pode_editar, calculado no backend - ver
-  // formatarObservacaoRecibo_, backend/Recibos.gs). Vivem dentro do modal de
-  // Editar Recibo, mas cada ação chama o backend na hora (não espera o
-  // "Salvar" do formulário) - ver abrirFormularioEdicao mais abaixo.
+  // formatarObservacaoRecibo_, backend/Recibos.gs). Editar/excluir uma
+  // observação já existente chama o backend na hora (funções abaixo); já
+  // ADICIONAR uma observação nova não tem botão próprio (pedido do usuário) -
+  // o texto digitado só é enviado junto com o "Salvar" do modal de Editar
+  // Recibo, ver salvarReciboEdicao mais abaixo.
 
   function observacaoHtml_(o) {
     const editadoHtml = o.data_edicao ? ' <span class="ajuda">(editado)</span>' : '';
@@ -1393,8 +1395,7 @@ const TelaRecibos = (function () {
           <p class="ajuda">Qualquer usuário pode adicionar uma observação. Só quem escreveu (ou um Gerente/Administrador) pode editar/excluir uma já existente.</p>
           <div id="recEdObservacoesLista" class="observacoes-recibo-lista">${observacoesListaHtml_(observacoes)}</div>
           <div class="observacao-recibo-nova">
-            <textarea id="recEdNovaObservacao" rows="2" placeholder="Escreva uma nova observação..."></textarea>
-            <button type="button" class="botao" id="btnAdicionarObservacao">Adicionar observação</button>
+            <textarea id="recEdNovaObservacao" rows="2" placeholder="Escreva uma nova observação... (salva junto com o botão &quot;Salvar&quot; deste formulário)"></textarea>
           </div>
         </div>
         <div class="campo"><label><input type="checkbox" id="recEdCompleto" ${recibo.completo ? 'checked' : ''} /> Cadastro completo</label></div>
@@ -1405,24 +1406,12 @@ const TelaRecibos = (function () {
       `<button class="botao" id="btnCancelarRecEd">Cancelar</button><button class="botao primario" id="btnSalvarRecEd">Salvar</button>`);
     UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
 
-    // Observações (sessão 2026-08-26): cada ação (adicionar/editar/excluir)
-    // chama o backend NA HORA, igual "Redefinir senha" em js/usuarios.js -
-    // não fica esperando o botão "Salvar" deste formulário, que só cuida dos
-    // campos do processo em si.
+    // Observações já existentes (sessão 2026-08-26): editar/excluir continua
+    // chamando o backend NA HORA, igual "Redefinir senha" em js/usuarios.js.
+    // Já a observação NOVA (campo recEdNovaObservacao, sem botão próprio,
+    // pedido do usuário) só é criada quando o "Salvar" deste formulário é
+    // clicado - ver salvarReciboEdicao, mais abaixo.
     ligarAcoesObservacoes_(document.getElementById('recEdObservacoesLista'), refIdObservacoes);
-    document.getElementById('btnAdicionarObservacao').addEventListener('click', async () => {
-      const campo = document.getElementById('recEdNovaObservacao');
-      const texto = campo.value.trim();
-      if (!texto) return;
-      try {
-        await Api.chamar('criarObservacaoRecibo', { data: { recibo_ref_id: refIdObservacoes, texto } });
-        CacheAbas.invalidar('recibos');
-        campo.value = '';
-        await carregarObservacoes_(refIdObservacoes);
-      } catch (err) {
-        UI.toast(err.message, 'erro');
-      }
-    });
 
     ['recEdObjeto', 'recEdCompetencia'].forEach(id => UI.tornarPesquisavel(id));
     ligarAutopreenchimentoNe_('recEdNotaEmpenho', 'recEdObjeto', 'recEdFonte', () => nesDaUnidadeAtual);
@@ -1513,11 +1502,14 @@ const TelaRecibos = (function () {
       // de mandar '') é o que faz atualizarRecibo/atualizarParcelasDivididasRecibo
       // não tocarem nesses campos (hasOwnProperty), preservando o status que
       // o seletor do card já define. observacao saiu daqui também (sessão
-      // 2026-08-26) - agora é uma aba própria, ver "Observações" acima
-      // (criarObservacaoRecibo/atualizarObservacaoRecibo/excluirObservacaoRecibo),
-      // cada ação salva na hora, sem passar pelo botão "Salvar" deste form.
+      // 2026-08-26) - agora é uma aba própria (RecibosObservacoes). Editar/
+      // excluir uma observação já existente salva na hora (ver
+      // ligarAcoesObservacoes_ acima); a observação NOVA (campo
+      // recEdNovaObservacao) só é enviada junto com este "Salvar", logo
+      // abaixo (pedido do usuário - sem botão próprio).
       completo: document.getElementById('recEdCompleto').checked
     };
+    const observacaoNova = document.getElementById('recEdNovaObservacao').value.trim();
 
     try {
       if (document.getElementById('recEdTemParcelaDividida').checked) {
@@ -1561,6 +1553,10 @@ const TelaRecibos = (function () {
         if (ob) Object.assign(dados, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
 
         await Api.chamar('atualizarRecibo', { id: recibo.id, data: dados });
+      }
+      if (observacaoNova) {
+        const refIdObservacoes = recibo.parcela_dividida_grupo_id || recibo.id;
+        await Api.chamar('criarObservacaoRecibo', { data: { recibo_ref_id: refIdObservacoes, texto: observacaoNova } });
       }
       CacheAbas.invalidar('recibos');
       UI.toast('Recibo atualizado com sucesso.', 'sucesso');
