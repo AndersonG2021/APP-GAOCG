@@ -33,6 +33,7 @@ const TelaRecibos = (function () {
   const statusSalvandoIds = new Set();
 
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+  const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
   /**
    * Regra de negócio (sessão 2026-08-06, pedido do usuário): a divisão em
@@ -378,14 +379,14 @@ const TelaRecibos = (function () {
       <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r))}">!</span>` : ''}</td>
       <td>${UI.escaparHtml(textoOrdensBancarias_(r))}</td>
       <td>${celulaStatusHtml_(r)}</td>
-      <td>${UI.escaparHtml(r.observacao || '-')}</td>
+      <td>${r.observacoes_count ? `💬 ${r.observacoes_count}` : '-'}</td>
     </tr>`;
   }
 
   function tabelaRecibosHtml_(linhas) {
     return `
       <table class="tabela">
-        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th><th>Observação</th></tr></thead>
+        <thead><tr><th></th><th>Unidade</th><th>Objeto</th><th>Nº Processo</th><th>Competência</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th><th>Observações</th></tr></thead>
         <tbody>${linhas.map(linhaReciboHtml_).join('')}</tbody>
       </table>`;
   }
@@ -400,9 +401,11 @@ const TelaRecibos = (function () {
    * tabelinha embaixo mostra só o que muda entre as parcelas: percentual,
    * valores, OB e status (cada linha com seu próprio <select> de status,
    * já que cada parcela pode estar numa etapa diferente do fluxo).
-   * Observação (sessão 2026-08-13) também é compartilhada pelo grupo (mesmo
-   * texto em todas as linhas - só existe UM campo de Observação por Recibo/
-   * grupo na edição), então aparece 1x só no cabeçalho, igual Unidade/Objeto.
+   * Observações (sessão 2026-08-26, comentários com autor+data) são
+   * compartilhadas pelo grupo - todas as parcelas de um mesmo processo
+   * dividido têm a MESMA lista (ver chaveObservacaoRecibo_, backend/Recibos.gs)
+   * - por isso só a contagem aparece 1x no cabeçalho, igual Unidade/Objeto; a
+   * lista completa (com quem escreveu e quando) mora no modal de edição.
    */
   function cartaoGrupoReciboHtml_(linhasDoGrupo) {
     const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
@@ -417,7 +420,7 @@ const TelaRecibos = (function () {
             ${primeira.competencia ? ` · Competência ${UI.escaparHtml(primeira.competencia)}` : ''}
           </span>
         </div>
-        ${primeira.observacao ? `<p class="cartao-grupo-recibo-observacao">💬 ${UI.escaparHtml(primeira.observacao)}</p>` : ''}
+        ${primeira.observacoes_count ? `<p class="cartao-grupo-recibo-observacao">💬 ${primeira.observacoes_count} observação(ões) - abra o processo pra ver</p>` : ''}
         <div class="tabela-reforcos-wrap">
           <table class="tabela">
             <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
@@ -770,7 +773,9 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Nº Processo</label><input id="recNumeroProcesso" /></div>
           <div class="campo"><label>Status</label><select id="recStatus">${statusOpcoes}</select></div>
         </div>
-        <div class="campo"><label>Observação</label><textarea id="recObservacao" rows="2"></textarea></div>
+        <div class="campo"><label>Observação inicial</label><textarea id="recObservacaoInicial" rows="2"></textarea>
+          <p class="ajuda">Fica registrada com seu nome e a data de hoje. Novas observações (de você ou de outros usuários) podem ser adicionadas depois, na edição do processo.</p>
+        </div>
         <div class="campo oculto" id="recBlocoTemParcelaDividida"><label><input type="checkbox" id="recTemParcelaDividida" /> Este pagamento é feito por mais de uma parcela?</label>
           <p class="ajuda">Disponível pra Objeto "${UI.escaparHtml(OBJETO_CONTRATO_GESTAO_TES)}" - divide automaticamente em ${UI.escaparHtml(PARCELA_DIVIDIDA_TES_PERCENTUAIS.join('%/'))}%.</p>
         </div>
@@ -1193,9 +1198,13 @@ const TelaRecibos = (function () {
       ordem_bancaria: document.getElementById('recOrdemBancaria').value.trim(),
       numero_processo: document.getElementById('recNumeroProcesso').value.trim(),
       status: document.getElementById('recStatus').value,
-      observacao: document.getElementById('recObservacao').value.trim(),
       completo: document.getElementById('recCompleto').checked
     };
+    // Observação inicial (sessão 2026-08-26) vira a 1ª observação da thread,
+    // via criarObservacaoRecibo, DEPOIS do processo já existir (não dá pra
+    // registrar autor+data de algo que ainda não tem id) - não é mais um
+    // campo da própria linha do Recibo.
+    const observacaoInicial = document.getElementById('recObservacaoInicial').value.trim();
 
     try {
       if (document.getElementById('recTemParcelaDividida').checked) {
@@ -1216,7 +1225,8 @@ const TelaRecibos = (function () {
           parcela.ordens_bancarias = montarPayloadOrdensBancarias_(div);
           return parcela;
         }));
-        await Api.chamar('criarGrupoParcelaDivididaRecibo', { dadosBase, parcelas });
+        const criados = await Api.chamar('criarGrupoParcelaDivididaRecibo', { dadosBase, parcelas });
+        if (observacaoInicial) await Api.chamar('criarObservacaoRecibo', { data: { recibo_ref_id: criados[0].parcela_dividida_grupo_id, texto: observacaoInicial } });
       } else {
         dadosBase.valor_liquidado = UI.parseValorBr(document.getElementById('recValorLiquidado').value);
         dadosBase.valor_pago = UI.parseValorBr(document.getElementById('recValorPago').value);
@@ -1225,7 +1235,8 @@ const TelaRecibos = (function () {
         if (nl) Object.assign(dadosBase, { notaLiquidacaoArquivoBase64: nl.base64, notaLiquidacaoArquivoNome: nl.nome, notaLiquidacaoArquivoTipo: nl.tipo });
         const ob = await lerAnexoDoInput_(document.getElementById('recOrdemBancariaArquivo'));
         if (ob) Object.assign(dadosBase, { ordemBancariaArquivoBase64: ob.base64, ordemBancariaArquivoNome: ob.nome, ordemBancariaArquivoTipo: ob.tipo });
-        await Api.chamar('criarRecibo', { data: dadosBase });
+        const criado = await Api.chamar('criarRecibo', { data: dadosBase });
+        if (observacaoInicial) await Api.chamar('criarObservacaoRecibo', { data: { recibo_ref_id: criado.id, texto: observacaoInicial } });
       }
       CacheAbas.invalidar('recibos');
       UI.toast('Recibo salvo com sucesso.', 'sucesso');
@@ -1236,6 +1247,87 @@ const TelaRecibos = (function () {
     }
   }
 
+  // ===================== OBSERVAÇÕES (sessão 2026-08-26) =====================
+  // Comentários com autor+data sobre um processo de Recibo, substituindo o
+  // antigo campo único "Observação" (um texto só, sem autoria). Qualquer
+  // usuário autenticado cria; só o próprio autor OU um Gerente/Administrador
+  // edita/exclui uma já existente (pode_editar, calculado no backend - ver
+  // formatarObservacaoRecibo_, backend/Recibos.gs). Vivem dentro do modal de
+  // Editar Recibo, mas cada ação chama o backend na hora (não espera o
+  // "Salvar" do formulário) - ver abrirFormularioEdicao mais abaixo.
+
+  function observacaoHtml_(o) {
+    const editadoHtml = o.data_edicao ? ' <span class="ajuda">(editado)</span>' : '';
+    const acoesHtml = o.pode_editar ? `
+      <button type="button" class="botao-icone editar" data-acao="editar-observacao" data-id="${o.id}" title="Editar">${ICONE_LAPIS}</button>
+      <button type="button" class="botao-icone excluir" data-acao="excluir-observacao" data-id="${o.id}" title="Excluir">${ICONE_LIXEIRA}</button>` : '';
+    return `
+      <div class="observacao-recibo" data-id-observacao="${o.id}">
+        <div class="observacao-recibo-texto">${UI.escaparHtml(o.texto)}</div>
+        <div class="observacao-recibo-rodape">
+          <span class="ajuda">${UI.escaparHtml(o.criado_por_nome)} · ${UI.formatarData(o.data_criacao)}${editadoHtml}</span>
+          <span class="observacao-recibo-acoes">${acoesHtml}</span>
+        </div>
+      </div>`;
+  }
+
+  function observacoesListaHtml_(lista) {
+    if (!lista.length) return '<p class="ajuda">Nenhuma observação ainda.</p>';
+    return lista.map(observacaoHtml_).join('');
+  }
+
+  /** Recarrega e re-renderiza a lista de observações do processo aberto - chamado depois de qualquer criar/editar/excluir. */
+  async function carregarObservacoes_(refId) {
+    const container = document.getElementById('recEdObservacoesLista');
+    if (!container) return;
+    const lista = await Api.chamar('listarObservacoesRecibo', { recibo_ref_id: refId }, { silencioso: true });
+    container.innerHTML = observacoesListaHtml_(lista);
+    ligarAcoesObservacoes_(container, refId);
+  }
+
+  function ligarAcoesObservacoes_(container, refId) {
+    container.querySelectorAll('[data-acao="excluir-observacao"]').forEach(botao => {
+      botao.addEventListener('click', async () => {
+        if (!confirm('Excluir esta observação?')) return;
+        try {
+          await Api.chamar('excluirObservacaoRecibo', { id: botao.dataset.id });
+          CacheAbas.invalidar('recibos');
+          await carregarObservacoes_(refId);
+        } catch (err) {
+          UI.toast(err.message, 'erro');
+        }
+      });
+    });
+    container.querySelectorAll('[data-acao="editar-observacao"]').forEach(botao => {
+      botao.addEventListener('click', () => iniciarEdicaoObservacao_(botao.dataset.id, refId));
+    });
+  }
+
+  /** Troca o texto de UMA observação por um textarea + Salvar/Cancelar, sem mexer nas outras nem reabrir o modal inteiro. */
+  function iniciarEdicaoObservacao_(id, refId) {
+    const bloco = document.querySelector(`.observacao-recibo[data-id-observacao="${id}"]`);
+    if (!bloco) return;
+    const textoAtual = bloco.querySelector('.observacao-recibo-texto').textContent;
+    bloco.innerHTML = `
+      <textarea class="observacao-recibo-editar" rows="2">${UI.escaparHtml(textoAtual)}</textarea>
+      <div class="observacao-recibo-acoes">
+        <button type="button" class="botao" data-acao="cancelar-edicao-observacao">Cancelar</button>
+        <button type="button" class="botao primario" data-acao="salvar-edicao-observacao">Salvar</button>
+      </div>`;
+    bloco.querySelector('[data-acao="cancelar-edicao-observacao"]').addEventListener('click', () => carregarObservacoes_(refId));
+    bloco.querySelector('[data-acao="salvar-edicao-observacao"]').addEventListener('click', async () => {
+      const novoTexto = bloco.querySelector('.observacao-recibo-editar').value.trim();
+      if (!novoTexto) return;
+      try {
+        await Api.chamar('atualizarObservacaoRecibo', { id, texto: novoTexto });
+        CacheAbas.invalidar('recibos');
+        await carregarObservacoes_(refId);
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
+    });
+  }
+
   // ===================== EDIÇÃO DE RECIBO EXISTENTE =====================
 
   async function abrirFormularioEdicao(recibo) {
@@ -1244,10 +1336,16 @@ const TelaRecibos = (function () {
     // "não fazem mais sentido" aqui porque já existe um seletor próprio no
     // card da listagem (select-status-recibo, ver renderCards/linhaCardHtml_
     // acima) que edita o mesmo campo direto, sem precisar abrir esta tela.
-    const [opcoesObjeto, nesDaUnidade, siblingsGrupo] = await Promise.all([
+    // refIdObservacoes: mesma chave usada no backend (chaveObservacaoRecibo_,
+    // Recibos.gs) pra agrupar as observações de um processo - o
+    // parcela_dividida_grupo_id quando o Recibo faz parte de um grupo, senão
+    // o próprio id.
+    const refIdObservacoes = grupoId || recibo.id;
+    const [opcoesObjeto, nesDaUnidade, siblingsGrupo, observacoes] = await Promise.all([
       TelaListas.obterOpcoes('OBJETO'),
       Api.chamar('listarNotasEmpenhoPorUnidade', { unidadeId: recibo.unidade_id }),
-      grupoId ? Api.chamar('listarRecibosPorGrupo', { grupoId }) : Promise.resolve([])
+      grupoId ? Api.chamar('listarRecibosPorGrupo', { grupoId }) : Promise.resolve([]),
+      Api.chamar('listarObservacoesRecibo', { recibo_ref_id: refIdObservacoes })
     ]);
     nesDaUnidadeAtual = nesDaUnidade;
     const corpo = `
@@ -1290,7 +1388,15 @@ const TelaRecibos = (function () {
           <button type="button" class="botao ${ehObjetoContratoGestaoTes_(recibo.objeto) ? 'oculto' : ''}" id="btnAddParcelaDivididaEd">+ Adicionar parcela</button>
         </div>
 
-        <div class="campo"><label>Observação</label><textarea id="recEdObservacao" rows="2">${UI.escaparHtml(recibo.observacao)}</textarea></div>
+        <div class="campo">
+          <label>Observações</label>
+          <p class="ajuda">Qualquer usuário pode adicionar uma observação. Só quem escreveu (ou um Gerente/Administrador) pode editar/excluir uma já existente.</p>
+          <div id="recEdObservacoesLista" class="observacoes-recibo-lista">${observacoesListaHtml_(observacoes)}</div>
+          <div class="observacao-recibo-nova">
+            <textarea id="recEdNovaObservacao" rows="2" placeholder="Escreva uma nova observação..."></textarea>
+            <button type="button" class="botao" id="btnAdicionarObservacao">Adicionar observação</button>
+          </div>
+        </div>
         <div class="campo"><label><input type="checkbox" id="recEdCompleto" ${recibo.completo ? 'checked' : ''} /> Cadastro completo</label></div>
         <p id="recEdErro" class="erro-campo oculto"></p>
       </form>`;
@@ -1298,6 +1404,25 @@ const TelaRecibos = (function () {
     UI.abrirModal('Editar Recibo', corpo,
       `<button class="botao" id="btnCancelarRecEd">Cancelar</button><button class="botao primario" id="btnSalvarRecEd">Salvar</button>`);
     UI.aoFecharModal(() => EdicaoSimultanea.sairDaEdicao('Recibo', recibo.id));
+
+    // Observações (sessão 2026-08-26): cada ação (adicionar/editar/excluir)
+    // chama o backend NA HORA, igual "Redefinir senha" em js/usuarios.js -
+    // não fica esperando o botão "Salvar" deste formulário, que só cuida dos
+    // campos do processo em si.
+    ligarAcoesObservacoes_(document.getElementById('recEdObservacoesLista'), refIdObservacoes);
+    document.getElementById('btnAdicionarObservacao').addEventListener('click', async () => {
+      const campo = document.getElementById('recEdNovaObservacao');
+      const texto = campo.value.trim();
+      if (!texto) return;
+      try {
+        await Api.chamar('criarObservacaoRecibo', { data: { recibo_ref_id: refIdObservacoes, texto } });
+        CacheAbas.invalidar('recibos');
+        campo.value = '';
+        await carregarObservacoes_(refIdObservacoes);
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
+    });
 
     ['recEdObjeto', 'recEdCompetencia'].forEach(id => UI.tornarPesquisavel(id));
     ligarAutopreenchimentoNe_('recEdNotaEmpenho', 'recEdObjeto', 'recEdFonte', () => nesDaUnidadeAtual);
@@ -1387,8 +1512,10 @@ const TelaRecibos = (function () {
       // ver comentário em abrirFormularioEdicao. Omitir por completo (em vez
       // de mandar '') é o que faz atualizarRecibo/atualizarParcelasDivididasRecibo
       // não tocarem nesses campos (hasOwnProperty), preservando o status que
-      // o seletor do card já define.
-      observacao: document.getElementById('recEdObservacao').value.trim(),
+      // o seletor do card já define. observacao saiu daqui também (sessão
+      // 2026-08-26) - agora é uma aba própria, ver "Observações" acima
+      // (criarObservacaoRecibo/atualizarObservacaoRecibo/excluirObservacaoRecibo),
+      // cada ação salva na hora, sem passar pelo botão "Salvar" deste form.
       completo: document.getElementById('recEdCompleto').checked
     };
 

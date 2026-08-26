@@ -2912,6 +2912,44 @@ O que mudou foi o *fluxo* de criação e troca de senha:
   nunca aparece. Depois, colar `backend/Auth.gs`, `backend/Usuarios.gs`, `backend/Code.gs` e
   `backend/Utils.gs` no editor do Apps Script e reimplantar.
 
+## Fase — Observações de Recibo viram comentários com autor+data (sessão 2026-08-26, pedido do usuário)
+O campo único "Observação" de Recibos (um texto só, sem saber quem escreveu
+nem quando) virou uma thread de comentários - aba nova `RecibosObservacoes`
+(`id, recibo_ref_id, texto, criado_por, data_criacao, data_edicao`), **criada
+sob demanda** (`getSheetObservacoesRecibo_`, `backend/Recibos.gs`) - não
+precisa criar à mão na planilha.
+- `recibo_ref_id` é o `parcela_dividida_grupo_id` quando o Recibo faz parte
+  de um grupo (parcela dividida), senão o próprio `id` da linha
+  (`chaveObservacaoRecibo_`) - mesma chave que já unia as parcelas de um
+  processo dividido num card só, então todas elas compartilham a mesma
+  thread de observações (comentário sobre o processo, não sobre uma parcela
+  isolada).
+- Qualquer usuário autenticado cria uma observação nova; só o próprio autor
+  OU um Gerente/Administrador pode editar/excluir uma já existente
+  (`podeGerenciarObservacaoRecibo_`) - o backend recalcula isso a cada
+  leitura (`pode_editar`), então o botão de editar/excluir já nasce
+  escondido pra quem não pode.
+- O antigo campo `observacao` de `Recibos` **continua na planilha, intocado,
+  só como histórico** - `montarLinhaRecibo_` parou de escrever nele (chave
+  omitida, não mais `''`, pra nunca sobrescrever o texto antigo à toa) e
+  `atualizarRecibo` tirou `observacao` da lista de campos editáveis. Não foi
+  feita migração pro texto antigo virar uma "observação" com autor - ele só
+  não aparece mais em lugar nenhum da tela.
+- **Frontend (`js/recibos.js`):** o formulário de "Novo processo" ganhou
+  "Observação inicial" (opcional) - vira a 1ª observação da thread logo
+  depois do Recibo ser criado (só depois de existir um id pra vincular). O
+  modal de "Editar Recibo" trocou o textarea único por uma lista de
+  comentários (autor, data, "(editado)" se aplicável) + campo pra adicionar
+  um novo - cada ação (criar/editar/excluir observação) chama o backend na
+  hora, sem esperar o "Salvar" do formulário (mesmo padrão de "Redefinir
+  senha" em `js/usuarios.js`). A listagem/cards de Recibos trocaram o texto
+  cru por uma contagem ("💬 3") - a lista completa mora só no modal de
+  edição, pra não pesar a leitura em lote (`observacoes_count`, calculado
+  uma vez por página em `listarRecibos`/`listarRecibosPorGrupo`, cache de
+  30s igual `todasOrdensBancariasComCache_`).
+- **Passo manual:** nenhum na planilha (aba nasce sozinha). Só implantar o
+  backend novo (`backend/Recibos.gs`, `backend/Code.gs`, `backend/Utils.gs`).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
