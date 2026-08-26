@@ -57,6 +57,19 @@ const Auth = (function () {
     } catch (e) { /* sessão inválida, ignora */ }
   }
 
+  /** Some com a flag em memória/sessionStorage depois de trocarSenhaPrimeiroLogin, sem exigir novo login (mesmo padrão de atualizarNomeLocal acima). */
+  function limparPrecisaTrocarSenhaLocal() {
+    if (!usuarioAtual) return;
+    usuarioAtual = Object.assign({}, usuarioAtual, { precisaTrocarSenha: false });
+    const bruto = sessionStorage.getItem(CHAVE_SESSAO);
+    if (!bruto) return;
+    try {
+      const dados = JSON.parse(bruto);
+      dados.user = usuarioAtual;
+      sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify(dados));
+    } catch (e) { /* sessão inválida, ignora */ }
+  }
+
   /**
    * Administrador do Aplicativo (sessão 2026-08-14) herda tudo que Gerente
    * tem - por isso conta aqui também, em vez de virar uma checagem paralela
@@ -71,5 +84,5 @@ const Auth = (function () {
     return !!usuarioAtual && usuarioAtual.perfil === 'administrador';
   }
 
-  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, ehAdministrador, atualizarNomeLocal };
+  return { carregarSessaoSalva, salvarSessao, encerrarSessaoLocal, login, usuario, ehGerente, ehAdministrador, atualizarNomeLocal, limparPrecisaTrocarSenhaLocal };
 })();

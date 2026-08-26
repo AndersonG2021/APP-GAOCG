@@ -2878,6 +2878,40 @@ atualizada de `backend/Utils.gs`, `backend/Contadores.gs`,
 Apps Script, reimplantar (Nova versão). A aba `MetasProcessos` nasce sozinha
 na primeira meta cadastrada - não precisa criar à mão.
 
+## Fase — Cadastro de usuários revisado (sessão 2026-08-26, pedido do usuário)
+Só Gerente/Administrador já criava/gerenciava usuários (`requireGerente_`) — isso não mudou.
+O que mudou foi o *fluxo* de criação e troca de senha:
+- **Criar usuário** (`js/usuarios.js`, `criarUsuario`/`backend/Usuarios.gs`): modal passou a pedir só
+  **Nome completo** + **Tipo de usuário** (Gerente ou Analista — conceder Administrador continua
+  exclusivo da edição, por um Administrador). Login e senha **não são mais digitados**: login é
+  gerado no backend como `primeironome.ultimonome` (`gerarLoginUnico_` — acentos removidos, e se
+  colidir com um já existente vira `primeironome.ultimonome2`, `...3` etc.), senha sempre a
+  padrão `"123456"` (`SENHA_PADRAO_`). Depois de salvar, um modal mostra o login gerado pro
+  Gerente/Administrador repassar ao novo usuário (`mostrarCredenciaisGeradas_`).
+- **Troca de senha obrigatória no primeiro login** (`precisa_trocar_senha`, coluna nova em
+  `Usuarios` — **precisa ser criada à mão na planilha real**, mesma pegadinha já documentada
+  pras 3 colunas de Prazos Contratuais): fica `true` em todo `criarUsuario` e em todo
+  `redefinirSenha`. `login_` devolve essa flag (`user.precisaTrocarSenha`); `mostrarApp`
+  (`js/app.js`) trava a tela num overlay fixo sem X/sem clicar-fora-fecha
+  (`#sobreposicaoTrocaSenhaObrigatoria`, `index.html`) até a pessoa salvar uma senha nova
+  (`trocarSenhaPrimeiroLogin`, `backend/Auth.gs` — não pede senha atual, a sessão já provou que
+  ela entrou com a padrão). Overlay avisa que a senha é pessoal e que só um
+  Gerente/Administrador pode resetá-la (o que devolve pro padrão e reexibe o mesmo overlay no
+  próximo login).
+- **Redefinir senha** (botão no modal de edição): não pede mais senha digitada pelo
+  Gerente/Administrador — sempre reseta pro padrão `"123456"` e marca `precisa_trocar_senha`,
+  com confirmação grande em vez do antigo `prompt()` nativo.
+- **Nome exibido**: o modal de edição (Gerente/Administrador) agora mostra o nome completo só
+  pra CONSULTA (campo desabilitado) — só o próprio dono da conta muda como o nome aparece no
+  app, em "Minha conta" (`alterarMeuNome`, já existia). Editar continua só mexendo no perfil.
+- **Lista de usuários**: checkbox "Mostrar usuários desativados" (desmarcado por padrão, esconde
+  inativos) + botão de lápis por linha pra editar (mesmo ícone/padrão de `js/listas.js`),
+  substituindo o clique na linha inteira.
+- **Passo manual:** criar a coluna `precisa_trocar_senha` na aba `Usuarios` da planilha real
+  (cabeçalho exatamente esse) — sem ela a escrita cai em silêncio e o modal de primeiro login
+  nunca aparece. Depois, colar `backend/Auth.gs`, `backend/Usuarios.gs`, `backend/Code.gs` e
+  `backend/Utils.gs` no editor do Apps Script e reimplantar.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

@@ -104,6 +104,31 @@
   <div id="dockModais" class="dock-modais"></div>
 
   <!--
+    TROCA DE SENHA OBRIGATÓRIA (sessão 2026-08-26, pedido do usuário) -
+    aparece no primeiro login de todo usuário novo, e de novo sempre que um
+    Gerente/Administrador redefine a senha dele (volta pro padrão "123456").
+    Fixo aqui (não passa por UI.abrirModal) DE PROPÓSITO: sem botão de
+    fechar/X e sem listener de "clicar fora" - só some depois que
+    trocarSenhaPrimeiroLogin salva com sucesso (ver verificarTrocaSenhaObrigatoria_,
+    js/app.js). Fica escondido por baixo do appShell até ser exibido.
+  -->
+  <div id="sobreposicaoTrocaSenhaObrigatoria" class="sobreposicao-modal oculto">
+    <div class="modal pequeno">
+      <div class="modal-cabecalho"><h3 class="modal-titulo">Troque sua senha</h3></div>
+      <div class="modal-corpo">
+        <p class="ajuda">Este é o seu primeiro acesso (ou sua senha foi redefinida). Por segurança, defina uma senha nova antes de continuar.</p>
+        <p class="ajuda">Essa senha é <strong>pessoal - só você tem acesso a ela</strong>. Se esquecer, peça a um Gerente ou ao Administrador do Aplicativo para redefini-la; ao fazer isso, sua senha volta para o padrão "123456" e este mesmo aviso aparecerá de novo no seu próximo login.</p>
+        <form id="formTrocaSenhaObrigatoria" novalidate>
+          <div class="campo"><label for="primeiroLoginSenhaNova">Nova senha *</label><input id="primeiroLoginSenhaNova" type="password" autocomplete="new-password" minlength="6" required /></div>
+          <div class="campo"><label for="primeiroLoginSenhaConfirmacao">Confirmar nova senha *</label><input id="primeiroLoginSenhaConfirmacao" type="password" autocomplete="new-password" minlength="6" required /></div>
+          <p id="primeiroLoginErro" class="erro-campo oculto"></p>
+          <button type="submit" class="botao primario" style="width:100%">Salvar nova senha</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!--
     defer: os 18 arquivos são baixados em PARALELO durante o parse do HTML e
     executados na ordem declarada, logo antes do DOMContentLoaded - em vez de
     um download bloqueante atrás do outro. A ordem entre eles continua

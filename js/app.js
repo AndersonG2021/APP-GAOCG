@@ -1059,6 +1059,23 @@ const App = (function () {
     document.getElementById('perfilUsuarioTopo').textContent = UI.rotuloPerfil(usuario.perfil);
     document.querySelectorAll('.somente-gerente').forEach(el => el.classList.toggle('oculto', !Auth.ehGerente()));
     navegarPara('dashboard');
+    verificarTrocaSenhaObrigatoria_();
+  }
+
+  /**
+   * Trava a tela no modal de troca de senha obrigatória (sessão 2026-08-26,
+   * pedido do usuário) sempre que o usuário logado tem precisaTrocarSenha
+   * true - primeiro login de um usuário novo, ou senha redefinida por um
+   * Gerente/Administrador (ver criarUsuario/redefinirSenha, Usuarios.gs).
+   * Chamado toda vez que a app é exibida (login novo OU sessão restaurada do
+   * sessionStorage em App.init), pra cobrir também quem fechou a aba no meio
+   * do fluxo sem chegar a trocar a senha. O overlay em si (index.html) não
+   * tem X nem fecha ao clicar fora - só some depois que
+   * formTrocaSenhaObrigatoria salva com sucesso, logo abaixo.
+   */
+  function verificarTrocaSenhaObrigatoria_() {
+    const usuario = Auth.usuario();
+    document.getElementById('sobreposicaoTrocaSenhaObrigatoria').classList.toggle('oculto', !(usuario && usuario.precisaTrocarSenha));
   }
 
   /**
@@ -1191,6 +1208,25 @@ const App = (function () {
       try {
         await Auth.login(login, senha);
         mostrarApp();
+      } catch (err) {
+        UI.mostrarErro(erroEl, err.message);
+      }
+    });
+
+    document.getElementById('formTrocaSenhaObrigatoria').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const erroEl = document.getElementById('primeiroLoginErro');
+      erroEl.classList.add('oculto');
+      const novaSenha = document.getElementById('primeiroLoginSenhaNova').value;
+      const confirmacao = document.getElementById('primeiroLoginSenhaConfirmacao').value;
+      if (novaSenha.length < 6) { UI.mostrarErro(erroEl, 'A nova senha deve ter pelo menos 6 caracteres.'); return; }
+      if (novaSenha !== confirmacao) { UI.mostrarErro(erroEl, 'A confirmação não confere com a nova senha.'); return; }
+      try {
+        await Api.chamar('trocarSenhaPrimeiroLogin', { novaSenha });
+        Auth.limparPrecisaTrocarSenhaLocal();
+        this.reset();
+        document.getElementById('sobreposicaoTrocaSenhaObrigatoria').classList.add('oculto');
+        UI.toast('Senha alterada com sucesso.', 'sucesso');
       } catch (err) {
         UI.mostrarErro(erroEl, err.message);
       }
