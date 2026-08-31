@@ -66,7 +66,10 @@ const TelaRelatorios = (function () {
         </div>
 
         <div class="rel-secao">
-          <label>3. Colunas <span class="rel-hint">(marque as que entram)</span></label>
+          <div class="rel-linha" style="justify-content:space-between">
+            <label style="margin:0">3. Colunas <span class="rel-hint">(marque as que entram)</span></label>
+            <button type="button" class="botao" id="btnRelTodasColunas">Marcar/desmarcar todas</button>
+          </div>
           <div id="relColunas" class="rel-colunas"></div>
         </div>
 
@@ -106,6 +109,16 @@ const TelaRelatorios = (function () {
     UI.abrirModal('Gerar relatório', corpo, rodape, { grande: true });
 
     document.getElementById('relFonte').addEventListener('change', aoMudarFonte_);
+    // Mesmo toggle de abrirParaTela (mais abaixo neste arquivo) - se alguma
+    // estiver desmarcada, marca todas; se já estão todas marcadas, desmarca
+    // todas. Consulta #relColunas na hora do clique (não guarda referência às
+    // caixas), então continua funcionando depois de trocar a Fonte de dados,
+    // que reconstrói essas checkboxes do zero (montarColunas_).
+    document.getElementById('btnRelTodasColunas').addEventListener('click', () => {
+      const caixas = Array.from(document.querySelectorAll('#relColunas input[type="checkbox"]'));
+      const marcarTodas = caixas.some(cb => !cb.checked);
+      caixas.forEach(cb => { cb.checked = marcarTodas; });
+    });
     document.getElementById('btnRelGerar').addEventListener('click', () => gerarComConfig(lerConfigAtual_()));
     document.getElementById('btnRelFechar').addEventListener('click', UI.fecharModal);
     document.getElementById('btnRelSalvarModelo').addEventListener('click', salvarModelo_);
