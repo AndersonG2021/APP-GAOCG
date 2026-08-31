@@ -22,6 +22,12 @@ const TelaRecibos = (function () {
   let objetosSofDaUnidadeNovo = [];
   let abrindoLinha = false;
   let ultimoFiltroJson = null;
+  const MESES_ABREV_COMPETENCIA_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  /** "ago.26" pro mês corrente - valor inicial do seletor de "Gerar recibos da meta" (mesmo formato de UI.listaCompetencias). */
+  function mesAtualComoCompetencia_() {
+    const hoje = new Date();
+    return MESES_ABREV_COMPETENCIA_[hoje.getMonth()] + '.' + String(hoje.getFullYear()).slice(-2);
+  }
   // Opções de STATUS_RECIBO (não deduplicadas) carregadas em render() -
   // reaproveitadas pelo <select> de status editável direto na tabela (sessão
   // 2026-08-07), pra não precisar buscar de novo a cada linha renderizada.
@@ -141,6 +147,8 @@ const TelaRecibos = (function () {
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
           <span style="flex:1"></span>
+          <div class="campo"><label>Competência p/ gerar</label><select id="recCompetenciaGerarMeta">${UI.opcoesCompetenciaHtml(mesAtualComoCompetencia_())}</select></div>
+          <button class="botao" id="btnGerarRecibosMeta" title="Cria um card em branco (sem Nº Processo) pra cada meta ativa que ainda não tem recibo nessa competência">Gerar recibos da meta</button>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
         </div>
         <div id="listaRecibos"></div>
@@ -158,6 +166,28 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnGerarRelatorioRec').addEventListener('click', abrirGerarRelatorio);
+    document.getElementById('btnGerarRecibosMeta').addEventListener('click', async function () {
+      const competencia = document.getElementById('recCompetenciaGerarMeta').value;
+      if (!competencia) { UI.toast('Escolha a competência.', 'erro'); return; }
+      this.disabled = true;
+      try {
+        const resposta = await Api.chamar('gerarRecibosMeta', { competencia });
+        Api.invalidarCache('listarRecibos');
+        CacheAbas.invalidar('recibos');
+        CacheAbas.invalidar('dashboard');
+        if (resposta.criados === 0) {
+          UI.toast('Nenhuma meta pendente para essa competência - toda meta ativa já tem recibo.', 'info');
+        } else {
+          UI.toast(`${resposta.criados} card(s) criado(s), em branco, pra completar (destacados até o Nº Processo ser preenchido).`, 'sucesso');
+          paginaAtual = 1;
+          await carregar();
+        }
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      } finally {
+        this.disabled = false;
+      }
+    });
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_REC_/aplicarResposta_). Substitui o estreitamento
     // antigo, que valia só para Unidade/Tipo/OSS.
@@ -381,7 +411,13 @@ const TelaRecibos = (function () {
 
   function linhaReciboHtml_(r) {
     const unidade = unidades.find(u => u.id === r.unidade_id);
-    return `<tr data-id="${r.id}">
+    // Destaque (sessão 2026-08-27, pedido do usuário): sem Nº Processo
+    // ainda, o processo não "chegou" de verdade (ver dashboardMetasProcessos_,
+    // Dashboard.gs) - vale pra qualquer recibo sem o campo preenchido, não só
+    // os gerados por "Gerar recibos da meta" (mesma classe .linha-parada já
+    // usada em SOF, cor diferente pra não confundir os dois avisos).
+    const classeDestaque = r.numero_processo ? '' : 'linha-sem-processo';
+    return `<tr data-id="${r.id}" class="${classeDestaque}">
       <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
       <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
       <td>${UI.escaparHtml(r.objeto || '-')}</td>
@@ -424,8 +460,12 @@ const TelaRecibos = (function () {
     const ordenadas = linhasDoGrupo.slice().sort((a, b) => (Number(b.percentual_parcela_dividida) || 0) - (Number(a.percentual_parcela_dividida) || 0));
     const primeira = ordenadas[0];
     const unidade = unidades.find(u => u.id === primeira.unidade_id);
+    // Mesmo destaque de linhaReciboHtml_ (ver comentário lá) - aqui o grupo
+    // inteiro compartilha um só Nº Processo, então o destaque olha só a
+    // primeira parcela (representa o grupo inteiro).
+    const classeDestaque = primeira.numero_processo ? '' : 'cartao-grupo-recibo-sem-processo';
     return `
-      <div class="cartao-grupo-recibo">
+      <div class="cartao-grupo-recibo ${classeDestaque}">
         <div class="cartao-grupo-recibo-cabecalho">
           <span class="cartao-grupo-recibo-titulo">🔗 ${UI.escaparHtml(unidade ? unidade.nome : primeira.unidade_id)} · ${UI.escaparHtml(primeira.objeto || '-')}</span>
           <span class="cartao-grupo-recibo-meta">

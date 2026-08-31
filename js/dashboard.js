@@ -182,7 +182,7 @@ const Dashboard = (function () {
       ? '<div class="cartao-indicador-delta">Nenhuma meta cadastrada ainda</div>'
       : (m.total_falta > 0
         ? `<div class="cartao-indicador-delta negativo">${m.total_falta} processo(s) ainda esperado(s)</div>`
-        : '<div class="cartao-indicador-delta positivo">Tudo chegou ✓</div>');
+        : '<div class="cartao-indicador-delta positivo">Tudo recebido ✓</div>');
     const barraHtml = semMetaCadastrada ? '' : `<div class="cartao-indicador-barra"><div class="cartao-indicador-barra-preenchimento" style="width:${pct}%"></div></div>`;
     return `
       <div class="cartao-indicador clicavel acento-roxo" id="dashCardMetas">
@@ -210,7 +210,7 @@ const Dashboard = (function () {
           <div class="campo"><label>Estado</label>
             <select id="dashMetasFiltroEstado">
               <option value="">Todos</option>
-              <option value="chegado">Chegado</option>
+              <option value="chegado">Recebido</option>
               <option value="falta">Falta</option>
             </select>
           </div>
@@ -280,7 +280,7 @@ const Dashboard = (function () {
     }
     alvo.innerHTML = `
       <table class="tabela">
-        <thead><tr><th>Unidade</th><th>Objeto</th><th>Esperado</th><th>Chegado</th><th>Falta</th></tr></thead>
+        <thead><tr><th>Unidade</th><th>Objeto</th><th>Esperado</th><th>Recebido</th><th>Falta</th></tr></thead>
         <tbody>${itens.map(it => `
           <tr data-unidade="${it.unidade_id}" data-objeto="${UI.escaparHtml(it.objeto)}">
             <td>${UI.escaparHtml(it.unidade_nome)}</td>
@@ -310,7 +310,7 @@ const Dashboard = (function () {
     if (!alvo) return;
     if (!semMeta.length) { alvo.innerHTML = ''; return; }
     const itens = semMeta.map(s => `${UI.escaparHtml(s.unidade_nome)} — ${UI.escaparHtml(s.objeto)} (${s.quantidade})`).join('; ');
-    alvo.innerHTML = `<div class="aviso-edicao-simultanea"><p>Chegou sem meta cadastrada: ${itens}.</p></div>`;
+    alvo.innerHTML = `<div class="aviso-edicao-simultanea"><p>Recebido sem meta cadastrada: ${itens}.</p></div>`;
   }
 
   // ===== Prazos contratuais das Unidades (sessão 2026-08-14, pedido do

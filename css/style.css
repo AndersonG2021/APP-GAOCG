@@ -285,6 +285,11 @@ table.tabela th, table.tabela td { padding: 8px 10px; border-bottom: 1px solid v
 table.tabela th { background: var(--cinza-100); font-weight: 600; color: var(--cinza-700); position: sticky; top: 0; }
 table.tabela tbody tr:hover { background: var(--cinza-100); cursor: pointer; }
 table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transition: opacity .1s ease; }
+/* Recibo sem Nº Processo ainda (sessão 2026-08-27) - card criado por "Gerar
+   recibos da meta", ou qualquer outro sem o campo preenchido, ver
+   linhaReciboHtml_/cartaoGrupoReciboHtml_ (js/recibos.js). */
+table.tabela tbody tr.linha-sem-processo { background: var(--amarelo-claro); }
+table.tabela tbody tr.linha-sem-processo:hover { background: #fef3c7; }
 
 .selo { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .selo.azul { background: var(--azul-claro); color: var(--azul-escuro); }
@@ -313,6 +318,9 @@ table.tabela tbody tr.carregando { opacity: 0.55; pointer-events: none; transiti
 #listaRecibos > table.tabela, #listaRecibos > .cartao-grupo-recibo { margin-bottom: 14px; }
 #listaRecibos > table.tabela:last-child, #listaRecibos > .cartao-grupo-recibo:last-child { margin-bottom: 0; }
 .cartao-grupo-recibo { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); border-left: 4px solid var(--azul); overflow: hidden; }
+/* Mesmo destaque de tr.linha-sem-processo, versão card (sessão 2026-08-27). */
+.cartao-grupo-recibo.cartao-grupo-recibo-sem-processo { background: var(--amarelo-claro); border-left-color: var(--amarelo); }
+.cartao-grupo-recibo.cartao-grupo-recibo-sem-processo .cartao-grupo-recibo-cabecalho { background: var(--amarelo-claro); }
 .cartao-grupo-recibo-cabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 14px; background: var(--azul-claro); }
 .cartao-grupo-recibo-titulo { font-weight: 700; color: var(--azul-escuro); font-size: 13.5px; }
 .cartao-grupo-recibo-meta { font-size: 12px; color: var(--cinza-700); }
