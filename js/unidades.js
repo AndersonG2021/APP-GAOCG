@@ -18,7 +18,9 @@ const TelaUnidades = (function () {
   let ultimoFiltroJson = null;
   let paginaAtual = 1;
   let totalRegistros = 0;
-  const TAMANHO_PAGINA = 20;
+  // Tamanho de página escolhível (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
+  let tamanhoPagina = 20;
+  const TAMANHO_PAGINA_TODOS_ = 100000;
   // Exclusão em lote (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
   // Só unidades ATIVAS entram na seleção (o botão individual equivalente,
   // "excluir", também só existe pra unidades ativas - inativar de novo uma
@@ -105,6 +107,23 @@ const TelaUnidades = (function () {
     };
   }
 
+  /** Mesmo formato "vazio" de filtrosAtuais(), sem depender do DOM - ver mesma função em js/sof.js. Usada só por preCarregar(). */
+  function filtrosPadrao_() {
+    return { busca: '', unidade_id: [], tipo: [], oss: [], somenteAtivas: true };
+  }
+
+  /** Pré-carrega os dados desta tela em segundo plano - ver mesma função em js/sof.js. */
+  async function preCarregar() {
+    try {
+      await TelaListas.obterOpcoes('OSS');
+      const params = Object.assign({ page: 1, pageSize: tamanhoPagina }, filtrosPadrao_());
+      await CacheAbas.comRevalidacao('unidades', params,
+        (opcoes) => Api.chamar('listarUnidades', params, Object.assign({ silencioso: true }, opcoes)),
+        () => {}
+      );
+    } catch (e) { /* pré-carga é best-effort */ }
+  }
+
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo (ou de Busca livre) da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = { uniFiltroUnidade: 'unidade_id', uniFiltroTipo: 'tipo', uniFiltroOss: 'oss', uniBusca: 'busca' };
 
@@ -135,7 +154,7 @@ const TelaUnidades = (function () {
 
   async function carregarComFiltros_(filtros) {
     ultimoFiltroJson = JSON.stringify(filtros);
-    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: tamanhoPagina }, filtros);
     const resposta = await CacheAbas.comRevalidacao('unidades', params,
       (opcoes) => Api.chamar('listarUnidades', params, opcoes),
       aplicarResposta_
@@ -159,15 +178,23 @@ const TelaUnidades = (function () {
   }
 
   function renderPaginacao() {
-    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoUni').innerHTML = `
       <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="paginacao-tamanho"><label for="uniTamanhoPagina">Por página</label>
+        <select id="uniTamanhoPagina">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+      </div>
       <div class="botoes">
         <button class="botao" id="uniPagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
         <button class="botao" id="uniPagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
       </div>`;
     document.getElementById('uniPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('uniPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
+    document.getElementById('uniTamanhoPagina').addEventListener('change', function () {
+      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
+      paginaAtual = 1;
+      carregar();
+    });
   }
 
   function linhaTaDetalheHtml_(t) {
@@ -553,5 +580,5 @@ const TelaUnidades = (function () {
     });
   }
 
-  return { render };
+  return { render, preCarregar };
 })();

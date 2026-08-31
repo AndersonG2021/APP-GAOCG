@@ -20,7 +20,9 @@ const TelaNotasEmpenho = (function () {
   let ultimoFiltroJson = null;
   let paginaAtual = 1;
   let totalRegistros = 0;
-  const TAMANHO_PAGINA = 20;
+  // Tamanho de página escolhível (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
+  let tamanhoPagina = 20;
+  const TAMANHO_PAGINA_TODOS_ = 100000;
   // Exclusão em lote (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
   // Diferente de SOF/Unidades/Recibos, cada card aqui é um GRUPO (numero_ne),
   // não uma linha só - a seleção guarda o numero_ne, e na hora de excluir
@@ -139,6 +141,27 @@ const TelaNotasEmpenho = (function () {
     };
   }
 
+  /** Mesmo formato "vazio" de filtrosAtuais(), sem depender do DOM - ver mesma função em js/sof.js. Usada só por preCarregar(). */
+  function filtrosPadrao_() {
+    return { busca: '', unidade_id: [], oss: [], objeto: [], tipo_unidade: [], dea: [], fonte: [], ano: [], competencia: [], saldoBaixo: false };
+  }
+
+  /** Pré-carrega os dados desta tela em segundo plano - ver mesma função em js/sof.js. */
+  async function preCarregar() {
+    try {
+      await Promise.all([
+        Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
+        TelaListas.obterOpcoes('OSS'),
+        TelaListas.obterOpcoes('OBJETO')
+      ]);
+      const params = Object.assign({ page: 1, pageSize: tamanhoPagina }, filtrosPadrao_());
+      await CacheAbas.comRevalidacao('notasEmpenho', params,
+        (opcoes) => Api.chamar('listarNotasEmpenho', params, Object.assign({ silencioso: true }, opcoes)),
+        () => {}
+      );
+    } catch (e) { /* pré-carga é best-effort */ }
+  }
+
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = {
     neFiltroUnidade: 'unidade_id', neFiltroOss: 'oss', neFiltroObjeto: 'objeto',
@@ -199,7 +222,7 @@ const TelaNotasEmpenho = (function () {
     // plano, quando os campos da tela podem já ter mudado.
     competenciasFiltradas_ = filtros.competencia || [];
     ultimoFiltroJson = JSON.stringify(filtros);
-    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: tamanhoPagina }, filtros);
     const resposta = await CacheAbas.comRevalidacao('notasEmpenho', params,
       (opcoes) => Api.chamar('listarNotasEmpenho', params, opcoes),
       aplicarResposta_
@@ -228,15 +251,23 @@ const TelaNotasEmpenho = (function () {
   }
 
   function renderPaginacao() {
-    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoNe').innerHTML = `
       <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="paginacao-tamanho"><label for="neTamanhoPagina">Por página</label>
+        <select id="neTamanhoPagina">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+      </div>
       <div class="botoes">
         <button class="botao" id="nePagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
         <button class="botao" id="nePagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
       </div>`;
     document.getElementById('nePagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('nePagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
+    document.getElementById('neTamanhoPagina').addEventListener('change', function () {
+      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
+      paginaAtual = 1;
+      carregar();
+    });
   }
 
   function seloSituacao_(situacao) {
@@ -1117,5 +1148,5 @@ const TelaNotasEmpenho = (function () {
     });
   }
 
-  return { render };
+  return { render, preCarregar };
 })();

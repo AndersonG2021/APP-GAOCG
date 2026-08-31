@@ -11,6 +11,12 @@
  * Nome escolhido para não colidir com o Map interno privado `cache` de
  * js/api.js - são dois caches diferentes (referência/dropdowns vs. payload
  * principal das abas).
+ *
+ * Desde 2026-08-31 (pedido do usuário: SOF/Notas de Empenho/Recibos/
+ * Unidades "já carregadas" ao entrar no app) o 1º aquecimento de cada
+ * recurso não depende mais do usuário visitar a aba - TelaX.preCarregar()
+ * (chamada em App.mostrarApp) já faz esse "cold path" em segundo plano,
+ * então normalmente já existe snapshot pronto antes mesmo da 1ª visita.
  */
 const CacheAbas = (function () {
   const snapshots = new Map(); // 'recurso:paramsJson' -> { versao, dados }

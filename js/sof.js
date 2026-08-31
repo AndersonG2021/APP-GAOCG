@@ -45,7 +45,12 @@ const TelaSof = (function () {
   let itens = [];
   let paginaAtual = 1;
   let totalRegistros = 0;
-  const TAMANHO_PAGINA = 20;
+  // Tamanho de página escolhível (sessão 2026-08-31, pedido do usuário: 20,
+  // 40, 80, 100 ou Todos) - deixou de ser const. TAMANHO_PAGINA_TODOS_ é o
+  // valor mandado ao backend pra "Todos", mesmo truque de pageSize gigante
+  // já usado nesta tela pra buscar TODAS as unidades pro dropdown.
+  let tamanhoPagina = 20;
+  const TAMANHO_PAGINA_TODOS_ = 100000;
   let sofEmEdicaoId = null;
   let abrindoLinha = false;
   let linhasFontes = [];
@@ -192,6 +197,43 @@ const TelaSof = (function () {
     };
   }
 
+  /**
+   * Mesmo formato "vazio" de filtrosAtuais(), mas sem depender do DOM (que
+   * ainda não existe antes da 1ª renderização) - usada só por preCarregar()
+   * (sessão 2026-08-31, pedido do usuário: aba já carregada ao entrar no
+   * app). Se um campo novo entrar em filtrosAtuais(), replicar aqui com o
+   * valor "vazio" equivalente.
+   */
+  function filtrosPadrao_() {
+    return { busca: '', unidade_id: [], oss: [], objeto: [], tipo_unidade: [], dea: [], fonte: [], ano: [], semNe: false };
+  }
+
+  /**
+   * Pré-carrega os dados desta tela em segundo plano, sem tocar no DOM (a
+   * tela pode nem estar visível ainda - ver App.mostrarApp) - sessão
+   * 2026-08-31, pedido do usuário: SOF já carregada ao entrar no app. Aquece
+   * tanto o cache de Api.chamar (dropdowns, {cache:true}) quanto o snapshot
+   * de CacheAbas (listagem padrão, página 1) - quando o usuário realmente
+   * clicar na aba, render()/carregar() encontram tudo pronto (mesma chave de
+   * cache) e a troca de aba fica instantânea. Best-effort: qualquer falha
+   * aqui é silenciosa - o carregamento normal ao clicar na aba continua
+   * funcionando do mesmo jeito se a pré-carga não der certo.
+   */
+  async function preCarregar() {
+    try {
+      await Promise.all([
+        Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
+        TelaListas.obterOpcoes('OSS'),
+        TelaListas.obterOpcoes('OBJETO')
+      ]);
+      const params = Object.assign({ page: 1, pageSize: tamanhoPagina }, filtrosPadrao_());
+      await CacheAbas.comRevalidacao('sof', params,
+        (opcoes) => Api.chamar('listarSof', params, Object.assign({ silencioso: true }, opcoes)),
+        () => {}
+      );
+    } catch (e) { /* pré-carga é best-effort - ver comentário acima */ }
+  }
+
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = {
     sofFiltroUnidade: 'unidade_id', sofFiltroOss: 'oss', sofFiltroObjeto: 'objeto',
@@ -224,7 +266,7 @@ const TelaSof = (function () {
 
   async function carregarComFiltros_(filtros) {
     ultimoFiltroJson = JSON.stringify(filtros);
-    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: tamanhoPagina }, filtros);
     const resposta = await CacheAbas.comRevalidacao('sof', params,
       (opcoes) => Api.chamar('listarSof', params, opcoes),
       aplicarResposta_
@@ -406,15 +448,23 @@ const TelaSof = (function () {
   }
 
   function renderPaginacao() {
-    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoSof').innerHTML = `
       <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="paginacao-tamanho"><label for="sofTamanhoPagina">Por página</label>
+        <select id="sofTamanhoPagina">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+      </div>
       <div class="botoes">
         <button class="botao" id="sofPagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
         <button class="botao" id="sofPagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
       </div>`;
     document.getElementById('sofPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('sofPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
+    document.getElementById('sofTamanhoPagina').addEventListener('change', function () {
+      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
+      paginaAtual = 1;
+      carregar();
+    });
   }
 
   /**
@@ -2198,5 +2248,5 @@ const TelaSof = (function () {
 </html>`;
   }
 
-  return { render };
+  return { render, preCarregar };
 })();

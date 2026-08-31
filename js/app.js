@@ -601,6 +601,20 @@ const UI = (function () {
     return opcaoInicial + lista.map(c => `<option ${c === valorSelecionado ? 'selected' : ''}>${c}</option>`).join('');
   }
 
+  /**
+   * Opções do seletor "Por página" (sessão 2026-08-31, pedido do usuário: 20,
+   * 40, 80, 100 ou Todos) - reaproveitado por SOF/Notas de Empenho/Recibos/
+   * Unidades, que continuam cada um cuidando do próprio <select> (id,
+   * variável de estado, o que fazer no "change") - só o HTML das opções é
+   * compartilhado, pra manter as 4 telas com a mesma lista sem repetir.
+   * `atual` é o valor numérico corrente (20/40/80/100) OU a string 'todos'.
+   */
+  function opcoesTamanhoPaginaHtml(atual) {
+    const valores = [20, 40, 80, 100];
+    return valores.map(v => `<option value="${v}" ${atual === v ? 'selected' : ''}>${v}</option>`).join('')
+      + `<option value="todos" ${atual === 'todos' ? 'selected' : ''}>Todos</option>`;
+  }
+
   // botaoFecharModal não é mais um elemento fixo (sessão 2026-08-12 - ver
   // construirModalDom_/abrirModal acima) - o listener do X é registrado ali,
   // um por modal criado, não aqui uma vez só no carregamento da página.
@@ -1026,7 +1040,7 @@ const UI = (function () {
   return {
     escaparHtml, mostrarCarregando, esconderCarregando, toast, abrirModal, fecharModal, aoFecharModal, modalFoiEditado, mostrarErro, lerArquivoBase64,
     formatarMoeda, parseValorBr, lerValorCampo, validarCamposMoeda, formatarData, formatarDataBr, rotuloPerfil, calcularPrazoContratoUnidade, corAlertaPrazo,
-    listaCompetencias, listaAnos, opcoesCompetenciaHtml, tornarPesquisavel,
+    listaCompetencias, listaAnos, opcoesCompetenciaHtml, opcoesTamanhoPaginaHtml, tornarPesquisavel,
     criarFiltroMultiplo, valoresFiltroMultiplo, limparFiltroMultiplo, definirValoresFiltroMultiplo,
     atualizarOpcoesFiltroMultiplo, aplicarFacetas, ligarLimpezaFiltros, seloStatusReciboHtml, corStatusReciboEstilo
   };
@@ -1060,6 +1074,26 @@ const App = (function () {
     document.querySelectorAll('.somente-gerente').forEach(el => el.classList.toggle('oculto', !Auth.ehGerente()));
     navegarPara('dashboard');
     verificarTrocaSenhaObrigatoria_();
+    preCarregarAbas_();
+  }
+
+  /**
+   * Pré-carrega SOF/Notas de Empenho/Recibos/Unidades em segundo plano
+   * assim que o app abre (sessão 2026-08-31, pedido do usuário: "as abas...
+   * já sejam carregadas" ao entrar no app - Dashboard já carrega na hora,
+   * por ser a tela inicial de navegarPara acima, sem precisar de nada extra
+   * aqui). Cada TelaX.preCarregar() só aquece caches (Api.chamar com
+   * {cache:true} e CacheAbas) sem tocar no DOM - a troca de aba real
+   * (TELAS[tela] em navegarPara) encontra tudo pronto e fica quase
+   * instantânea. Roda em paralelo, best-effort - cada preCarregar() já
+   * engole os próprios erros, e mesmo se algum falhar por completo a
+   * navegação manual pra aquela aba volta a carregar do zero normalmente,
+   * exatamente como antes desta função existir.
+   */
+  function preCarregarAbas_() {
+    [TelaSof, TelaNotasEmpenho, TelaRecibos, TelaUnidades].forEach(tela => {
+      Promise.resolve().then(() => tela.preCarregar()).catch(() => {});
+    });
   }
 
   /**

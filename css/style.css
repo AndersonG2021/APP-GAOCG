@@ -348,8 +348,11 @@ table.tabela tbody tr.linha-sem-processo:hover { background: #fef3c7; }
 .observacao-recibo-acoes { display: flex; gap: 4px; flex-shrink: 0; }
 .observacao-recibo-nova { margin-top: 4px; }
 
-.paginacao { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--cinza-500); }
+.paginacao { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: var(--cinza-500); gap: 12px; flex-wrap: wrap; }
 .paginacao .botoes { display: flex; gap: 6px; }
+/* Seletor "Por página" (sessão 2026-08-31, pedido do usuário: 20/40/80/100/Todos). */
+.paginacao-tamanho { display: flex; align-items: center; gap: 6px; }
+.paginacao-tamanho select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--cinza-300); background: var(--superficie); color: var(--cinza-900); font-size: 13px; }
 
 /* ===== Select pesquisável (busca em qualquer dropdown com várias opções) ===== */
 .select-pesquisavel { position: relative; }

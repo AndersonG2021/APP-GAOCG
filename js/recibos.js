@@ -8,7 +8,12 @@ const TelaRecibos = (function () {
   let itens = [];
   let paginaAtual = 1;
   let totalRegistros = 0;
-  const TAMANHO_PAGINA = 20;
+  // Tamanho de página escolhível (sessão 2026-08-31) - ver mesma explicação
+  // em js/sof.js. Aqui o valor inicial (antes do 1º render()) é 20 mas
+  // render() troca pra TAMANHO_PAGINA_TODOS_ quando não há competência
+  // explícita vinda de fora - ver comentário no render() abaixo.
+  let tamanhoPagina = 20;
+  const TAMANHO_PAGINA_TODOS_ = 100000;
   let contadorLinhasParcelaDividida = 0;
   let historicoRecibosUnidade = [];
   // Notas de Empenho da unidade selecionada (sessão 2026-07-29) - alimenta o
@@ -217,7 +222,20 @@ const TelaRecibos = (function () {
     UI.criarFiltroMultiplo('recFiltroAno', UI.listaAnos());
     UI.criarFiltroMultiplo('recFiltroFonte', ['TESOURO', 'SUS', 'Outra']);
     UI.criarFiltroMultiplo('recFiltroStatus', statusFiltroOpcoes.map(o => o.valor));
-    if (filtroInicial && filtroInicial.competencia) UI.definirValoresFiltroMultiplo('recFiltroCompetencia', filtroInicial.competencia);
+    // Competência (sessão 2026-08-31, pedido do usuário: "todas as linhas
+    // referente áquele mês já sejam carregadas juntos" ao entrar na aba) -
+    // sem competência explícita vinda de fora (navegação normal pelo menu),
+    // o padrão passa a ser o mês atual, com "Por página" em "Todos" (ver
+    // logo abaixo) - o usuário ainda pode trocar os dois livremente depois.
+    UI.definirValoresFiltroMultiplo('recFiltroCompetencia', (filtroInicial && filtroInicial.competencia) || [mesAtualComoCompetencia_()]);
+    if (!(filtroInicial && filtroInicial.competencia)) {
+      // paginaAtual também precisa voltar pra 1 aqui: ela sobrevive entre
+      // visitas à aba (mesmo princípio de "lembra onde parou" já usado
+      // nesta tela), mas uma página > 1 salva de uma visita anterior com
+      // outro tamanhoPagina ficaria fora do intervalo real com TODOS.
+      tamanhoPagina = TAMANHO_PAGINA_TODOS_;
+      paginaAtual = 1;
+    }
     if (filtroInicial && filtroInicial.status) UI.definirValoresFiltroMultiplo('recFiltroStatus', filtroInicial.status);
     // unidade_id/objeto (Dashboard, painel "Processos do mês" - Metas de
     // Processos): clique numa linha da tabela de metas já navega pra Recibos
@@ -266,6 +284,38 @@ const TelaRecibos = (function () {
     };
   }
 
+  /**
+   * Mesmo formato "vazio" de filtrosAtuais(), sem depender do DOM - ver
+   * mesma função em js/sof.js. Usada só por preCarregar(); competencia já
+   * vem no mês atual e não `[]`, pra bater com o filtro padrão que render()
+   * aplica quando não há competência explícita (ver comentário lá) - senão
+   * a pré-carga aqueceria uma chave de cache que o 1º render() real nunca usa.
+   */
+  function filtrosPadrao_() {
+    return {
+      busca: '', unidade_id: [], oss: [], objeto: [], tipo_unidade: [], dea: [],
+      competencia: [mesAtualComoCompetencia_()], ano: [], fonte: [], status: [],
+      instrumento: '', nota_empenho: '', numero_processo: ''
+    };
+  }
+
+  /** Pré-carrega os dados desta tela em segundo plano - ver mesma função em js/sof.js. */
+  async function preCarregar() {
+    try {
+      await Promise.all([
+        Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
+        carregarOpcoesStatus_(),
+        TelaListas.obterOpcoes('OSS'),
+        TelaListas.obterOpcoes('OBJETO')
+      ]);
+      const params = Object.assign({ page: 1, pageSize: TAMANHO_PAGINA_TODOS_ }, filtrosPadrao_());
+      await CacheAbas.comRevalidacao('recibos', params,
+        (opcoes) => Api.chamar('listarRecibos', params, Object.assign({ silencioso: true }, opcoes)),
+        () => {}
+      );
+    } catch (e) { /* pré-carga é best-effort */ }
+  }
+
   /** Chave de filtrosAtuais() correspondente a cada id de filtro-multiplo da barra - ver aoLimparFiltroIndividual_. */
   const CHAVE_POR_FILTRO_ = {
     recFiltroUnidade: 'unidade_id', recFiltroOss: 'oss', recFiltroObjeto: 'objeto',
@@ -294,7 +344,7 @@ const TelaRecibos = (function () {
 
   async function carregarComFiltros_(filtros) {
     ultimoFiltroJson = JSON.stringify(filtros);
-    const params = Object.assign({ page: paginaAtual, pageSize: TAMANHO_PAGINA }, filtros);
+    const params = Object.assign({ page: paginaAtual, pageSize: tamanhoPagina }, filtros);
     // listarRecibos já devolve os indicadores calculados sobre a mesma leitura/filtro
     // (evita reler a aba Recibos inteira duas vezes numa única troca de aba).
     const resposta = await CacheAbas.comRevalidacao('recibos', params,
@@ -587,15 +637,23 @@ const TelaRecibos = (function () {
   }
 
   function renderPaginacao() {
-    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+    const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoRec').innerHTML = `
       <span>${totalRegistros} registro(s) - página ${paginaAtual} de ${totalPaginas}</span>
+      <div class="paginacao-tamanho"><label for="recTamanhoPagina">Por página</label>
+        <select id="recTamanhoPagina">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+      </div>
       <div class="botoes">
         <button class="botao" id="recPagAnterior" ${paginaAtual <= 1 ? 'disabled' : ''}>Anterior</button>
         <button class="botao" id="recPagProxima" ${paginaAtual >= totalPaginas ? 'disabled' : ''}>Próxima</button>
       </div>`;
     document.getElementById('recPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('recPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
+    document.getElementById('recTamanhoPagina').addEventListener('change', function () {
+      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
+      paginaAtual = 1;
+      carregar();
+    });
   }
 
   /**
@@ -1692,5 +1750,5 @@ const TelaRecibos = (function () {
     }
   }
 
-  return { render };
+  return { render, preCarregar };
 })();
