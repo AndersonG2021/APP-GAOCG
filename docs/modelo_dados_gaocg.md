@@ -152,7 +152,7 @@ Processos de Recibo (Anexo II), incluindo rateio — Funcionalidade 4.
 | `divergente_da_unidade` | boolean | Mesmo conceito da aba `SOF` |
 | `tipo_unidade` | texto | Ex.: UPA, UPAE, Hospital, Carreta |
 | `objeto` | texto | Ex.: "CONTRATO DE GESTÃO (TES)", "PISO ENFERMAGEM" |
-| `instrumento` | texto | Ex.: "022/2022", "4º TA" |
+| `contrato_gestao` | texto | Renomeado de `instrumento` (2026-08-31) - mesmo campo `contrato_gestao` da unidade vinculada (Ex.: "022/2022", "4º TA") |
 | `parcela_contratual` | número | Valor de referência da parcela contratual (usado no alerta de divergência) |
 | `fonte` | enum | `TESOURO`, `SUS`, outra |
 | `nota_empenho` | texto | Número da nota de empenho referente ao pagamento |

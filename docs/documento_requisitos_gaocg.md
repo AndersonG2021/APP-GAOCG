@@ -138,7 +138,7 @@ O GAOCG App substitui as planilhas de Google Sheets hoje usadas para o acompanha
 ### Descrição e fluxo principal
 1. Analista ou gerente acessa a tela de Recibos.
 2. Clica em "Novo processo" e seleciona a unidade (autopreenchimento).
-3. Preenche os campos específicos: tipo de unidade, objeto, instrumento, parcela contratual, fonte, nota de empenho, competência, valor liquidado, valor pago, ordem bancária, número do processo, observação, status.
+3. Preenche os campos específicos: tipo de unidade, objeto, contrato de gestão, parcela contratual, fonte, nota de empenho, competência, valor liquidado, valor pago, ordem bancária, número do processo, observação, status.
 4. Caso o pagamento seja feito por rateio (ex.: 30%/70%), cadastra duas ou mais linhas vinculadas ao mesmo processo/nota de empenho, cada uma com seu percentual e valor.
 5. Salva o processo, que aparece na listagem paginada e filtrável.
 6. Analista ou gerente pode editar, buscar (por qualquer campo) ou filtrar (unidade, OSS, status, competência, fonte) os recibos.

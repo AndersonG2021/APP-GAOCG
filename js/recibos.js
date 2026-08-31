@@ -156,7 +156,7 @@ const TelaRecibos = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Status</label>
             <div id="recFiltroStatus"></div><button type="button" class="filtro-multiplo-x" data-alvo="recFiltroStatus" title="Limpar filtro de Status">&times;</button>
           </div>
-          <div class="campo"><label>Instrumento</label><input id="recFiltroInstrumento" placeholder="Instrumento" /></div>
+          <div class="campo"><label>Contrato de Gestão</label><input id="recFiltroContratoGestao" placeholder="Contrato de Gestão" /></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recFiltroNotaEmpenho" placeholder="Nota de Empenho" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recFiltroNumeroProcesso" placeholder="Nº Processo" /></div>
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
@@ -180,7 +180,7 @@ const TelaRecibos = (function () {
       </div>`;
 
     document.getElementById('btnFiltrarRec').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
-    ['recBusca', 'recFiltroInstrumento', 'recFiltroNotaEmpenho', 'recFiltroNumeroProcesso'].forEach(id => {
+    ['recBusca', 'recFiltroContratoGestao', 'recFiltroNotaEmpenho', 'recFiltroNumeroProcesso'].forEach(id => {
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); }
       });
@@ -289,7 +289,7 @@ const TelaRecibos = (function () {
       ano: UI.valoresFiltroMultiplo('recFiltroAno'),
       fonte: UI.valoresFiltroMultiplo('recFiltroFonte'),
       status: UI.valoresFiltroMultiplo('recFiltroStatus'),
-      instrumento: document.getElementById('recFiltroInstrumento').value.trim(),
+      contrato_gestao: document.getElementById('recFiltroContratoGestao').value.trim(),
       nota_empenho: document.getElementById('recFiltroNotaEmpenho').value.trim(),
       numero_processo: document.getElementById('recFiltroNumeroProcesso').value.trim()
     };
@@ -306,7 +306,7 @@ const TelaRecibos = (function () {
     return {
       busca: '', unidade_id: [], oss: [], objeto: [], tipo_unidade: [], dea: [],
       competencia: [mesAtualComoCompetencia_()], ano: [], fonte: [], status: [],
-      instrumento: '', nota_empenho: '', numero_processo: ''
+      contrato_gestao: '', nota_empenho: '', numero_processo: ''
     };
   }
 
@@ -962,7 +962,7 @@ const TelaRecibos = (function () {
             </select>
             <p class="ajuda">Escolhendo um objeto já usado antes para essa unidade, os campos abaixo são preenchidos com o último lançamento (ou, se ainda não houver Recibo, com a Fonte/Nota de Empenho/Parcela já cadastradas na SOF).</p>
           </div>
-          <div class="campo"><label>Instrumento</label><input id="recInstrumento" /></div>
+          <div class="campo"><label>Contrato de Gestão</label><input id="recContratoGestao" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recParcelaContratual" type="text" inputmode="decimal" class="campo-moeda" /></div>
           <div class="campo"><label>Fonte</label><select id="recFonte"><option value="">-</option><option>TESOURO</option><option>SUS</option><option>Outra</option></select></div>
           <div class="campo"><label>Nota de Empenho</label>
@@ -1004,7 +1004,7 @@ const TelaRecibos = (function () {
       document.getElementById('recOss').value = unidade ? unidade.oss || '' : '';
       document.getElementById('recCnpj').value = unidade ? unidade.cnpj || '' : '';
       document.getElementById('recTipoUnidade').value = unidade ? unidade.tipo || '' : '';
-      document.getElementById('recInstrumento').value = unidade ? unidade.contrato_gestao || '' : '';
+      document.getElementById('recContratoGestao').value = unidade ? unidade.contrato_gestao || '' : '';
       document.getElementById('recParcelaContratual').value = '';
       document.getElementById('recFonte').value = '';
       document.getElementById('recNotaEmpenho').value = '';
@@ -1032,7 +1032,7 @@ const TelaRecibos = (function () {
       const objeto = this.value.trim();
       const ultimoLancamento = historicoRecibosUnidade.find(r => (r.objeto || '').trim().toLowerCase() === objeto.toLowerCase());
       if (ultimoLancamento) {
-        document.getElementById('recInstrumento').value = ultimoLancamento.instrumento || '';
+        document.getElementById('recContratoGestao').value = ultimoLancamento.contrato_gestao || '';
         document.getElementById('recParcelaContratual').value = ultimoLancamento.parcela_contratual || '';
         document.getElementById('recFonte').value = ultimoLancamento.fonte || '';
         document.getElementById('recNotaEmpenho').value = ultimoLancamento.nota_empenho || '';
@@ -1391,7 +1391,7 @@ const TelaRecibos = (function () {
       cnpj_snapshot: document.getElementById('recCnpj').value.trim(),
       tipo_unidade: document.getElementById('recTipoUnidade').value.trim(),
       objeto: document.getElementById('recObjeto').value.trim(),
-      instrumento: document.getElementById('recInstrumento').value.trim(),
+      contrato_gestao: document.getElementById('recContratoGestao').value.trim(),
       parcela_contratual: UI.parseValorBr(document.getElementById('recParcelaContratual').value),
       fonte: document.getElementById('recFonte').value,
       nota_empenho: document.getElementById('recNotaEmpenho').value.trim(),
@@ -1566,7 +1566,7 @@ const TelaRecibos = (function () {
               ${opcoesObjeto.map(o => `<option ${recibo.objeto === o.valor ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
             </select>
           </div>
-          <div class="campo"><label>Instrumento</label><input id="recEdInstrumento" value="${UI.escaparHtml(recibo.instrumento)}" /></div>
+          <div class="campo"><label>Contrato de Gestão</label><input id="recEdContratoGestao" value="${UI.escaparHtml(recibo.contrato_gestao)}" /></div>
           <div class="campo"><label>Parcela Contratual</label><input id="recEdParcelaContratual" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.parcela_contratual}" /></div>
           <div class="campo"><label>Fonte</label><select id="recEdFonte">${['', 'TESOURO', 'SUS', 'Outra'].map(f => `<option ${recibo.fonte === f ? 'selected' : ''}>${f}</option>`).join('')}</select></div>
           <div class="campo"><label>Nota de Empenho</label>
@@ -1692,7 +1692,7 @@ const TelaRecibos = (function () {
       cnpj_snapshot: document.getElementById('recEdCnpj').value.trim(),
       tipo_unidade: document.getElementById('recEdTipoUnidade').value.trim(),
       objeto: document.getElementById('recEdObjeto').value.trim(),
-      instrumento: document.getElementById('recEdInstrumento').value.trim(),
+      contrato_gestao: document.getElementById('recEdContratoGestao').value.trim(),
       parcela_contratual: UI.parseValorBr(document.getElementById('recEdParcelaContratual').value),
       fonte: document.getElementById('recEdFonte').value,
       nota_empenho: document.getElementById('recEdNotaEmpenho').value.trim(),
