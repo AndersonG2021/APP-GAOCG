@@ -159,10 +159,12 @@ const TelaRecibos = (function () {
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
-          <span style="flex:1"></span>
-          <div class="campo"><label>Competência p/ gerar</label><select id="recCompetenciaGerarMeta">${UI.opcoesCompetenciaHtml(mesAtualComoCompetencia_())}</select></div>
-          <button class="botao" id="btnGerarRecibosMeta" title="Cria um card em branco (sem Nº Processo) pra cada meta ativa que ainda não tem recibo nessa competência">Gerar recibos da meta</button>
           <button class="botao" id="btnModoSelecaoLoteRec">Apagar linhas</button>
+          <div class="acao-gerar-meta">
+            <div class="campo"><label>Competência p/ gerar</label><select id="recCompetenciaGerarMeta">${UI.opcoesCompetenciaHtml(mesAtualComoCompetencia_())}</select></div>
+            <button class="botao" id="btnGerarRecibosMeta" title="Cria um card em branco (sem Nº Processo) pra cada meta ativa que ainda não tem recibo nessa competência">Gerar recibos da meta</button>
+          </div>
+          <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
         </div>
         <div class="barra-selecao-lote oculto" id="barraSelecaoLoteRec">

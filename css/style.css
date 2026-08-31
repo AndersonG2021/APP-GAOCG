@@ -287,6 +287,9 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 
 .barra-filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 16px; }
 .barra-filtros .campo { margin-bottom: 0; min-width: 160px; }
+/* Agrupa o seletor de competência com o botão "Gerar recibos da meta" (sessão 2026-08-31, pedido do usuário) - os dois sempre juntos, nunca separados pelo wrap da barra de filtros. */
+.acao-gerar-meta { display: flex; align-items: flex-end; gap: 8px; }
+.acao-gerar-meta .campo { margin-bottom: 0; min-width: 130px; }
 
 /* Legenda de cores do prazo do contrato (sessão 2026-08-24, pedido do usuário) - tela de Unidades. */
 .legenda-prazo-unidades { margin: -8px 0 16px; font-size: 12px; color: var(--cinza-500); }
