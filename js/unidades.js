@@ -19,6 +19,12 @@ const TelaUnidades = (function () {
   let paginaAtual = 1;
   let totalRegistros = 0;
   const TAMANHO_PAGINA = 20;
+  // Exclusão em lote (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
+  // Só unidades ATIVAS entram na seleção (o botão individual equivalente,
+  // "excluir", também só existe pra unidades ativas - inativar de novo uma
+  // já inativa não faz sentido).
+  let modoSelecaoLote = false;
+  let idsSelecionadosLote_ = new Set();
 
   const ICONE_LAPIS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   const ICONE_LIXEIRA = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
@@ -52,6 +58,7 @@ const TelaUnidades = (function () {
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosUni">Limpar filtros</button>
           <span style="flex:1"></span>
           <button class="botao" id="btnGerarRelatorioUni">Gerar Relatório</button>
+          <button class="botao" id="btnModoSelecaoLoteUni">Apagar cards</button>
           <button class="botao primario" id="btnNovaUnidade">+ Nova unidade</button>
         </div>
         <p class="ajuda legenda-prazo-unidades">
@@ -59,12 +66,20 @@ const TelaUnidades = (function () {
           <span class="selo amarelo">Amarelo</span> atenção, até 180 dias ·
           <span class="selo vermelho">Vermelho</span> urgente, até 60 dias ou já vencido
         </p>
+        <div class="barra-selecao-lote oculto" id="barraSelecaoLoteUni">
+          <span id="contagemSelecaoLoteUni">0 selecionado(s)</span>
+          <button type="button" class="botao perigo" id="btnExcluirSelecionadosUni" disabled>Excluir selecionados</button>
+          <button type="button" class="botao" id="btnCancelarSelecaoLoteUni">Cancelar</button>
+        </div>
         <div id="listaUnidades"></div>
         <div class="paginacao" id="paginacaoUni"></div>
       </div>`;
 
     document.getElementById('btnNovaUnidade').addEventListener('click', () => abrirFormulario());
     document.getElementById('btnGerarRelatorioUni').addEventListener('click', abrirGerarRelatorio);
+    document.getElementById('btnModoSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_());
+    document.getElementById('btnCancelarSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_(false));
+    document.getElementById('btnExcluirSelecionadosUni').addEventListener('click', excluirSelecionadosLoteClique_);
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
@@ -211,6 +226,17 @@ const TelaUnidades = (function () {
       </div>`;
   }
 
+  /** Ícones do topo do card: checkbox de seleção em lote (só unidades ativas) ou os botões de sempre (editar/excluir/restaurar). */
+  function acoesCardUnidadeHtml_(u) {
+    if (modoSelecaoLote && u.ativo) {
+      return `<input type="checkbox" class="checkbox-selecao-lote" data-id="${u.id}" ${idsSelecionadosLote_.has(String(u.id)) ? 'checked' : ''} title="Selecionar para excluir" />`;
+    }
+    return `<button type="button" class="botao-icone editar" data-acao="editar" title="Editar">${ICONE_LAPIS}</button>
+      ${u.ativo
+        ? `<button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>`
+        : `<button type="button" class="botao-icone" data-acao="restaurar" title="Restaurar">${ICONE_RESTAURAR}</button>`}`;
+  }
+
   function renderCards() {
     const alvo = document.getElementById('listaUnidades');
     if (!unidades.length) {
@@ -218,13 +244,8 @@ const TelaUnidades = (function () {
       return;
     }
     alvo.innerHTML = `<div class="grade-cards-unidade">${unidades.map(u => `
-      <div class="cartao-unidade ${u.ativo ? '' : 'inativa'}" data-id="${u.id}">
-        <div class="cartao-unidade-acoes">
-          <button type="button" class="botao-icone editar" data-acao="editar" title="Editar">${ICONE_LAPIS}</button>
-          ${u.ativo
-            ? `<button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>`
-            : `<button type="button" class="botao-icone" data-acao="restaurar" title="Restaurar">${ICONE_RESTAURAR}</button>`}
-        </div>
+      <div class="cartao-unidade ${u.ativo ? '' : 'inativa'} ${modoSelecaoLote && u.ativo ? 'em-selecao-lote' : ''}" data-id="${u.id}">
+        <div class="cartao-unidade-acoes">${acoesCardUnidadeHtml_(u)}</div>
         <div class="cartao-unidade-corpo">
           <div class="cartao-unidade-cabecalho">
             <h3>${UI.escaparHtml(u.nome)}</h3>
@@ -240,6 +261,15 @@ const TelaUnidades = (function () {
     alvo.querySelectorAll('.cartao-unidade').forEach(cartao => {
       const id = cartao.dataset.id;
       const unidade = unidades.find(u => u.id === id);
+
+      if (modoSelecaoLote && unidade && unidade.ativo) {
+        const chk = cartao.querySelector('.checkbox-selecao-lote');
+        chk.addEventListener('change', () => {
+          if (chk.checked) idsSelecionadosLote_.add(String(unidade.id)); else idsSelecionadosLote_.delete(String(unidade.id));
+          atualizarBarraSelecaoLote_();
+        });
+        return;
+      }
 
       cartao.querySelector('.cartao-unidade-corpo').addEventListener('click', () => {
         cartao.querySelector('.cartao-unidade-detalhe').classList.toggle('oculto');
@@ -259,6 +289,45 @@ const TelaUnidades = (function () {
         UI.toast('Unidade restaurada.', 'sucesso');
         await carregar();
       });
+    });
+  }
+
+  /** Liga/desliga o modo de seleção em lote (sessão 2026-08-31) - ver mesma função em js/sof.js. */
+  function alternarModoSelecaoLote_(ligar) {
+    modoSelecaoLote = typeof ligar === 'boolean' ? ligar : !modoSelecaoLote;
+    idsSelecionadosLote_.clear();
+    document.getElementById('btnModoSelecaoLoteUni').classList.toggle('ativo', modoSelecaoLote);
+    atualizarBarraSelecaoLote_();
+    renderCards();
+  }
+
+  function atualizarBarraSelecaoLote_() {
+    document.getElementById('barraSelecaoLoteUni').classList.toggle('oculto', !modoSelecaoLote);
+    document.getElementById('contagemSelecaoLoteUni').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
+    document.getElementById('btnExcluirSelecionadosUni').disabled = idsSelecionadosLote_.size === 0;
+  }
+
+  /** Mesmo aviso grande de confirmarExclusao, só que pra várias unidades de uma vez (inativarUnidadesEmLote - reversível, "Restaurar" continua funcionando unidade a unidade). */
+  function excluirSelecionadosLoteClique_() {
+    if (!idsSelecionadosLote_.size) return;
+    const qtd = idsSelecionadosLote_.size;
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtd} UNIDADE(S) E TODOS OS SEUS DADOS? SE FIZER ISSO NENHUM USUÁRIO TERÁ ACESSO A ESSAS INFORMAÇÕES!</p>`;
+    UI.abrirModal('Excluir unidades em lote', corpo,
+      `<button class="botao" id="btnCancelarExclusaoLoteUni">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoLoteUni">Excluir</button>`,
+      { pequeno: true });
+    document.getElementById('btnCancelarExclusaoLoteUni').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnConfirmarExclusaoLoteUni').addEventListener('click', async () => {
+      try {
+        await Api.chamar('inativarUnidadesEmLote', { ids: Array.from(idsSelecionadosLote_) });
+        Api.invalidarCache('listarUnidades');
+        CacheAbas.invalidar('unidades');
+        UI.toast('Unidades excluídas.', 'sucesso');
+        UI.fecharModal();
+        alternarModoSelecaoLote_(false);
+        await carregar();
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
     });
   }
 

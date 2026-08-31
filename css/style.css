@@ -143,6 +143,18 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .botao.perigo { background: var(--vermelho); color: var(--branco); }
 .botao.sucesso { background: var(--verde); color: var(--branco); }
 .botao:disabled { opacity: 0.6; cursor: not-allowed; }
+/* Botão "Apagar cards"/"Apagar linhas" com o modo de seleção em lote ligado (sessão 2026-08-31). */
+.botao.ativo { background: var(--vermelho); color: var(--branco); }
+
+/**
+ * Barra de seleção em lote (sessão 2026-08-31, pedido do usuário: "Apagar
+ * cards" em SOF/Notas de Empenho/Unidades/Recibos) - mesma barra reaproveitada
+ * nas 4 telas, sempre logo abaixo da barra de filtros.
+ */
+.barra-selecao-lote { display: flex; align-items: center; gap: 12px; background: var(--vermelho-claro); border: 1px solid var(--vermelho); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-weight: 600; }
+.barra-selecao-lote span { flex: 1; }
+.checkbox-selecao-lote { width: 20px; height: 20px; cursor: pointer; }
+.em-selecao-lote { outline: 2px dashed var(--vermelho); outline-offset: 2px; }
 
 .campo { margin-bottom: 14px; }
 .campo label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 12.5px; color: var(--cinza-700); }

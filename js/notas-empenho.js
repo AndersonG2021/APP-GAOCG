@@ -21,6 +21,13 @@ const TelaNotasEmpenho = (function () {
   let paginaAtual = 1;
   let totalRegistros = 0;
   const TAMANHO_PAGINA = 20;
+  // Exclusão em lote (sessão 2026-08-31) - ver mesma explicação em js/sof.js.
+  // Diferente de SOF/Unidades/Recibos, cada card aqui é um GRUPO (numero_ne),
+  // não uma linha só - a seleção guarda o numero_ne, e na hora de excluir
+  // resolve pra TODAS as linhas de cada grupo selecionado (grupo.linhas -
+  // mãe + reforços) via excluirGrupoNotaEmpenhoEmLote.
+  let modoSelecaoLote = false;
+  let numerosNeSelecionados_ = new Set();
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `saldoBaixo: true`
@@ -73,8 +80,14 @@ const TelaNotasEmpenho = (function () {
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosNe">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioNe">Gerar Relatório</button>
+          <button class="botao" id="btnModoSelecaoLoteNe">Apagar cards</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovaNe">+ Nova Nota de Empenho</button>
+        </div>
+        <div class="barra-selecao-lote oculto" id="barraSelecaoLoteNe">
+          <span id="contagemSelecaoLoteNe">0 selecionado(s)</span>
+          <button type="button" class="botao perigo" id="btnExcluirSelecionadosNe" disabled>Excluir selecionados</button>
+          <button type="button" class="botao" id="btnCancelarSelecaoLoteNe">Cancelar</button>
         </div>
         <div id="listaNe"></div>
         <div class="paginacao" id="paginacaoNe"></div>
@@ -83,6 +96,9 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('neBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('btnNovaNe').addEventListener('click', abrirModalNovaNe);
     document.getElementById('btnGerarRelatorioNe').addEventListener('click', abrirGerarRelatorio);
+    document.getElementById('btnModoSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_());
+    document.getElementById('btnCancelarSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_(false));
+    document.getElementById('btnExcluirSelecionadosNe').addEventListener('click', excluirSelecionadosLoteClique_);
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_NE_/aplicarResposta_). Substitui o estreitamento
     // antigo, que valia só para Unidade/Tipo/OSS.
@@ -359,8 +375,9 @@ const TelaNotasEmpenho = (function () {
     const cronogramaSolicitado = g.cronograma_solicitado || [];
     const temCronograma = cronograma.length > 0 || cronogramaSolicitado.length > 0;
     return `
-      <div class="cartao-ne ${g.alerta ? 'alerta' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
+      <div class="cartao-ne ${g.alerta ? 'alerta' : ''} ${modoSelecaoLote ? 'em-selecao-lote' : ''}" data-numero="${UI.escaparHtml(g.numero_ne)}">
         <div class="cartao-ne-topo">
+          ${modoSelecaoLote ? `<input type="checkbox" class="checkbox-selecao-lote" data-numero="${UI.escaparHtml(g.numero_ne)}" ${numerosNeSelecionados_.has(g.numero_ne) ? 'checked' : ''} title="Selecionar para excluir" />` : ''}
           <span class="cartao-ne-meta">${ICONE_PASTA} ${UI.escaparHtml(g.objeto || '-')} · SOF ${UI.escaparHtml(g.sof_numero || '-')}</span>
           ${g.alerta ? '<span class="selo vermelho">Saldo abaixo da parcela</span>' : ''}
         </div>
@@ -393,6 +410,16 @@ const TelaNotasEmpenho = (function () {
 
     alvo.querySelectorAll('.cartao-ne').forEach(cartao => {
       const grupo = grupos.find(g => g.numero_ne === cartao.dataset.numero);
+
+      if (modoSelecaoLote) {
+        const chk = cartao.querySelector('.checkbox-selecao-lote');
+        chk.addEventListener('change', () => {
+          if (chk.checked) numerosNeSelecionados_.add(chk.dataset.numero); else numerosNeSelecionados_.delete(chk.dataset.numero);
+          atualizarBarraSelecaoLote_();
+        });
+        return;
+      }
+
       cartao.querySelector('[data-acao="reforco"]').addEventListener('click', () => abrirModalReforco(grupo));
       const linkCronograma = cartao.querySelector('.cartao-ne-ver-cronograma');
       if (linkCronograma) linkCronograma.addEventListener('click', e => {
@@ -408,6 +435,54 @@ const TelaNotasEmpenho = (function () {
           excluirReforcoClique_(btn.dataset.ids.split(','));
         });
       });
+    });
+  }
+
+  /** Liga/desliga o modo de seleção em lote (sessão 2026-08-31) - ver mesma função em js/sof.js. */
+  function alternarModoSelecaoLote_(ligar) {
+    modoSelecaoLote = typeof ligar === 'boolean' ? ligar : !modoSelecaoLote;
+    numerosNeSelecionados_.clear();
+    document.getElementById('btnModoSelecaoLoteNe').classList.toggle('ativo', modoSelecaoLote);
+    atualizarBarraSelecaoLote_();
+    renderCards();
+  }
+
+  function atualizarBarraSelecaoLote_() {
+    document.getElementById('barraSelecaoLoteNe').classList.toggle('oculto', !modoSelecaoLote);
+    document.getElementById('contagemSelecaoLoteNe').textContent = `${numerosNeSelecionados_.size} selecionado(s)`;
+    document.getElementById('btnExcluirSelecionadosNe').disabled = numerosNeSelecionados_.size === 0;
+  }
+
+  /**
+   * Exclui vários cards de NE inteiros de uma vez (sessão 2026-08-31) - cada
+   * card selecionado é um GRUPO (mãe + reforços); junta as ids de TODAS as
+   * linhas de cada grupo selecionado (grupo.linhas) antes de mandar pro
+   * backend, que exclui tudo junto (excluirGrupoNotaEmpenhoEmLote).
+   */
+  function excluirSelecionadosLoteClique_() {
+    if (!numerosNeSelecionados_.size) return;
+    const qtdCards = numerosNeSelecionados_.size;
+    const idsParaExcluir = grupos
+      .filter(g => numerosNeSelecionados_.has(g.numero_ne))
+      .flatMap(g => (g.linhas || []).map(l => l.id));
+    if (!idsParaExcluir.length) return;
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtdCards} NOTA(S) DE EMPENHO (COM TODOS OS SEUS REFORÇOS)? A EXCLUSÃO PODE SER REVERTIDA APENAS POR UM ADMINISTRADOR DIRETAMENTE NA PLANILHA.</p>`;
+    UI.abrirModal('Excluir Notas de Empenho em lote', corpo,
+      `<button class="botao" id="btnCancelarExclusaoLoteNe">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoLoteNe">Excluir</button>`,
+      { pequeno: true });
+    document.getElementById('btnCancelarExclusaoLoteNe').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnConfirmarExclusaoLoteNe').addEventListener('click', async () => {
+      try {
+        await Api.chamar('excluirGrupoNotaEmpenhoEmLote', { ids: idsParaExcluir });
+        CacheAbas.invalidar('notasEmpenho');
+        CacheAbas.invalidar('sof');
+        UI.toast('Notas de Empenho excluídas.', 'sucesso');
+        UI.fecharModal();
+        alternarModoSelecaoLote_(false);
+        await carregar();
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
     });
   }
 

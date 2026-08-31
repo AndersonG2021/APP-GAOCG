@@ -67,6 +67,12 @@ const TelaSof = (function () {
   // com o arquivo mesmo que a leitura automática tenha falhado.
   let arquivoNeDriveIdMiniform_ = null;
   let arquivoNeUrlMiniform_ = null;
+  // Exclusão em lote (sessão 2026-08-31, pedido do usuário: botão "Apagar
+  // cards"): modoSelecaoLote liga/desliga os checkboxes nos cards;
+  // idsSelecionadosLote_ guarda os ids marcados enquanto o modo está ativo -
+  // zerado sempre que o modo é ligado/desligado ou a listagem recarrega.
+  let modoSelecaoLote = false;
+  let idsSelecionadosLote_ = new Set();
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `semNe: true`
@@ -116,8 +122,14 @@ const TelaSof = (function () {
           <button class="botao" id="btnFiltrarSof">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosSof">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioSof">Gerar Relatório</button>
+          <button class="botao" id="btnModoSelecaoLoteSof">Apagar cards</button>
           <span style="flex:1"></span>
           <button class="botao primario" id="btnNovoSof">+ Nova SOF</button>
+        </div>
+        <div class="barra-selecao-lote oculto" id="barraSelecaoLoteSof">
+          <span id="contagemSelecaoLoteSof">0 selecionado(s)</span>
+          <button type="button" class="botao perigo" id="btnExcluirSelecionadosSof" disabled>Excluir selecionados</button>
+          <button type="button" class="botao" id="btnCancelarSelecaoLoteSof">Cancelar</button>
         </div>
         <div id="listaSof"></div>
         <div class="paginacao" id="paginacaoSof"></div>
@@ -132,6 +144,9 @@ const TelaSof = (function () {
       try { await abrirFormulario(); } finally { this.disabled = false; }
     });
     document.getElementById('btnGerarRelatorioSof').addEventListener('click', abrirGerarRelatorio);
+    document.getElementById('btnModoSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_());
+    document.getElementById('btnCancelarSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_(false));
+    document.getElementById('btnExcluirSelecionadosSof').addEventListener('click', excluirSelecionadosLoteClique_);
     document.getElementById('sofFiltroSemNe').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     // Estas são as opções INICIAIS. A partir da primeira carga, todas as listas
     // passam a vir das facetas do backend (ver FACETAS_SOF_/aplicarResposta_):
@@ -249,10 +264,12 @@ const TelaSof = (function () {
     const pct = percentualAndamento(s);
     const fontesTexto = (s.fontes || []).map(f => f.fonte).filter(Boolean).join(', ');
     return `
-      <div class="cartao-sof" data-id="${s.id}">
+      <div class="cartao-sof ${modoSelecaoLote ? 'em-selecao-lote' : ''}" data-id="${s.id}">
         <div class="cartao-sof-topo">
           <div class="cartao-sof-topo-acoes">
-            <button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>
+            ${modoSelecaoLote
+              ? `<input type="checkbox" class="checkbox-selecao-lote" data-id="${s.id}" ${idsSelecionadosLote_.has(String(s.id)) ? 'checked' : ''} title="Selecionar para excluir" />`
+              : `<button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>`}
           </div>
         </div>
         <h3 class="cartao-sof-titulo">${UI.escaparHtml(s.sof_numero || '-')}</h3>
@@ -279,6 +296,14 @@ const TelaSof = (function () {
   }
 
   function ligarEventosCartaoSof_(cartaoEl, sof) {
+    if (modoSelecaoLote) {
+      const chk = cartaoEl.querySelector('.checkbox-selecao-lote');
+      chk.addEventListener('change', () => {
+        if (chk.checked) idsSelecionadosLote_.add(String(sof.id)); else idsSelecionadosLote_.delete(String(sof.id));
+        atualizarBarraSelecaoLote_();
+      });
+      return;
+    }
     cartaoEl.querySelector('.botao-icone.excluir').addEventListener('click', () => excluirSofClique(sof));
     cartaoEl.querySelector('[data-acao="abrir"]').addEventListener('click', () => abrirSofExistente(sof.id));
     cartaoEl.querySelectorAll('.stepper-marcador').forEach(btn => {
@@ -323,6 +348,48 @@ const TelaSof = (function () {
     } catch (err) {
       UI.toast(err.message, 'erro');
     }
+  }
+
+  /**
+   * Liga/desliga o modo de seleção em lote (sessão 2026-08-31). `ligar`
+   * omitido alterna o estado atual; passar true/false força um dos dois
+   * (usado por "Cancelar" e depois de excluir com sucesso).
+   */
+  function alternarModoSelecaoLote_(ligar) {
+    modoSelecaoLote = typeof ligar === 'boolean' ? ligar : !modoSelecaoLote;
+    idsSelecionadosLote_.clear();
+    document.getElementById('btnModoSelecaoLoteSof').classList.toggle('ativo', modoSelecaoLote);
+    atualizarBarraSelecaoLote_();
+    renderCards();
+  }
+
+  function atualizarBarraSelecaoLote_() {
+    document.getElementById('barraSelecaoLoteSof').classList.toggle('oculto', !modoSelecaoLote);
+    document.getElementById('contagemSelecaoLoteSof').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
+    document.getElementById('btnExcluirSelecionadosSof').disabled = idsSelecionadosLote_.size === 0;
+  }
+
+  /** Mesmo padrão de aviso-exclusao já usado em Unidades (confirmarExclusao, js/unidades.js), aqui pra excluir vários processos de SOF de uma vez. */
+  function excluirSelecionadosLoteClique_() {
+    if (!idsSelecionadosLote_.size) return;
+    const qtd = idsSelecionadosLote_.size;
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtd} PROCESSO(S) DE SOF? A EXCLUSÃO PODE SER REVERTIDA APENAS POR UM ADMINISTRADOR DIRETAMENTE NA PLANILHA.</p>`;
+    UI.abrirModal('Excluir processos em lote', corpo,
+      `<button class="botao" id="btnCancelarExclusaoLoteSof">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoLoteSof">Excluir</button>`,
+      { pequeno: true });
+    document.getElementById('btnCancelarExclusaoLoteSof').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnConfirmarExclusaoLoteSof').addEventListener('click', async () => {
+      try {
+        await Api.chamar('excluirSofEmLote', { ids: Array.from(idsSelecionadosLote_) });
+        CacheAbas.invalidar('sof');
+        UI.toast('Processos excluídos.', 'sucesso');
+        UI.fecharModal();
+        alternarModoSelecaoLote_(false);
+        await carregar();
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
+    });
   }
 
   async function excluirSofClique(sof) {

@@ -22,6 +22,14 @@ const TelaRecibos = (function () {
   let objetosSofDaUnidadeNovo = [];
   let abrindoLinha = false;
   let ultimoFiltroJson = null;
+  // Exclusão em lote (sessão 2026-08-31) - ver mesma explicação em
+  // js/sof.js. Aqui a unidade de seleção é a LINHA (mesma granularidade do
+  // botão de excluir individual já existente - inclusive dentro de um card
+  // de parcela dividida, cada parcela é sua própria linha/seleção), não o
+  // processo/grupo inteiro - "aba de recibo, seria sim apagar a(as)
+  // linha(as) referente áquele recibo" (pedido do usuário).
+  let modoSelecaoLote = false;
+  let idsSelecionadosLote_ = new Set();
   const MESES_ABREV_COMPETENCIA_ = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   /** "ago.26" pro mês corrente - valor inicial do seletor de "Gerar recibos da meta" (mesmo formato de UI.listaCompetencias). */
   function mesAtualComoCompetencia_() {
@@ -149,7 +157,13 @@ const TelaRecibos = (function () {
           <span style="flex:1"></span>
           <div class="campo"><label>Competência p/ gerar</label><select id="recCompetenciaGerarMeta">${UI.opcoesCompetenciaHtml(mesAtualComoCompetencia_())}</select></div>
           <button class="botao" id="btnGerarRecibosMeta" title="Cria um card em branco (sem Nº Processo) pra cada meta ativa que ainda não tem recibo nessa competência">Gerar recibos da meta</button>
+          <button class="botao" id="btnModoSelecaoLoteRec">Apagar linhas</button>
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
+        </div>
+        <div class="barra-selecao-lote oculto" id="barraSelecaoLoteRec">
+          <span id="contagemSelecaoLoteRec">0 selecionado(s)</span>
+          <button type="button" class="botao perigo" id="btnExcluirSelecionadosRec" disabled>Excluir selecionados</button>
+          <button type="button" class="botao" id="btnCancelarSelecaoLoteRec">Cancelar</button>
         </div>
         <div id="listaRecibos"></div>
         <div class="paginacao" id="paginacaoRec"></div>
@@ -188,6 +202,9 @@ const TelaRecibos = (function () {
         this.disabled = false;
       }
     });
+    document.getElementById('btnModoSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_());
+    document.getElementById('btnCancelarSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_(false));
+    document.getElementById('btnExcluirSelecionadosRec').addEventListener('click', excluirSelecionadosLoteClique_);
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_REC_/aplicarResposta_). Substitui o estreitamento
     // antigo, que valia só para Unidade/Tipo/OSS.
@@ -409,6 +426,14 @@ const TelaRecibos = (function () {
     return `${r.ultima_observacao.autor_nome} · ${UI.formatarData(r.ultima_observacao.data)}${extra}`;
   }
 
+  /** 1ª célula de cada linha (tabela simples ou dentro de um card de parcela dividida): checkbox de seleção em lote, ou o botão de excluir de sempre. */
+  function celulaAcaoLinhaRecibo_(id) {
+    if (modoSelecaoLote) {
+      return `<input type="checkbox" class="checkbox-selecao-lote" data-id="${id}" ${idsSelecionadosLote_.has(String(id)) ? 'checked' : ''} title="Selecionar para excluir" />`;
+    }
+    return `<button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button>`;
+  }
+
   function linhaReciboHtml_(r) {
     const unidade = unidades.find(u => u.id === r.unidade_id);
     // Destaque (sessão 2026-08-27, pedido do usuário): sem Nº Processo
@@ -418,7 +443,7 @@ const TelaRecibos = (function () {
     // usada em SOF, cor diferente pra não confundir os dois avisos).
     const classeDestaque = r.numero_processo ? '' : 'linha-sem-processo';
     return `<tr data-id="${r.id}" class="${classeDestaque}">
-      <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
+      <td>${celulaAcaoLinhaRecibo_(r.id)}</td>
       <td>${UI.escaparHtml(unidade ? unidade.nome : r.unidade_id)}</td>
       <td>${UI.escaparHtml(r.objeto || '-')}</td>
       <td>${UI.escaparHtml(r.numero_processo)}</td>
@@ -479,7 +504,7 @@ const TelaRecibos = (function () {
             <thead><tr><th></th><th>Parcela</th><th>Valor Liquidado</th><th>Valor Pago</th><th>Ordem Bancária</th><th>Status</th></tr></thead>
             <tbody>${ordenadas.map(r => `
               <tr data-id="${r.id}">
-                <td><button type="button" class="botao-icone excluir" data-acao="excluir" title="Excluir">${ICONE_LIXEIRA}</button></td>
+                <td>${celulaAcaoLinhaRecibo_(r.id)}</td>
                 <td>${r.percentual_parcela_dividida !== '' && r.percentual_parcela_dividida !== undefined ? UI.escaparHtml(String(r.percentual_parcela_dividida)) + '%' : '-'}</td>
                 <td>${UI.formatarMoeda(r.valor_liquidado)}</td>
                 <td>${UI.formatarMoeda(r.valor_pago)}${r.alerta_divergencia_valores ? ` <span class="selo vermelho" title="${UI.escaparHtml(descricaoDivergenciaValores_(r, ordenadas))}">!</span>` : ''}</td>
@@ -535,6 +560,15 @@ const TelaRecibos = (function () {
     alvo.innerHTML = partes.join('');
 
     alvo.querySelectorAll('tr[data-id]').forEach(tr => {
+      if (modoSelecaoLote) {
+        const chk = tr.querySelector('.checkbox-selecao-lote');
+        chk.addEventListener('click', e => e.stopPropagation());
+        chk.addEventListener('change', () => {
+          if (chk.checked) idsSelecionadosLote_.add(tr.dataset.id); else idsSelecionadosLote_.delete(tr.dataset.id);
+          atualizarBarraSelecaoLote_();
+        });
+        return;
+      }
       tr.addEventListener('click', () => abrirReciboExistente(tr.dataset.id));
       tr.querySelector('[data-acao="excluir"]').addEventListener('click', e => {
         e.stopPropagation();
@@ -614,6 +648,44 @@ const TelaRecibos = (function () {
   }
 
   /** Confirmação grande e em destaque - exclusão é lógica (excluido=true), mesmo padrão de confirmarExclusao em js/unidades.js. */
+  /** Liga/desliga o modo de seleção em lote (sessão 2026-08-31) - ver mesma função em js/sof.js. */
+  function alternarModoSelecaoLote_(ligar) {
+    modoSelecaoLote = typeof ligar === 'boolean' ? ligar : !modoSelecaoLote;
+    idsSelecionadosLote_.clear();
+    document.getElementById('btnModoSelecaoLoteRec').classList.toggle('ativo', modoSelecaoLote);
+    atualizarBarraSelecaoLote_();
+    renderTabela();
+  }
+
+  function atualizarBarraSelecaoLote_() {
+    document.getElementById('barraSelecaoLoteRec').classList.toggle('oculto', !modoSelecaoLote);
+    document.getElementById('contagemSelecaoLoteRec').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
+    document.getElementById('btnExcluirSelecionadosRec').disabled = idsSelecionadosLote_.size === 0;
+  }
+
+  /** Mesmo aviso grande de confirmarExclusaoRecibo, só que pra várias linhas de uma vez (excluirRecibosEmLote). */
+  function excluirSelecionadosLoteClique_() {
+    if (!idsSelecionadosLote_.size) return;
+    const qtd = idsSelecionadosLote_.size;
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtd} LINHA(S) DE RECIBO?</p>`;
+    UI.abrirModal('Excluir recibos em lote', corpo,
+      `<button class="botao" id="btnCancelarExclusaoLoteRec">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoLoteRec">Excluir</button>`,
+      { pequeno: true });
+    document.getElementById('btnCancelarExclusaoLoteRec').addEventListener('click', UI.fecharModal);
+    document.getElementById('btnConfirmarExclusaoLoteRec').addEventListener('click', async () => {
+      try {
+        await Api.chamar('excluirRecibosEmLote', { ids: Array.from(idsSelecionadosLote_) });
+        CacheAbas.invalidar('recibos');
+        UI.toast('Recibos excluídos.', 'sucesso');
+        UI.fecharModal();
+        alternarModoSelecaoLote_(false);
+        await carregar();
+      } catch (err) {
+        UI.toast(err.message, 'erro');
+      }
+    });
+  }
+
   function confirmarExclusaoRecibo(id) {
     const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ESSE PROCESSO?</p>`;
     UI.abrirModal('Excluir recibo', corpo,
