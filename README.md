@@ -68,7 +68,23 @@ RELATORIO_LENTIDAO_SOF.md   Diagnóstico de performance (referenciado a partir d
 3. "Executar como": **Eu** (o usuário que está implantando) — assim o script sempre acessa a planilha com a permissão de quem publicou, independentemente de quem está usando o app.
 4. "Quem tem acesso": **Qualquer pessoa**.
 5. Clique em **Implantar** e copie a URL gerada (termina em `/exec`).
-6. Sempre que o código do backend for alterado, é preciso criar uma **nova versão** da implantação (Implantar > Gerenciar implantações > editar > Nova versão) para que as mudanças entrem em vigor na URL publicada.
+6. Sempre que o código do backend for alterado, é preciso criar uma **nova versão** da implantação (Implantar > Gerenciar implantações > editar > Nova versão) para que as mudanças entrem em vigor na URL publicada — ou use o `clasp` (seção 2.1), que faz os passos 5-6 por linha de comando.
+
+### 2.1. Atualizações seguintes via `clasp` (opcional, mais rápido que colar no editor)
+
+Depois da configuração inicial acima (que só acontece uma vez), toda alteração *seguinte* no backend pode ser publicada sem abrir o editor do Apps Script, usando o [`clasp`](https://github.com/google/clasp) (CLI oficial do Google):
+
+1. `npm install -g @google/clasp` (precisa de Node.js).
+2. `clasp login` — abre o navegador para autorizar com a conta Google que tem acesso ao projeto do Apps Script.
+3. Copie `backend/.clasp.json.example` para `backend/.clasp.json` (fica de fora do git — é config de máquina/pessoa, não do projeto) e cole o **Script ID** do projeto (`script.google.com`, projeto aberto → ⚙️ Configurações do projeto → seção IDs).
+4. `clasp deployments` (de dentro de `backend/`) lista as implantações existentes — identifique a que corresponde à URL publicada (o trecho depois de `/macros/s/` e antes de `/exec` na URL é o ID da implantação, começa com `AKfycb...`).
+5. Pra publicar uma alteração: de dentro de `backend/`,
+   ```
+   clasp push --force
+   clasp version "descrição da mudança"
+   clasp redeploy <ID_DA_IMPLANTACAO> -V <número da versão criada no passo anterior> -d "descrição da mudança"
+   ```
+   O `push` sozinho só atualiza o conteúdo "HEAD" (visível no editor) - sem `version` + `redeploy`, a URL publicada continua servindo a versão antiga.
 
 ### 3. Configurar o frontend
 
