@@ -8,7 +8,7 @@
 
 const TelaRelatorios = (function () {
   const FILTROS_POR_FONTE_ = {
-    recibos: ['competencia', 'oss', 'unidade', 'tipo_unidade', 'fonte', 'status', 'semNumeroProcesso'],
+    recibos: ['competencia', 'oss', 'unidade', 'tipo_unidade', 'fonte', 'status'],
     notasEmpenho: ['oss', 'unidade', 'tipo_unidade', 'fonte'],
     sof: ['oss', 'unidade', 'tipo_unidade'],
     unidades: ['oss', 'tipo_unidade']
@@ -157,13 +157,6 @@ const TelaRelatorios = (function () {
     if (disp.indexOf('tipo_unidade') !== -1) html += filtroMultiploCampo_('Tipo de unidade', 'relFiltroTipoUnidade');
     if (disp.indexOf('fonte') !== -1) html += filtroMultiploCampo_('Fonte', 'relFiltroFonte');
     if (disp.indexOf('status') !== -1) html += filtroMultiploCampo_('Status', 'relFiltroStatus');
-    // semNumeroProcesso (sessão 2026-08-31, pedido do usuário: "relatórios de
-    // não recebimento de recibos") - único filtro booleano do assistente até
-    // agora (os demais são multi-seleção) - por isso não usa
-    // filtroMultiploCampo_/criarFiltroMultiplo, só um checkbox comum.
-    if (disp.indexOf('semNumeroProcesso') !== -1) {
-      html += `<div class="campo" style="align-self:center"><label class="rotulo-checkbox" style="white-space:nowrap"><input type="checkbox" id="relFiltroSemNumeroProcesso" /> Somente sem Nº Processo (não recebidos)</label></div>`;
-    }
     document.getElementById('relFiltros').innerHTML = html;
 
     if (disp.indexOf('oss') !== -1) UI.criarFiltroMultiplo('relFiltroOss', state.opcoes.oss);
@@ -201,7 +194,6 @@ const TelaRelatorios = (function () {
     if (disp.indexOf('tipo_unidade') !== -1) filtros.tipo_unidade = UI.valoresFiltroMultiplo('relFiltroTipoUnidade');
     if (disp.indexOf('fonte') !== -1) filtros.fonte = UI.valoresFiltroMultiplo('relFiltroFonte');
     if (disp.indexOf('status') !== -1) filtros.status = UI.valoresFiltroMultiplo('relFiltroStatus');
-    if (disp.indexOf('semNumeroProcesso') !== -1) filtros.semNumeroProcesso = document.getElementById('relFiltroSemNumeroProcesso').checked;
     const radioFmt = document.querySelector('input[name=relFormato]:checked');
     return {
       fonte, filtros, colunas: cols,
@@ -227,7 +219,6 @@ const TelaRelatorios = (function () {
     if (f.tipo_unidade) UI.definirValoresFiltroMultiplo('relFiltroTipoUnidade', f.tipo_unidade);
     if (f.fonte) UI.definirValoresFiltroMultiplo('relFiltroFonte', f.fonte);
     if (f.status) UI.definirValoresFiltroMultiplo('relFiltroStatus', f.status);
-    if (document.getElementById('relFiltroSemNumeroProcesso')) document.getElementById('relFiltroSemNumeroProcesso').checked = !!f.semNumeroProcesso;
     document.getElementById('relAgrupar').value = config.agruparPor || '';
     document.getElementById('relIncluirGrafico').checked = !!config.incluirGrafico;
     const fmt = document.querySelector('input[name=relFormato][value="' + (config.formato || 'tela') + '"]');
