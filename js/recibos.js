@@ -159,6 +159,7 @@ const TelaRecibos = (function () {
           <div class="campo"><label>Contrato de Gestão</label><input id="recFiltroContratoGestao" placeholder="Contrato de Gestão" /></div>
           <div class="campo"><label>Nota de Empenho</label><input id="recFiltroNotaEmpenho" placeholder="Nota de Empenho" /></div>
           <div class="campo"><label>Nº Processo</label><input id="recFiltroNumeroProcesso" placeholder="Nº Processo" /></div>
+          <label style="align-self:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="recFiltroSemNumeroProcesso" /> Somente sem Nº Processo (não recebidos)</label>
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
@@ -190,6 +191,7 @@ const TelaRecibos = (function () {
       try { await abrirFormularioNovo(); } finally { this.disabled = false; }
     });
     document.getElementById('btnGerarRelatorioRec').addEventListener('click', abrirGerarRelatorio);
+    document.getElementById('recFiltroSemNumeroProcesso').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnGerarRecibosMeta').addEventListener('click', async function () {
       const competencia = document.getElementById('recCompetenciaGerarMeta').value;
       if (!competencia) { UI.toast('Escolha a competência.', 'erro'); return; }
@@ -291,7 +293,14 @@ const TelaRecibos = (function () {
       status: UI.valoresFiltroMultiplo('recFiltroStatus'),
       contrato_gestao: document.getElementById('recFiltroContratoGestao').value.trim(),
       nota_empenho: document.getElementById('recFiltroNotaEmpenho').value.trim(),
-      numero_processo: document.getElementById('recFiltroNumeroProcesso').value.trim()
+      numero_processo: document.getElementById('recFiltroNumeroProcesso').value.trim(),
+      // semNumeroProcesso (sessão 2026-08-31, pedido do usuário: "relatórios
+      // de não recebimento de recibos... quais recibos ainda não têm...
+      // número dos processos cadastrados") - mesmo padrão do "Sem NE
+      // emitida" da SOF (sofFiltroSemNe). Recibo só conta como "recebido"
+      // quando numero_processo está preenchido (ver dashboardMetasProcessos_,
+      // Dashboard.gs) - este filtro isola exatamente os que ainda faltam.
+      semNumeroProcesso: document.getElementById('recFiltroSemNumeroProcesso').checked
     };
   }
 
@@ -306,7 +315,7 @@ const TelaRecibos = (function () {
     return {
       busca: '', unidade_id: [], oss: [], objeto: [], tipo_unidade: [], dea: [],
       competencia: [mesAtualComoCompetencia_()], ano: [], fonte: [], status: [],
-      contrato_gestao: '', nota_empenho: '', numero_processo: ''
+      contrato_gestao: '', nota_empenho: '', numero_processo: '', semNumeroProcesso: false
     };
   }
 
