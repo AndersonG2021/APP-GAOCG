@@ -8,10 +8,10 @@
 
 const TelaRelatorios = (function () {
   const FILTROS_POR_FONTE_ = {
-    recibos: ['competencia', 'oss', 'unidade', 'fonte', 'status'],
-    notasEmpenho: ['oss', 'unidade', 'fonte'],
-    sof: ['oss', 'unidade'],
-    unidades: ['oss']
+    recibos: ['competencia', 'oss', 'unidade', 'tipo_unidade', 'fonte', 'status'],
+    notasEmpenho: ['oss', 'unidade', 'tipo_unidade', 'fonte'],
+    sof: ['oss', 'unidade', 'tipo_unidade'],
+    unidades: ['oss', 'tipo_unidade']
   };
   const ROTULO_DIMENSAO_ = { oss: 'OSS', unidade: 'Unidade', fonte: 'Fonte' };
   const OPCOES_FONTE_ = ['TESOURO', 'SUS', 'Outra'];
@@ -30,6 +30,11 @@ const TelaRelatorios = (function () {
     ]);
     cat.fontes.forEach(f => { state.catalogo[f.fonte] = f; });
     state.opcoes.unidades = (unidades.items || []).map(u => ({ valor: u.id, rotulo: u.nome }));
+    // tipoUnidade (sessão 2026-08-31, pedido do usuário: filtro por Tipo de
+    // Unidade no assistente) - mesmo princípio já usado em SOF/NE/Recibos
+    // (tiposUnidade = Array.from(new Set(unidades.map...))): deriva dos
+    // valores realmente cadastrados, em vez de uma lista fixa à parte.
+    state.opcoes.tipoUnidade = Array.from(new Set((unidades.items || []).map(u => u.tipo).filter(Boolean))).sort();
     state.opcoes.oss = (oss || []).map(o => o.valor);
     state.opcoes.status = (status || []).map(o => o.valor);
     state.modelos = modelos || [];
@@ -149,12 +154,14 @@ const TelaRelatorios = (function () {
     }
     if (disp.indexOf('oss') !== -1) html += filtroMultiploCampo_('OSS', 'relFiltroOss');
     if (disp.indexOf('unidade') !== -1) html += filtroMultiploCampo_('Unidade', 'relFiltroUnidade');
+    if (disp.indexOf('tipo_unidade') !== -1) html += filtroMultiploCampo_('Tipo de unidade', 'relFiltroTipoUnidade');
     if (disp.indexOf('fonte') !== -1) html += filtroMultiploCampo_('Fonte', 'relFiltroFonte');
     if (disp.indexOf('status') !== -1) html += filtroMultiploCampo_('Status', 'relFiltroStatus');
     document.getElementById('relFiltros').innerHTML = html;
 
     if (disp.indexOf('oss') !== -1) UI.criarFiltroMultiplo('relFiltroOss', state.opcoes.oss);
     if (disp.indexOf('unidade') !== -1) UI.criarFiltroMultiplo('relFiltroUnidade', state.opcoes.unidades);
+    if (disp.indexOf('tipo_unidade') !== -1) UI.criarFiltroMultiplo('relFiltroTipoUnidade', state.opcoes.tipoUnidade);
     if (disp.indexOf('fonte') !== -1) UI.criarFiltroMultiplo('relFiltroFonte', OPCOES_FONTE_);
     if (disp.indexOf('status') !== -1) UI.criarFiltroMultiplo('relFiltroStatus', state.opcoes.status);
   }
@@ -184,6 +191,7 @@ const TelaRelatorios = (function () {
     }
     if (disp.indexOf('oss') !== -1) filtros.oss = UI.valoresFiltroMultiplo('relFiltroOss');
     if (disp.indexOf('unidade') !== -1) filtros.unidade_id = UI.valoresFiltroMultiplo('relFiltroUnidade');
+    if (disp.indexOf('tipo_unidade') !== -1) filtros.tipo_unidade = UI.valoresFiltroMultiplo('relFiltroTipoUnidade');
     if (disp.indexOf('fonte') !== -1) filtros.fonte = UI.valoresFiltroMultiplo('relFiltroFonte');
     if (disp.indexOf('status') !== -1) filtros.status = UI.valoresFiltroMultiplo('relFiltroStatus');
     const radioFmt = document.querySelector('input[name=relFormato]:checked');
@@ -208,6 +216,7 @@ const TelaRelatorios = (function () {
     if (document.getElementById('relCompFim')) document.getElementById('relCompFim').value = f.competenciaFim || '';
     if (f.oss) UI.definirValoresFiltroMultiplo('relFiltroOss', f.oss);
     if (f.unidade_id) UI.definirValoresFiltroMultiplo('relFiltroUnidade', f.unidade_id);
+    if (f.tipo_unidade) UI.definirValoresFiltroMultiplo('relFiltroTipoUnidade', f.tipo_unidade);
     if (f.fonte) UI.definirValoresFiltroMultiplo('relFiltroFonte', f.fonte);
     if (f.status) UI.definirValoresFiltroMultiplo('relFiltroStatus', f.status);
     document.getElementById('relAgrupar').value = config.agruparPor || '';
