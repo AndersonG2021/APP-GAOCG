@@ -49,6 +49,9 @@ const TelaNotasEmpenho = (function () {
       <div class="painel">
         <p class="ajuda">Cada card agrupa a Nota de Empenho original e seus reforços pelo número. O valor atual já desconta o que foi liquidado nos Recibos vinculados a essa NE.</p>
         <div class="barra-filtros">
+          <div class="campo campo-tamanho-pagina"><label>Itens por página</label>
+            <select id="neTamanhoPaginaTopo">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+          </div>
           <div class="campo campo-busca-livre"><label>Busca livre</label>
             <input type="text" id="neBusca" placeholder="número, SEI, valor..." /><button type="button" class="busca-livre-x" data-alvo="neBusca" title="Limpar busca livre">&times;</button>
           </div>
@@ -101,6 +104,8 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('btnModoSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosNe').addEventListener('click', excluirSelecionadosLoteClique_);
+    // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
+    document.getElementById('neTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_NE_/aplicarResposta_). Substitui o estreitamento
     // antigo, que valia só para Unidade/Tipo/OSS.
@@ -250,6 +255,17 @@ const TelaNotasEmpenho = (function () {
     renderPaginacao();
   }
 
+  /** Muda tamanhoPagina a partir de qualquer um dos dois seletores (topo/embaixo) e sincroniza o outro - ver mesma função em js/sof.js. */
+  function mudarTamanhoPagina_(valorSelecionado) {
+    tamanhoPagina = valorSelecionado === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(valorSelecionado);
+    paginaAtual = 1;
+    ['neTamanhoPaginaTopo', 'neTamanhoPagina'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = valorSelecionado;
+    });
+    carregar();
+  }
+
   function renderPaginacao() {
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoNe').innerHTML = `
@@ -263,11 +279,7 @@ const TelaNotasEmpenho = (function () {
       </div>`;
     document.getElementById('nePagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('nePagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
-    document.getElementById('neTamanhoPagina').addEventListener('change', function () {
-      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
-      paginaAtual = 1;
-      carregar();
-    });
+    document.getElementById('neTamanhoPagina').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
   }
 
   function seloSituacao_(situacao) {

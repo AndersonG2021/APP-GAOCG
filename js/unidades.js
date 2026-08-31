@@ -43,6 +43,9 @@ const TelaUnidades = (function () {
       <h2 class="titulo-tela">Unidades</h2>
       <div class="painel">
         <div class="barra-filtros">
+          <div class="campo campo-tamanho-pagina"><label>Itens por página</label>
+            <select id="uniTamanhoPaginaTopo">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+          </div>
           <div class="campo campo-busca-livre"><label>Busca livre</label>
             <input type="text" id="uniBusca" placeholder="nome, OSS, CNPJ..." /><button type="button" class="busca-livre-x" data-alvo="uniBusca" title="Limpar busca livre">&times;</button>
           </div>
@@ -82,6 +85,8 @@ const TelaUnidades = (function () {
     document.getElementById('btnModoSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosUni').addEventListener('click', excluirSelecionadosLoteClique_);
+    // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
+    document.getElementById('uniTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     document.getElementById('btnFiltrarUni').addEventListener('click', () => { if (filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
     document.getElementById('uniBusca').addEventListener('keydown', e => { if (e.key === 'Enter' && filtrosMudaram_()) { paginaAtual = 1; carregar(); } });
@@ -177,6 +182,17 @@ const TelaUnidades = (function () {
     renderPaginacao();
   }
 
+  /** Muda tamanhoPagina a partir de qualquer um dos dois seletores (topo/embaixo) e sincroniza o outro - ver mesma função em js/sof.js. */
+  function mudarTamanhoPagina_(valorSelecionado) {
+    tamanhoPagina = valorSelecionado === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(valorSelecionado);
+    paginaAtual = 1;
+    ['uniTamanhoPaginaTopo', 'uniTamanhoPagina'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = valorSelecionado;
+    });
+    carregar();
+  }
+
   function renderPaginacao() {
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoUni').innerHTML = `
@@ -190,11 +206,7 @@ const TelaUnidades = (function () {
       </div>`;
     document.getElementById('uniPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('uniPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
-    document.getElementById('uniTamanhoPagina').addEventListener('change', function () {
-      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
-      paginaAtual = 1;
-      carregar();
-    });
+    document.getElementById('uniTamanhoPagina').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
   }
 
   function linhaTaDetalheHtml_(t) {

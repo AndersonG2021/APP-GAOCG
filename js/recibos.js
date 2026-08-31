@@ -123,6 +123,9 @@ const TelaRecibos = (function () {
       <div class="grade-indicadores" id="recIndicadores"></div>
       <div class="painel">
         <div class="barra-filtros">
+          <div class="campo campo-tamanho-pagina"><label>Itens por página</label>
+            <select id="recTamanhoPaginaTopo">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+          </div>
           <div class="campo campo-busca-livre"><label>Busca livre</label>
             <input type="text" id="recBusca" placeholder="processo, ordem bancária, valor..." /><button type="button" class="busca-livre-x" data-alvo="recBusca" title="Limpar busca livre">&times;</button>
           </div>
@@ -212,6 +215,8 @@ const TelaRecibos = (function () {
     document.getElementById('btnModoSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosRec').addEventListener('click', excluirSelecionadosLoteClique_);
+    // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
+    document.getElementById('recTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
     // backend (ver FACETAS_REC_/aplicarResposta_). Substitui o estreitamento
     // antigo, que valia só para Unidade/Tipo/OSS.
@@ -237,6 +242,10 @@ const TelaRecibos = (function () {
       // outro tamanhoPagina ficaria fora do intervalo real com TODOS.
       tamanhoPagina = TAMANHO_PAGINA_TODOS_;
       paginaAtual = 1;
+      // O seletor do topo já foi montado no HTML acima, ANTES deste reset
+      // rodar - sem isso ficaria mostrando o tamanho da visita anterior
+      // (ex. "20") mesmo com tamanhoPagina já em TODOS por baixo dos panos.
+      document.getElementById('recTamanhoPaginaTopo').value = 'todos';
     }
     if (filtroInicial && filtroInicial.status) UI.definirValoresFiltroMultiplo('recFiltroStatus', filtroInicial.status);
     // unidade_id/objeto (Dashboard, painel "Processos do mês" - Metas de
@@ -638,6 +647,17 @@ const TelaRecibos = (function () {
     });
   }
 
+  /** Muda tamanhoPagina a partir de qualquer um dos dois seletores (topo/embaixo) e sincroniza o outro - ver mesma função em js/sof.js. */
+  function mudarTamanhoPagina_(valorSelecionado) {
+    tamanhoPagina = valorSelecionado === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(valorSelecionado);
+    paginaAtual = 1;
+    ['recTamanhoPaginaTopo', 'recTamanhoPagina'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = valorSelecionado;
+    });
+    carregar();
+  }
+
   function renderPaginacao() {
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoRec').innerHTML = `
@@ -651,11 +671,7 @@ const TelaRecibos = (function () {
       </div>`;
     document.getElementById('recPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('recPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
-    document.getElementById('recTamanhoPagina').addEventListener('change', function () {
-      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
-      paginaAtual = 1;
-      carregar();
-    });
+    document.getElementById('recTamanhoPagina').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
   }
 
   /**

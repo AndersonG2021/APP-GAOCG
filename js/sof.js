@@ -99,6 +99,9 @@ const TelaSof = (function () {
       <h2 class="titulo-tela">SOF</h2>
       <div class="painel">
         <div class="barra-filtros">
+          <div class="campo campo-tamanho-pagina"><label>Itens por página</label>
+            <select id="sofTamanhoPaginaTopo">${UI.opcoesTamanhoPaginaHtml(tamanhoPagina === TAMANHO_PAGINA_TODOS_ ? 'todos' : tamanhoPagina)}</select>
+          </div>
           <div class="campo campo-busca-livre"><label>Busca livre</label>
             <input type="text" id="sofBusca" placeholder="unidade, SEI, valor..." /><button type="button" class="busca-livre-x" data-alvo="sofBusca" title="Limpar busca livre">&times;</button>
           </div>
@@ -152,6 +155,12 @@ const TelaSof = (function () {
     document.getElementById('btnModoSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosSof').addEventListener('click', excluirSelecionadosLoteClique_);
+    // Seletor "Itens por página" duplicado no topo (sessão 2026-08-31,
+    // pedido do usuário: "pra quem estiver utilizando saber que existe essa
+    // opção só de olhar a aba inicialmente") - o de baixo (renderPaginacao)
+    // continua sendo o "dono" da opção, reconstruído a cada carregar(); este
+    // aqui só precisa ficar sincronizado com ele (ver mudarTamanhoPagina_).
+    document.getElementById('sofTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     document.getElementById('sofFiltroSemNe').addEventListener('change', () => { paginaAtual = 1; carregar(); });
     // Estas são as opções INICIAIS. A partir da primeira carga, todas as listas
     // passam a vir das facetas do backend (ver FACETAS_SOF_/aplicarResposta_):
@@ -447,6 +456,23 @@ const TelaSof = (function () {
     }
   }
 
+  /**
+   * Muda tamanhoPagina a partir do valor de QUALQUER UM dos dois seletores
+   * ("Itens por página" no topo da barra de filtros, ou "Por página" perto
+   * da paginação embaixo - sessão 2026-08-31, pedido do usuário: a opção
+   * precisa aparecer no topo também, "só de olhar a aba inicialmente") -
+   * sincroniza o OUTRO seletor na hora (sem esperar a rede) e recarrega.
+   */
+  function mudarTamanhoPagina_(valorSelecionado) {
+    tamanhoPagina = valorSelecionado === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(valorSelecionado);
+    paginaAtual = 1;
+    ['sofTamanhoPaginaTopo', 'sofTamanhoPagina'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = valorSelecionado;
+    });
+    carregar();
+  }
+
   function renderPaginacao() {
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina));
     document.getElementById('paginacaoSof').innerHTML = `
@@ -460,11 +486,7 @@ const TelaSof = (function () {
       </div>`;
     document.getElementById('sofPagAnterior').addEventListener('click', () => { paginaAtual--; carregar(); });
     document.getElementById('sofPagProxima').addEventListener('click', () => { paginaAtual++; carregar(); });
-    document.getElementById('sofTamanhoPagina').addEventListener('change', function () {
-      tamanhoPagina = this.value === 'todos' ? TAMANHO_PAGINA_TODOS_ : Number(this.value);
-      paginaAtual = 1;
-      carregar();
-    });
+    document.getElementById('sofTamanhoPagina').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
   }
 
   /**
