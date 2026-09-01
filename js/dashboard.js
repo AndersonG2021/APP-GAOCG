@@ -35,6 +35,12 @@ const Dashboard = (function () {
   // linha por combinação Unidade+Objeto).
   let metasItensAtuais_ = [];
   let metasAbertoAtual_ = false;
+  // Itens do painel "NEs com saldo abaixo da parcela" (sessão 2026-09-01,
+  // pedido do usuário) - vem do mesmo `dados.notas_empenho.itens` que já
+  // chega no obterDashboard (ver dashboardNotasEmpenho_, Dashboard.gs),
+  // filtrado por `alerta` na hora de montar a tabela, sem round-trip extra.
+  let saldoBaixoItensAtuais_ = [];
+  let saldoBaixoAbertoAtual_ = false;
 
   async function carregarMapaUsuarios_() {
     try {
@@ -144,12 +150,13 @@ const Dashboard = (function () {
       <div class="grade-indicadores grade-indicadores-3">
         ${cartaoIndicadorHtml_('dashCardRecibos', ICONE_RECIBO, r.total_recibos, `Recibos na competência ${UI.escaparHtml(r.competencia)}`, compRecibosHtml + deltaVsMesHtml, 'azul')}
         ${cartaoIndicadorHtml_('dashCardAtendido', ICONE_CIFRAO, percentualAtendido === null ? '—' : percentualAtendido + '%', 'Atendido do total solicitado', atendidoDeltaHtml, 'verde', false)}
-        ${cartaoIndicadorHtml_('dashCardSaldoBaixo', ICONE_ALERTA, ne.total_saldo_abaixo_20, 'NEs com saldo abaixo de 20% da parcela', '<div class="cartao-indicador-delta">Clique para ver as Notas de Empenho</div>', 'vermelho')}
+        ${cartaoSaldoBaixoHtml_(ne)}
         ${cartaoIndicadorHtml_('dashCardSaldoNe', ICONE_ALERTA, UI.formatarMoeda(ne.saldo_disponivel), 'Saldo disponível em Notas de Empenho', ne.total_sem_saldo > 0 ? `<div class="cartao-indicador-delta negativo">${ne.total_sem_saldo} sem saldo</div>` : '', 'vermelho')}
         ${cartaoIndicadorHtml_('dashCardUnidades', ICONE_PREDIO, UI.formatarMoeda(uni.total_mensal_comprometido), 'Total mensal comprometido (Unidades ativas)', `<div class="cartao-indicador-delta">${uni.total_unidades_ativas} unidade(s) ativa(s)</div>`, 'ciano')}
         ${cartaoMetasHtml_(metas)}
       </div>
 
+      ${painelSaldoBaixoHtml_()}
       ${painelMetasDetalheHtml_()}
       ${painelGraficosHtml_()}
       ${painelPrazosHtml_()}`;
@@ -158,14 +165,97 @@ const Dashboard = (function () {
     // (o filtro de status é "incluir X", então mandamos todos menos PAGO).
     document.getElementById('dashCardRecibos').addEventListener('click', () => App.navegarPara('recibos', { competencia: [r.competencia], statusExceto: ['PAGO'] }));
     // Card 2 (Atendido x Solicitado) é só informativo - sem clique.
-    // Card 3: Notas de Empenho já filtrado por saldo < 20% da parcela.
-    document.getElementById('dashCardSaldoBaixo').addEventListener('click', () => App.navegarPara('notasEmpenho', { saldoBaixo: true }));
+    // Card 3 (NEs com saldo abaixo da parcela): não navega mais - expande o
+    // painel no próprio Dashboard, ver configurarPainelSaldoBaixo_ abaixo.
     document.getElementById('dashCardSaldoNe').addEventListener('click', () => App.navegarPara('notasEmpenho'));
     document.getElementById('dashCardUnidades').addEventListener('click', () => App.navegarPara('unidades'));
 
+    configurarPainelSaldoBaixo_(ne);
     configurarPainelMetas_(metas);
     configurarGraficos_();
     carregarPrazosContratuais_();
+  }
+
+  // ===== Card "NEs com saldo abaixo da parcela" (sessão 2026-09-01, pedido
+  // do usuário) - antes navegava direto pra tela de Notas de Empenho já
+  // filtrada; agora, igual ao card "Processos do mês" logo abaixo, expande/
+  // recolhe no próprio Dashboard uma lista com Unidade/Objeto/Fonte/Saldo/
+  // Valor da Parcela de cada NE em alerta, sem precisar trocar de tela.
+  function cartaoSaldoBaixoHtml_(ne) {
+    return `
+      <div class="cartao-indicador clicavel acento-vermelho" id="dashCardSaldoBaixo">
+        <div class="cartao-indicador-topo">
+          <span class="cartao-indicador-icone vermelho">${ICONE_ALERTA}</span>
+          <span class="cartao-indicador-seta" id="dashSaldoBaixoChevron">${ICONE_CHEVRON}</span>
+        </div>
+        <div class="valor">${ne.total_saldo_abaixo_parcela}</div>
+        <div class="rotulo">NEs com saldo abaixo da parcela</div>
+        <div class="cartao-indicador-delta">Clique para ver a lista</div>
+      </div>`;
+  }
+
+  function painelSaldoBaixoHtml_() {
+    return `
+      <div class="painel oculto" id="dashSaldoBaixoDetalhe">
+        <div class="dash-painel-cabecalho">
+          <h3>Notas de Empenho com saldo abaixo da parcela</h3>
+          <a href="#" id="dashSaldoBaixoVerTodas">Ver na tela de Notas de Empenho →</a>
+        </div>
+        <div id="dashSaldoBaixoTabela"></div>
+      </div>`;
+  }
+
+  function configurarPainelSaldoBaixo_(ne) {
+    saldoBaixoItensAtuais_ = (ne.itens || []).filter(it => it.alerta);
+    const cardEl = document.getElementById('dashCardSaldoBaixo');
+    const detalheEl = document.getElementById('dashSaldoBaixoDetalhe');
+    const chevronEl = document.getElementById('dashSaldoBaixoChevron');
+    if (!cardEl || !detalheEl) return;
+
+    // Recolhido por padrão a cada carregar() (troca de competência,
+    // "Atualizar") - mesmo comportamento do painel de Metas, ver
+    // configurarPainelMetas_ abaixo.
+    detalheEl.classList.toggle('oculto', !saldoBaixoAbertoAtual_);
+    chevronEl.classList.toggle('aberta', saldoBaixoAbertoAtual_);
+
+    cardEl.addEventListener('click', () => {
+      saldoBaixoAbertoAtual_ = detalheEl.classList.contains('oculto');
+      detalheEl.classList.toggle('oculto', !saldoBaixoAbertoAtual_);
+      chevronEl.classList.toggle('aberta', saldoBaixoAbertoAtual_);
+    });
+    document.getElementById('dashSaldoBaixoVerTodas').addEventListener('click', e => {
+      e.preventDefault();
+      App.navegarPara('notasEmpenho', { saldoBaixo: true });
+    });
+
+    renderTabelaSaldoBaixo_();
+  }
+
+  /** Pior saldo primeiro (mais negativo/menor sobra), pra chamar atenção pro caso mais urgente logo no topo. */
+  function renderTabelaSaldoBaixo_() {
+    const alvo = document.getElementById('dashSaldoBaixoTabela');
+    if (!alvo) return;
+    if (!saldoBaixoItensAtuais_.length) {
+      alvo.innerHTML = '<p class="estado-vazio">Nenhuma Nota de Empenho com saldo abaixo da parcela no momento.</p>';
+      return;
+    }
+    const itens = saldoBaixoItensAtuais_.slice().sort((a, b) => a.saldo_atual - b.saldo_atual);
+    alvo.innerHTML = `
+      <table class="tabela">
+        <thead><tr><th>Unidade</th><th>Objeto</th><th>Fonte</th><th>Saldo</th><th>Valor da Parcela</th></tr></thead>
+        <tbody>${itens.map(it => `
+          <tr data-numero="${UI.escaparHtml(it.numero_ne)}">
+            <td>${UI.escaparHtml(it.unidade_nome || '-')}</td>
+            <td>${UI.escaparHtml(it.objeto || '-')}</td>
+            <td>${UI.escaparHtml(it.fonte || '-')}</td>
+            <td><strong class="vermelho">${UI.formatarMoeda(it.saldo_atual)}</strong></td>
+            <td>${UI.formatarMoeda(it.parcela_mensal_referencia)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    alvo.querySelectorAll('tr[data-numero]').forEach(tr => {
+      tr.addEventListener('click', () => App.navegarPara('notasEmpenho', { saldoBaixo: true }));
+    });
   }
 
   // ===== Card "Processos do mês" (Metas de Processos, sessão 2026-08-24) =====

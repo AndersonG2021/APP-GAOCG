@@ -33,8 +33,9 @@ const TelaNotasEmpenho = (function () {
 
   /**
    * opts (opcional, vindo do Dashboard via App.navegarPara): `saldoBaixo: true`
-   * já marca o filtro "Somente saldo < 20% da parcela" antes da primeira carga
-   * (card "NEs com saldo baixo" do Dashboard).
+   * já marca o filtro "Somente saldo abaixo da parcela" antes da primeira
+   * carga (link "Ver na tela de Notas de Empenho" do painel "NEs com saldo
+   * abaixo da parcela" do Dashboard).
    */
   async function render(opts) {
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
@@ -80,7 +81,7 @@ const TelaNotasEmpenho = (function () {
             <div id="neFiltroCompetencia"></div><button type="button" class="filtro-multiplo-x" data-alvo="neFiltroCompetencia" title="Limpar filtro de Competência">&times;</button>
           </div>
           <div class="campo campo-checkbox-filtro">
-            <label class="rotulo-checkbox"><input type="checkbox" id="neFiltroSaldoBaixo" /> Somente saldo &lt; 20% da parcela</label>
+            <label class="rotulo-checkbox"><input type="checkbox" id="neFiltroSaldoBaixo" /> Somente saldo abaixo da parcela</label>
           </div>
           <button class="botao" id="btnFiltrarNe">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosNe">Limpar filtros</button>
@@ -90,6 +91,7 @@ const TelaNotasEmpenho = (function () {
           <button class="botao primario" id="btnNovaNe">+ Nova Nota de Empenho</button>
         </div>
         <div class="barra-selecao-lote oculto" id="barraSelecaoLoteNe">
+          <label class="rotulo-checkbox"><input type="checkbox" id="chkSelecionarTodosNe" /> Selecionar todos</label>
           <span id="contagemSelecaoLoteNe">0 selecionado(s)</span>
           <button type="button" class="botao perigo" id="btnExcluirSelecionadosNe" disabled>Excluir selecionados</button>
           <button type="button" class="botao" id="btnCancelarSelecaoLoteNe">Cancelar</button>
@@ -104,6 +106,11 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('btnModoSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteNe').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosNe').addEventListener('click', excluirSelecionadosLoteClique_);
+    document.getElementById('chkSelecionarTodosNe').addEventListener('change', function () {
+      numerosNeSelecionados_ = this.checked ? new Set(grupos.map(g => g.numero_ne)) : new Set();
+      atualizarBarraSelecaoLote_();
+      renderCards();
+    });
     // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
     document.getElementById('neTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
@@ -494,6 +501,13 @@ const TelaNotasEmpenho = (function () {
     document.getElementById('barraSelecaoLoteNe').classList.toggle('oculto', !modoSelecaoLote);
     document.getElementById('contagemSelecaoLoteNe').textContent = `${numerosNeSelecionados_.size} selecionado(s)`;
     document.getElementById('btnExcluirSelecionadosNe').disabled = numerosNeSelecionados_.size === 0;
+    // "Selecionar todos" reflete o estado atual mesmo quando a seleção veio
+    // de marcar os cards um por um (não só pelo próprio checkbox) -
+    // indeterminate (nem marcado nem desmarcado) quando só parte está selecionada.
+    const chkTodos = document.getElementById('chkSelecionarTodosNe');
+    const totalMarcavel = grupos.length;
+    chkTodos.checked = totalMarcavel > 0 && numerosNeSelecionados_.size === totalMarcavel;
+    chkTodos.indeterminate = numerosNeSelecionados_.size > 0 && numerosNeSelecionados_.size < totalMarcavel;
   }
 
   /**
