@@ -135,6 +135,7 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
   cursor: pointer;
   background: var(--cinza-200);
   color: var(--cinza-900);
+  text-decoration: none; /* .botao também é usada em <a> (ex.: "Ver arquivo") - sem isso, herdava o sublinhado padrão de link. */
   transition: transform .08s ease, filter .08s ease;
 }
 .botao:hover { filter: brightness(0.97); }

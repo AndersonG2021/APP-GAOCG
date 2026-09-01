@@ -417,7 +417,7 @@ const TelaNotasEmpenho = (function () {
                   <td>${rg.meses.length
                     ? `<ul class="tabela-reforcos-lista">${rg.meses.map(m => `<li>${UI.formatarMoeda(m.valor)}</li>`).join('')}</ul>`
                     : UI.formatarMoeda(rg.valor_total)}</td>
-                  <td>${rg.arquivo_url ? `<a href="${UI.escaparHtml(rg.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '<span class="ajuda">-</span>'}</td>
+                  <td>${rg.arquivo_url ? `<a href="${UI.escaparHtml(rg.arquivo_url)}" target="_blank" rel="noopener" class="botao">Ver arquivo</a>` : '<span class="ajuda">-</span>'}</td>
                   <td><button type="button" class="botao-icone excluir" data-acao="excluir-reforco" data-ids="${rg.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
                 </tr>`).join('')}
             </tbody>
@@ -450,8 +450,8 @@ const TelaNotasEmpenho = (function () {
         ${linhasReforcoHtml_(g)}
         <div class="cartao-ne-rodape">
           <div class="cartao-ne-rodape-links">
-            ${temCronograma ? '<a href="#" class="cartao-ne-ver-cronograma">Ver cronograma ↓</a>' : '<span class="ajuda">Sem cronograma</span>'}
-            ${(g.arquivos || []).map((a, i) => `<a href="${UI.escaparHtml(a.url)}" target="_blank" rel="noopener">Ver arquivo${g.arquivos.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('')}
+            ${temCronograma ? '<button type="button" class="botao cartao-ne-ver-cronograma">Ver cronograma ↓</button>' : '<span class="ajuda">Sem cronograma</span>'}
+            ${(g.arquivos || []).map((a, i) => `<a href="${UI.escaparHtml(a.url)}" target="_blank" rel="noopener" class="botao">Ver arquivo${g.arquivos.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('')}
           </div>
           <button type="button" class="botao sucesso" data-acao="reforco">+ Reforço</button>
         </div>
@@ -477,13 +477,15 @@ const TelaNotasEmpenho = (function () {
       }
 
       cartao.querySelector('[data-acao="reforco"]').addEventListener('click', () => abrirModalReforco(grupo));
-      const linkCronograma = cartao.querySelector('.cartao-ne-ver-cronograma');
-      if (linkCronograma) linkCronograma.addEventListener('click', e => {
-        e.preventDefault();
+      // botão, não link (sessão 2026-09-01, pedido do usuário: padronizar
+      // com os outros botões do app) - não precisa mais de preventDefault,
+      // já que um <button> não navega em lugar nenhum sozinho.
+      const botaoCronograma = cartao.querySelector('.cartao-ne-ver-cronograma');
+      if (botaoCronograma) botaoCronograma.addEventListener('click', () => {
         const caixa = cartao.querySelector('.cartao-ne-cronograma-caixa');
         caixa.classList.toggle('oculto');
         const aberto = !caixa.classList.contains('oculto');
-        linkCronograma.textContent = aberto ? 'Ocultar cronograma ↑' : 'Ver cronograma ↓';
+        botaoCronograma.textContent = aberto ? 'Ocultar cronograma ↑' : 'Ver cronograma ↓';
       });
       cartao.querySelectorAll('[data-acao="excluir-reforco"]').forEach(btn => {
         btn.addEventListener('click', e => {
