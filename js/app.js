@@ -42,15 +42,24 @@ const UI = (function () {
 
   let carregandoInicioMs_ = 0;
   let carregandoIntervalo_ = null;
+  /**
+   * Cada acesso a elemento aqui é blindado com "?." (opcional): se o HTML
+   * servido estiver um passo atrás do JS num instante de propagação do
+   * GitHub Pages (cada arquivo tem seu próprio cache, não são trocados
+   * atomicamente juntos - achado real: um elemento faltando fazia
+   * `.classList` estourar e abortar a função ANTES do setInterval, travando
+   * o anel em 0% pro resto daquela sessão), o anel simplesmente não anima
+   * (silencioso) em vez de quebrar o resto da função.
+   */
   function iniciarAnelCarregamento_() {
     carregandoInicioMs_ = Date.now();
     aplicarProgressoAnel_(0);
-    document.getElementById('carregandoAviso').classList.add('oculto');
+    document.getElementById('carregandoAviso')?.classList.add('oculto');
     clearInterval(carregandoIntervalo_);
     carregandoIntervalo_ = setInterval(() => {
       const decorrido = Date.now() - carregandoInicioMs_;
       aplicarProgressoAnel_(progressoEstimado_(decorrido));
-      if (decorrido > ANEL_AVISO_LIMIAR_MS_) document.getElementById('carregandoAviso').classList.remove('oculto');
+      if (decorrido > ANEL_AVISO_LIMIAR_MS_) document.getElementById('carregandoAviso')?.classList.remove('oculto');
     }, 100);
   }
 
