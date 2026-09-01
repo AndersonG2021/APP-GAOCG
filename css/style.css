@@ -694,6 +694,11 @@ table.tabela tbody tr.linha-sem-processo:hover { background: #fef3c7; }
 .tabela-reforcos th:nth-child(5), .tabela-reforcos td:nth-child(5) { width: 40px; padding-left: 4px; padding-right: 4px; }
 .tabela-reforcos-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .tabela-reforcos .botao-icone { width: 26px; height: 26px; background: var(--cinza-100); }
+/* "Ver arquivo"/"Ver" (sessão 2026-09-01, padronizados como .botao) precisam
+   ser bem mais compactos aqui - a coluna Arquivo é só 20% de uma tabela com
+   table-layout:fixed, e o .botao padrão (padding 8px 16px) estourava a
+   largura da coluna, sobrepondo o botão de excluir (40px) ao lado. */
+.tabela-reforcos .botao { padding: 4px 10px; font-size: 11.5px; }
 @media (max-width: 480px) {
   .tabela-reforcos th, .tabela-reforcos td { font-size: 11.5px; padding: 6px; }
 }
