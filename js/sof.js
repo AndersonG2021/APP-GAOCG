@@ -1647,7 +1647,7 @@ const TelaSof = (function () {
       <tr data-id="${n.id}">
         <td>${n.tipo}</td><td>${UI.escaparHtml(n.numero_ne || '-')}</td><td>${UI.escaparHtml(n.fonte || '-')}</td>
         <td>${UI.escaparHtml(n.objeto || '-')}</td><td>${UI.formatarMoeda(n.valor)}</td><td>${UI.escaparHtml(n.periodo)}</td>
-        <td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td>
+        <td>${n.arquivo_url ? `<a href="${UI.escaparHtml(n.arquivo_url)}" target="_blank" rel="noopener" class="botao">Ver arquivo</a>` : '-'}</td>
         <td><button type="button" class="botao-icone excluir" data-acao="excluir-ne" data-id="${n.id}" title="Excluir">${ICONE_LIXEIRA}</button></td>
       </tr>`);
 
@@ -1658,7 +1658,7 @@ const TelaSof = (function () {
           <td>reforco</td><td>${UI.escaparHtml(numeroNe || '-')}</td><td>${UI.escaparHtml(primeira.fonte || '-')}</td>
           <td>${UI.escaparHtml(primeira.objeto || '-')}</td><td>${UI.formatarMoeda(g.valor_total)}</td>
           <td>${g.meses.length ? g.meses.map(m => NOMES_MESES_ABREV_FONTE_[m - 1]).join('/') : '-'}</td>
-          <td>${g.arquivo_url ? `<a href="${UI.escaparHtml(g.arquivo_url)}" target="_blank" rel="noopener">Ver arquivo</a>` : '-'}</td>
+          <td>${g.arquivo_url ? `<a href="${UI.escaparHtml(g.arquivo_url)}" target="_blank" rel="noopener" class="botao">Ver arquivo</a>` : '-'}</td>
           <td><button type="button" class="botao-icone excluir" data-acao="excluir-ne-lote" data-ids="${g.ids.join(',')}" title="Excluir este reforço (todos os meses deste documento)">${ICONE_LIXEIRA}</button></td>
         </tr>`);
     });

@@ -1301,7 +1301,7 @@ const TelaRecibos = (function () {
               <td>LE</td>
               <td>${le.numero ? UI.escaparHtml(le.numero) : '<span class="ajuda">-</span>'}</td>
               <td>${UI.formatarMoeda(valorLe)}</td>
-              <td>${le.url ? `<a href="${UI.escaparHtml(le.url)}" target="_blank" rel="noopener">Ver</a>` : '<span class="ajuda">-</span>'}</td>
+              <td>${le.url ? `<a href="${UI.escaparHtml(le.url)}" target="_blank" rel="noopener" class="botao">Ver</a>` : '<span class="ajuda">-</span>'}</td>
               <td><button type="button" class="botao-icone excluir" data-acao="remover-le" title="Remover esta LE">${ICONE_LIXEIRA}</button></td>
             </tr>` : ''}
             ${itens.map((it, i) => `
@@ -1309,7 +1309,7 @@ const TelaRecibos = (function () {
                 <td>OB</td>
                 <td>${it.numero_ob ? UI.escaparHtml(it.numero_ob) : '<span class="ajuda">-</span>'}</td>
                 <td>${UI.formatarMoeda(it.valor)}</td>
-                <td>${it.arquivo_url ? `<a href="${UI.escaparHtml(it.arquivo_url)}" target="_blank" rel="noopener">Ver</a>` : '<span class="ajuda">-</span>'}</td>
+                <td>${it.arquivo_url ? `<a href="${UI.escaparHtml(it.arquivo_url)}" target="_blank" rel="noopener" class="botao">Ver</a>` : '<span class="ajuda">-</span>'}</td>
                 <td><button type="button" class="botao-icone excluir" data-indice-ob="${i}" title="Remover esta OB">${ICONE_LIXEIRA}</button></td>
               </tr>`).join('')}
           </tbody>
@@ -1597,9 +1597,9 @@ const TelaRecibos = (function () {
 
         <div id="blocoParcelaUnicaEd" class="grade-2 ${grupoId ? 'oculto' : ''}">
           <div class="campo"><label>Valor Liquidado</label><input id="recEdValorLiquidado" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.valor_liquidado}" /></div>
-          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+          <div class="campo"><label>Nota de Liquidação (anexo)</label><input type="file" id="recEdNotaLiquidacaoArquivo" accept=".pdf,image/*" />${recibo.nota_liquidacao_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.nota_liquidacao_url)}" target="_blank" rel="noopener" class="botao">Ver arquivo atual</a></p>` : ''}</div>
           <div class="campo"><label>Valor Pago</label><input id="recEdValorPago" type="text" inputmode="decimal" class="campo-moeda" value="${recibo.valor_pago}" /></div>
-          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recEdOrdemBancariaArquivo" accept=".pdf,image/*" />${recibo.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener">Ver arquivo atual</a></p>` : ''}</div>
+          <div class="campo"><label>Ordem Bancária (anexo)</label><input type="file" id="recEdOrdemBancariaArquivo" accept=".pdf,image/*" />${recibo.ordem_bancaria_arquivo_url ? `<p class="ajuda"><a href="${UI.escaparHtml(recibo.ordem_bancaria_arquivo_url)}" target="_blank" rel="noopener" class="botao">Ver arquivo atual</a></p>` : ''}</div>
         </div>
         <div id="blocoComParcelaDivididaEd" class="${grupoId ? '' : 'oculto'}">
           <div id="linhasParcelaDivididaEd" class="linhas-parcela-dividida"></div>
