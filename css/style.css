@@ -491,12 +491,25 @@ table.tabela tbody tr.linha-sem-processo:hover { background: #fef3c7; }
   position: fixed; inset: 0; background: rgba(15,23,42,0.25); z-index: 70;
   display: flex; align-items: center; justify-content: center;
 }
-.spinner {
-  width: 32px; height: 32px; border-radius: 50%;
-  border: 4px solid var(--cinza-200); border-top-color: var(--azul);
-  animation: girar 0.7s linear infinite;
+.carregando-caixa {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--branco); border-radius: 16px; padding: 18px 22px; box-shadow: var(--sombra);
 }
-@keyframes girar { to { transform: rotate(360deg); } }
+.anel-carregamento-wrap { position: relative; width: 56px; height: 56px; }
+/* rotate(-90deg): SVG desenha o círculo a partir das 3h por padrão - gira pra começar do topo (12h), como qualquer indicador de progresso circular. */
+.anel-carregamento { width: 56px; height: 56px; transform: rotate(-90deg); }
+.anel-carregamento-fundo { fill: none; stroke: var(--cinza-200); stroke-width: 4; }
+/* stroke-dasharray/dashoffset = como se desenha "fatia preenchida x vazia" num círculo com stroke - dasharray fixa o comprimento total do traço (2*pi*raio, raio=19 -> ~119.4); dashoffset (atualizado via JS a cada tick, ver atualizarAnelCarregamento_ em js/app.js) é quanto desse traço fica invisível, então baixar o offset "fecha" o anel de progresso. */
+.anel-carregamento-progresso {
+  fill: none; stroke: var(--azul); stroke-width: 4; stroke-linecap: round;
+  stroke-dasharray: 119.4; stroke-dashoffset: 119.4;
+  transition: stroke-dashoffset .2s linear;
+}
+.anel-carregamento-texto {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--azul-escuro); font-variant-numeric: tabular-nums;
+}
+.carregando-aviso { margin: 0; font-size: 12px; color: var(--cinza-700); text-align: center; }
 
 /* min-width:0 + overflow:hidden: sem isso, um item de grid não encolhe abaixo do
    conteúdo "intrínseco" dele - um número grande sem espaço pra quebrar (ex.

@@ -32,7 +32,29 @@
 </head>
 <body>
 
-  <div id="sobreposicaoCarregando" class="oculto"><div class="spinner"></div></div>
+  <!--
+    Anel de carregamento com porcentagem (sessão 2026-09-01, pedido do
+    usuário: "como eu sei que não travou?") - substitui o spinner simples
+    (sem informação nenhuma) por um indicador que sempre está em movimento e
+    mostra uma estimativa de progresso, pra nunca parecer travado numa
+    requisição mais lenta. A porcentagem é uma ESTIMATIVA por tempo (o Apps
+    Script não expõe progresso real de execução) - se aproxima de ~92% e
+    desacelera, nunca chega perto de 100% sozinha; só pula pra 100% quando a
+    resposta chega de verdade (ver UI.mostrarCarregando/esconderCarregando,
+    js/app.js).
+  -->
+  <div id="sobreposicaoCarregando" class="oculto">
+    <div class="carregando-caixa">
+      <div class="anel-carregamento-wrap">
+        <svg class="anel-carregamento" viewBox="0 0 44 44">
+          <circle class="anel-carregamento-fundo" cx="22" cy="22" r="19"></circle>
+          <circle class="anel-carregamento-progresso" id="anelCarregamentoProgresso" cx="22" cy="22" r="19"></circle>
+        </svg>
+        <span class="anel-carregamento-texto" id="anelCarregamentoTexto">0%</span>
+      </div>
+      <p class="carregando-aviso oculto" id="carregandoAviso">Ainda carregando, aguarde…</p>
+    </div>
+  </div>
   <div id="containerToasts"></div>
 
   <!-- TELA DE LOGIN -->

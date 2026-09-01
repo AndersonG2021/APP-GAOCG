@@ -12,18 +12,80 @@ const UI = (function () {
   }
 
   /**
+   * Anel de carregamento com porcentagem (sessão 2026-09-01, pedido do
+   * usuário: "como eu sei que não travou?") - o Apps Script não expõe
+   * progresso real de uma requisição em andamento, então isto é uma
+   * ESTIMATIVA por tempo decorrido: sobe rápido no início e desacelera numa
+   * curva (progressoEstimado_), se aproximando de ANEL_PROGRESSO_CAP_ sem
+   * nunca chegar lá sozinho. Isso garante as duas coisas que o usuário
+   * pediu ao mesmo tempo - o anel NUNCA fica parado (prova visual de que
+   * não travou) e NUNCA promete "pronto" antes da hora - só
+   * finalizarAnelCarregamento_ (chamado quando a resposta chega de
+   * verdade) fecha os últimos %.
+   */
+  const CIRCUNFERENCIA_ANEL_ = 2 * Math.PI * 19; // raio do <circle> em index.html (viewBox 44x44, r=19)
+  const ANEL_PROGRESSO_CAP_ = 92;
+  const ANEL_PROGRESSO_TAU_S_ = 2.2; // maior = sobe mais devagar
+  const ANEL_AVISO_LIMIAR_MS_ = 5000; // acima disso, mostra "Ainda carregando..."
+
+  function progressoEstimado_(decorridoMs) {
+    const decorridoS = decorridoMs / 1000;
+    return ANEL_PROGRESSO_CAP_ * (1 - Math.exp(-decorridoS / ANEL_PROGRESSO_TAU_S_));
+  }
+
+  function aplicarProgressoAnel_(percentual) {
+    const circulo = document.getElementById('anelCarregamentoProgresso');
+    const texto = document.getElementById('anelCarregamentoTexto');
+    if (circulo) circulo.style.strokeDashoffset = String(CIRCUNFERENCIA_ANEL_ * (1 - percentual / 100));
+    if (texto) texto.textContent = Math.round(percentual) + '%';
+  }
+
+  let carregandoInicioMs_ = 0;
+  let carregandoIntervalo_ = null;
+  function iniciarAnelCarregamento_() {
+    carregandoInicioMs_ = Date.now();
+    aplicarProgressoAnel_(0);
+    document.getElementById('carregandoAviso').classList.add('oculto');
+    clearInterval(carregandoIntervalo_);
+    carregandoIntervalo_ = setInterval(() => {
+      const decorrido = Date.now() - carregandoInicioMs_;
+      aplicarProgressoAnel_(progressoEstimado_(decorrido));
+      if (decorrido > ANEL_AVISO_LIMIAR_MS_) document.getElementById('carregandoAviso').classList.remove('oculto');
+    }, 100);
+  }
+
+  /** Fecha o anel em 100% antes de esconder a sobreposição (a transição CSS de .2s já deixa isso suave) - sem isso o "sumiço" aconteceria com o anel ainda incompleto, quebrando a promessa de nunca fechar antes da hora. */
+  function finalizarAnelCarregamento_() {
+    clearInterval(carregandoIntervalo_);
+    carregandoIntervalo_ = null;
+    aplicarProgressoAnel_(100);
+  }
+
+  /**
    * Contador em vez de toggle simples: se duas chamadas de Api.chamar
    * estiverem em voo ao mesmo tempo, a primeira que terminar não pode
-   * esconder o spinner enquanto a outra ainda está em andamento.
+   * esconder a sobreposição enquanto a outra ainda está em andamento - só a
+   * PRIMEIRA (0->1) reinicia o anel, só a ÚLTIMA (->0) fecha e esconde.
    */
   let contadorCarregando = 0;
   function mostrarCarregando() {
     contadorCarregando++;
+    if (contadorCarregando === 1) iniciarAnelCarregamento_();
     document.getElementById('sobreposicaoCarregando').classList.remove('oculto');
   }
   function esconderCarregando() {
     contadorCarregando = Math.max(0, contadorCarregando - 1);
-    if (contadorCarregando === 0) document.getElementById('sobreposicaoCarregando').classList.add('oculto');
+    if (contadorCarregando === 0) {
+      finalizarAnelCarregamento_();
+      // Pequeno atraso pra dar tempo da transição do anel até 100% terminar
+      // visualmente antes de sumir. Confere de novo dentro do timeout (não
+      // só antes de agendar) porque uma nova chamada pode ter começado nesse
+      // meio-tempo (contadorCarregando voltou a 1) - aí não é hora de
+      // esconder nada.
+      setTimeout(() => {
+        if (contadorCarregando === 0) document.getElementById('sobreposicaoCarregando').classList.add('oculto');
+      }, 200);
+    }
   }
 
   function toast(mensagem, tipo) {

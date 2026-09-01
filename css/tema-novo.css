@@ -425,7 +425,10 @@ html[data-tema="novo"] .dock-modal-card:hover { border-color: var(--azul); backg
 html[data-tema="novo"] .dock-modal-card-titulo { color: var(--cinza-900); }
 html[data-tema="novo"] .toast { box-shadow: var(--sombra-forte); }
 html[data-tema="novo"] #sobreposicaoCarregando { background: rgba(10,16,32,.35); }
-html[data-tema="novo"] .spinner { border-color: var(--cinza-200); border-top-color: var(--azul); }
+html[data-tema="novo"] .carregando-caixa { background: var(--superficie); box-shadow: var(--sombra-forte); border: 1px solid var(--cinza-200); }
+html[data-tema="novo"] .anel-carregamento-fundo { stroke: var(--cinza-200); }
+html[data-tema="novo"] .anel-carregamento-texto { color: var(--cinza-900); }
+html[data-tema="novo"] .carregando-aviso { color: var(--cinza-500); }
 
 /* ===== Gráficos do Dashboard ===== */
 html[data-tema="novo"] .dash-graf-controles label { color: var(--cinza-500); }
