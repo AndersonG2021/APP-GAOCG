@@ -38,6 +38,12 @@ const TelaNotasEmpenho = (function () {
    * abaixo da parcela" do Dashboard).
    */
   async function render(opts) {
+    // Sai do modo de seleção em lote sempre que a tela é (re)aberta - ver
+    // mesmo comentário/motivo em js/sof.js (bug relatado pelo usuário: trocar
+    // de aba sem clicar Cancelar mantinha a borda pontilhada de seleção nos
+    // cards ao voltar pra esta tela).
+    modoSelecaoLote = false;
+    numerosNeSelecionados_.clear();
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),

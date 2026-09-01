@@ -107,6 +107,12 @@ const TelaRecibos = (function () {
    * (js/app.js) e abrirReciboExistente abaixo.
    */
   async function render(filtroInicial) {
+    // Sai do modo de seleção em lote sempre que a tela é (re)aberta - ver
+    // mesmo comentário/motivo em js/sof.js (bug relatado pelo usuário: trocar
+    // de aba sem clicar Cancelar mantinha a borda pontilhada de seleção nos
+    // cards ao voltar pra esta tela).
+    modoSelecaoLote = false;
+    idsSelecionadosLote_.clear();
     const [unidadesCarregadas, statusFiltroOpcoesBrutas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       carregarOpcoesStatus_(),
@@ -162,7 +168,7 @@ const TelaRecibos = (function () {
           <button class="botao" id="btnFiltrarRec">Filtrar</button>
           <button class="botao botao-limpar-filtros" id="btnLimparFiltrosRec">Limpar filtros</button>
           <button class="botao" id="btnGerarRelatorioRec">Gerar Relatório</button>
-          <button class="botao" id="btnModoSelecaoLoteRec">Apagar linhas</button>
+          <button class="botao" id="btnModoSelecaoLoteRec">Apagar Recibos</button>
           <div class="acao-gerar-meta">
             <div class="campo"><label>Competência p/ gerar</label><select id="recCompetenciaGerarMeta">${UI.opcoesCompetenciaHtml(mesAtualComoCompetencia_())}</select></div>
             <button class="botao" id="btnGerarRecibosMeta" title="Cria um card em branco (sem Nº Processo) pra cada meta ativa que ainda não tem recibo nessa competência">Gerar recibos da meta</button>
@@ -171,6 +177,7 @@ const TelaRecibos = (function () {
           <button class="botao primario" id="btnNovoRecibo">+ Novo processo</button>
         </div>
         <div class="barra-selecao-lote oculto" id="barraSelecaoLoteRec">
+          <label class="rotulo-checkbox"><input type="checkbox" id="chkSelecionarTodosRec" /> Selecionar todos</label>
           <span id="contagemSelecaoLoteRec">0 selecionado(s)</span>
           <button type="button" class="botao perigo" id="btnExcluirSelecionadosRec" disabled>Excluir selecionados</button>
           <button type="button" class="botao" id="btnCancelarSelecaoLoteRec">Cancelar</button>
@@ -215,6 +222,11 @@ const TelaRecibos = (function () {
     document.getElementById('btnModoSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteRec').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosRec').addEventListener('click', excluirSelecionadosLoteClique_);
+    document.getElementById('chkSelecionarTodosRec').addEventListener('change', function () {
+      idsSelecionadosLote_ = this.checked ? new Set(itens.map(i => String(i.id))) : new Set();
+      atualizarBarraSelecaoLote_();
+      renderTabela();
+    });
     // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
     document.getElementById('recTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     // Opções INICIAIS - a partir da primeira carga elas vêm das facetas do
@@ -737,13 +749,16 @@ const TelaRecibos = (function () {
     document.getElementById('barraSelecaoLoteRec').classList.toggle('oculto', !modoSelecaoLote);
     document.getElementById('contagemSelecaoLoteRec').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
     document.getElementById('btnExcluirSelecionadosRec').disabled = idsSelecionadosLote_.size === 0;
+    const chkTodos = document.getElementById('chkSelecionarTodosRec');
+    chkTodos.checked = itens.length > 0 && idsSelecionadosLote_.size === itens.length;
+    chkTodos.indeterminate = idsSelecionadosLote_.size > 0 && idsSelecionadosLote_.size < itens.length;
   }
 
-  /** Mesmo aviso grande de confirmarExclusaoRecibo, só que pra várias linhas de uma vez (excluirRecibosEmLote). */
+  /** Mesmo aviso grande de confirmarExclusaoRecibo, só que pra vários recibos de uma vez (excluirRecibosEmLote). */
   function excluirSelecionadosLoteClique_() {
     if (!idsSelecionadosLote_.size) return;
     const qtd = idsSelecionadosLote_.size;
-    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtd} LINHA(S) DE RECIBO?</p>`;
+    const corpo = `<p class="aviso-exclusao">TEM CERTEZA QUE QUER EXCLUIR ${qtd} RECIBO(S)?</p>`;
     UI.abrirModal('Excluir recibos em lote', corpo,
       `<button class="botao" id="btnCancelarExclusaoLoteRec">Cancelar</button><button class="botao perigo" id="btnConfirmarExclusaoLoteRec">Excluir</button>`,
       { pequeno: true });

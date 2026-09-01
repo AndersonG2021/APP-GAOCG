@@ -88,6 +88,15 @@ const TelaSof = (function () {
    * direto logo após a primeira carga.
    */
   async function render(opts) {
+    // Sai do modo de seleção em lote sempre que a tela é (re)aberta (sessão
+    // 2026-09-01, bug relatado pelo usuário: trocar de aba com "Apagar
+    // cards" ligado, sem clicar Cancelar, mantinha modoSelecaoLote=true no
+    // módulo - ele persiste entre navegações porque só o HTML de #conteudo é
+    // trocado, não o estado JS de cada tela - então voltar pra SOF renderizava
+    // os cards já com a borda pontilhada de seleção, sem a barra de ações
+    // pra sair desse estado (a barra nasce oculta por padrão no HTML).
+    modoSelecaoLote = false;
+    idsSelecionadosLote_.clear();
     const [unidadesCarregadas, opcoesOss, opcoesObjeto] = await Promise.all([
       Api.chamar('listarUnidades', { somenteAtivas: true, pageSize: 100000 }, { cache: true }),
       TelaListas.obterOpcoes('OSS'),
@@ -135,6 +144,7 @@ const TelaSof = (function () {
           <button class="botao primario" id="btnNovoSof">+ Nova SOF</button>
         </div>
         <div class="barra-selecao-lote oculto" id="barraSelecaoLoteSof">
+          <label class="rotulo-checkbox"><input type="checkbox" id="chkSelecionarTodosSof" /> Selecionar todos</label>
           <span id="contagemSelecaoLoteSof">0 selecionado(s)</span>
           <button type="button" class="botao perigo" id="btnExcluirSelecionadosSof" disabled>Excluir selecionados</button>
           <button type="button" class="botao" id="btnCancelarSelecaoLoteSof">Cancelar</button>
@@ -155,6 +165,11 @@ const TelaSof = (function () {
     document.getElementById('btnModoSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteSof').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosSof').addEventListener('click', excluirSelecionadosLoteClique_);
+    document.getElementById('chkSelecionarTodosSof').addEventListener('change', function () {
+      idsSelecionadosLote_ = this.checked ? new Set(itens.map(i => String(i.id))) : new Set();
+      atualizarBarraSelecaoLote_();
+      renderCards();
+    });
     // Seletor "Itens por página" duplicado no topo (sessão 2026-08-31,
     // pedido do usuário: "pra quem estiver utilizando saber que existe essa
     // opção só de olhar a aba inicialmente") - o de baixo (renderPaginacao)
@@ -418,6 +433,9 @@ const TelaSof = (function () {
     document.getElementById('barraSelecaoLoteSof').classList.toggle('oculto', !modoSelecaoLote);
     document.getElementById('contagemSelecaoLoteSof').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
     document.getElementById('btnExcluirSelecionadosSof').disabled = idsSelecionadosLote_.size === 0;
+    const chkTodos = document.getElementById('chkSelecionarTodosSof');
+    chkTodos.checked = itens.length > 0 && idsSelecionadosLote_.size === itens.length;
+    chkTodos.indeterminate = idsSelecionadosLote_.size > 0 && idsSelecionadosLote_.size < itens.length;
   }
 
   /** Mesmo padrão de aviso-exclusao já usado em Unidades (confirmarExclusao, js/unidades.js), aqui pra excluir vários processos de SOF de uma vez. */

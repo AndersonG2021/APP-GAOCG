@@ -33,6 +33,12 @@ const TelaUnidades = (function () {
   const ICONE_RESTAURAR = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
 
   async function render() {
+    // Sai do modo de seleção em lote sempre que a tela é (re)aberta - ver
+    // mesmo comentário/motivo em js/sof.js (bug relatado pelo usuário: trocar
+    // de aba sem clicar Cancelar mantinha a borda pontilhada de seleção nos
+    // cards ao voltar pra esta tela).
+    modoSelecaoLote = false;
+    idsSelecionadosLote_.clear();
     const [opcoesOss, todasUnidadesCarregadas] = await Promise.all([
       TelaListas.obterOpcoes('OSS'),
       Api.chamar('listarUnidades', { pageSize: 100000 }, { cache: true })
@@ -72,6 +78,7 @@ const TelaUnidades = (function () {
           <span class="selo vermelho">Vermelho</span> urgente, até 60 dias ou já vencido
         </p>
         <div class="barra-selecao-lote oculto" id="barraSelecaoLoteUni">
+          <label class="rotulo-checkbox"><input type="checkbox" id="chkSelecionarTodosUni" /> Selecionar todos</label>
           <span id="contagemSelecaoLoteUni">0 selecionado(s)</span>
           <button type="button" class="botao perigo" id="btnExcluirSelecionadosUni" disabled>Excluir selecionados</button>
           <button type="button" class="botao" id="btnCancelarSelecaoLoteUni">Cancelar</button>
@@ -85,6 +92,13 @@ const TelaUnidades = (function () {
     document.getElementById('btnModoSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_());
     document.getElementById('btnCancelarSelecaoLoteUni').addEventListener('click', () => alternarModoSelecaoLote_(false));
     document.getElementById('btnExcluirSelecionadosUni').addEventListener('click', excluirSelecionadosLoteClique_);
+    // Só unidades ATIVAS entram (mesma regra do checkbox individual - ver
+    // acoesCardUnidadeHtml_).
+    document.getElementById('chkSelecionarTodosUni').addEventListener('change', function () {
+      idsSelecionadosLote_ = this.checked ? new Set(unidades.filter(u => u.ativo).map(u => String(u.id))) : new Set();
+      atualizarBarraSelecaoLote_();
+      renderCards();
+    });
     // Seletor "Itens por página" duplicado no topo - ver mesma explicação em js/sof.js.
     document.getElementById('uniTamanhoPaginaTopo').addEventListener('change', function () { mudarTamanhoPagina_(this.value); });
     document.getElementById('chkSomenteAtivas').addEventListener('change', () => { paginaAtual = 1; carregar(); });
@@ -344,6 +358,10 @@ const TelaUnidades = (function () {
     document.getElementById('barraSelecaoLoteUni').classList.toggle('oculto', !modoSelecaoLote);
     document.getElementById('contagemSelecaoLoteUni').textContent = `${idsSelecionadosLote_.size} selecionado(s)`;
     document.getElementById('btnExcluirSelecionadosUni').disabled = idsSelecionadosLote_.size === 0;
+    const chkTodos = document.getElementById('chkSelecionarTodosUni');
+    const totalMarcavel = unidades.filter(u => u.ativo).length;
+    chkTodos.checked = totalMarcavel > 0 && idsSelecionadosLote_.size === totalMarcavel;
+    chkTodos.indeterminate = idsSelecionadosLote_.size > 0 && idsSelecionadosLote_.size < totalMarcavel;
   }
 
   /** Mesmo aviso grande de confirmarExclusao, só que pra várias unidades de uma vez (inativarUnidadesEmLote - reversível, "Restaurar" continua funcionando unidade a unidade). */
