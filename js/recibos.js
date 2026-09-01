@@ -402,7 +402,8 @@ const TelaRecibos = (function () {
   function renderIndicadores(indicadores) {
     document.getElementById('recIndicadores').innerHTML = `
       <div class="cartao-indicador"><div class="valor">${indicadores.pendentes}</div><div class="rotulo">Pendentes (status ≠ PAGO)</div></div>
-      <div class="cartao-indicador"><div class="valor">${UI.formatarMoeda(indicadores.total_pago_ano)}</div><div class="rotulo">Total pago no ano</div></div>`;
+      <div class="cartao-indicador"><div class="valor">${UI.formatarMoeda(indicadores.total_pago_ano)}</div><div class="rotulo">Total pago no ano</div></div>
+      <div class="cartao-indicador" title="Parcela mensal regular de toda unidade ativa × 12, menos o total pago no ano"><div class="valor">${UI.formatarMoeda(indicadores.total_a_pagar)}</div><div class="rotulo">Total a pagar no ano</div></div>`;
   }
 
   /**

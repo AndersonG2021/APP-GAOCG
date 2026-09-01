@@ -1,0 +1,15 @@
+{
+  "name": "GAOCG App - Gerência Administrativa Orçamentária dos Contratos de Gestão",
+  "short_name": "GAOCG",
+  "description": "Acompanhamento do ciclo de pagamento dos Contratos de Gestão das unidades de saúde geridas por OSS - SOF, Notas de Empenho, Recibos e Unidades.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f2f4fa",
+  "theme_color": "#1e3a8a",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -2950,6 +2950,52 @@ precisa criar à mão na planilha.
 - **Passo manual:** nenhum na planilha (aba nasce sozinha). Só implantar o
   backend novo (`backend/Recibos.gs`, `backend/Code.gs`, `backend/Utils.gs`).
 
+## Fase — Indicador "Total a pagar no ano" em Recibos (sessão 2026-09-01, pedido do usuário)
+Ficou adiado desde a Fase 5 de Recibos (2026-07-12, decisão 9) por depender
+de uma base de dados que só passou a existir na Fase seguinte (Valor do
+C.G. + T.A. de Unidades) e nunca chegou a ser ligada a um indicador.
+Definição fechada com o usuário nesta sessão:
+```
+Total a pagar no ano = (parcela mensal REGULAR de toda unidade ATIVA, soma × 12)
+                        − Total pago no ano
+```
+- **"Regular"** já existia como conceito pronto (`parcelaMensalRegular_`,
+  `backend/Unidades.gs`, sessão 2026-07-29) - exclui T.A.s marcados como
+  "Não Regular"/sazonais (`tipo_pagamento === 'sazonal'`), já mostrado no
+  card de Unidades como "Repasse Mensal Regular". Não foi preciso inventar
+  campo novo nenhum.
+- **× 12 sempre** (o usuário escolheu ano inteiro, não só os meses já
+  decorridos) - representa o orçamento do ano inteiro, não um indicador de
+  atraso.
+- Novo helper `totalParcelaMensalRegularAtivas_()` (`backend/Unidades.gs`)
+  soma isso pra toda unidade ativa. Chamado por
+  `calcularIndicadoresRecibos_` (`backend/Recibos.gs`), que já calculava
+  "Pendentes"/"Total pago no ano".
+- **De propósito NÃO filtrado** pelos filtros da tela de Recibos (ao
+  contrário dos outros 2 cards) - representa o compromisso orçamentário da
+  gestão como um todo. Só o lado "já pago" (reaproveita `totalPagoAno`)
+  continua respeitando os filtros ativos - então filtrar por Unidade faz o
+  "a pagar" parecer maior que o real daquela unidade isolada (aceito, ver
+  comentário em `calcularIndicadoresRecibos_`).
+- Pode dar **negativo** (já pago mais que o esperado no ano) - mostrado
+  assim mesmo, sem esconder ou zerar.
+- Frontend: 3º card em `renderIndicadores` (`js/recibos.js`), mesmo padrão
+  visual dos outros dois, com `title` explicando a conta no hover.
+
+## Fase — App instalável (PWA leve, sessão 2026-09-01, pedido do usuário)
+`manifest.json` + `sw.js` novos (raiz do repo), `index.html` referenciando os
+dois. Só cuida de "Adicionar à tela inicial" no celular/desktop - SEM modo
+offline de propósito (o app inteiro depende do Apps Script respondendo, não
+existe "offline" que faça sentido aqui). `sw.js` é passthrough puro (não
+cacheia nada) justamente pra não criar uma nova camada de staleness em cima
+do cache HTTP normal do navegador - a mesma classe de bug real já vista
+nesta sessão (usuário relatou o anel de carregamento preso em 0% por causa
+de `js/app.js` desatualizado em cache do navegador, "O carregamento só fica
+em 0%"). Ícone usa o `favicon.svg` já existente (SVG funciona bem como ícone
+de instalação no Chrome/Android; `apple-touch-icon` do iOS Safari prefere
+PNG - fica como limitação conhecida até existir um PNG quadrado pra
+substituir).
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.

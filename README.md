@@ -40,6 +40,8 @@ A especificação original (documento de requisitos e modelo de dados que orient
 /css/style.css       Estilos (CSS puro, sem framework), layout responsivo
 /js                  Um módulo por tela + api.js/auth.js/app.js/edicao-simultanea.js
 index.html           Shell da SPA
+manifest.json        App instalável (PWA leve, sem modo offline - ver PROGRESS.md)
+sw.js                Service worker mínimo (só instalabilidade, não cacheia nada)
 
 /docs                Especificação original do MVP (ver aviso de desatualização acima)
 PROGRESS.md          Histórico real de decisões e mudanças - fonte da verdade sobre o estado atual
@@ -122,6 +124,5 @@ A especificação em `docs/` (Seção 8 do prompt de construção original) desc
 
 - Migração de Recibos históricos não tem tela própria; é uma rotina de backend executada uma única vez no lançamento (ver passo 5 acima).
 - Locale da planilha: recomenda-se pt-BR para que os booleans nativos do Sheets sejam exibidos como VERDADEIRO/FALSO (o app grava/lê `true`/`false` normalmente; a exibição no Sheets segue o locale da planilha).
-- Indicador "total a pagar" (Recibos) fica de fora por enquanto: depende de uma tabela de valores mensais recebidos por unidade (NEs recorrentes que não geram Termo Aditivo) ainda não implementada — a base de dados (Valor do C.G. + T.A. em Unidades) já existe, só não está ligada a esse indicador ainda.
 - Trocar a Nota de Empenho de um Recibo *depois* de já ter anexado/validado uma Nota de Liquidação ou Ordem Bancária (OCR) não reavalia automaticamente a validação - é preciso remover e reanexar o documento.
 - Fora de escopo: geração automática de documentos, calendário de prazos por e-mail, checklist digital de anexos, relatórios avançados além do CSV simples, login via Google OAuth, telas dedicadas para RPA/Diária/Emenda Parlamentar.
