@@ -886,6 +886,10 @@ const UI = (function () {
       </button>
       <div class="filtro-multiplo-painel oculto">
         <input type="text" class="filtro-multiplo-busca" placeholder="Buscar..." autocomplete="off" />
+        <label class="filtro-multiplo-opcao filtro-multiplo-selecionar-todas">
+          <input type="checkbox" class="filtro-multiplo-chk-todas" />
+          <span>Selecionar todas</span>
+        </label>
         <div class="filtro-multiplo-opcoes"></div>
       </div>`;
 
@@ -894,12 +898,19 @@ const UI = (function () {
     const painel = raiz.querySelector('.filtro-multiplo-painel');
     const buscaInput = raiz.querySelector('.filtro-multiplo-busca');
     const opcoesContainer = raiz.querySelector('.filtro-multiplo-opcoes');
+    const chkTodas = raiz.querySelector('.filtro-multiplo-chk-todas');
+    // Últimas opções renderizadas (já filtradas pela busca, se houver) - é
+    // sobre ESSAS que "Selecionar todas" age, não sobre `normalizadas`
+    // inteiro. Sem isso, buscar "Hospital X", marcar "Selecionar todas" e
+    // apagar a busca depois revelaria um monte de opção marcada que a
+    // pessoa nunca viu nem quis selecionar.
+    let ultimasFiltradas = [];
 
     function renderOpcoes(filtro) {
       const termo = normalizarBusca_(filtro);
-      const filtradas = termo ? normalizadas.filter(o => normalizarBusca_(o.rotulo).indexOf(termo) !== -1) : normalizadas;
-      opcoesContainer.innerHTML = filtradas.length
-        ? filtradas.map(o => `
+      ultimasFiltradas = termo ? normalizadas.filter(o => normalizarBusca_(o.rotulo).indexOf(termo) !== -1) : normalizadas;
+      opcoesContainer.innerHTML = ultimasFiltradas.length
+        ? ultimasFiltradas.map(o => `
           <label class="filtro-multiplo-opcao">
             <input type="checkbox" value="${escaparHtml(o.valor)}" ${selecionados.has(o.valor) ? 'checked' : ''} />
             <span>${escaparHtml(o.rotulo)}</span>
@@ -909,10 +920,27 @@ const UI = (function () {
         cb.addEventListener('change', () => {
           if (cb.checked) selecionados.add(cb.value); else selecionados.delete(cb.value);
           atualizarTexto();
+          atualizarChkTodas_();
           if (aoMudar) aoMudar();
         });
       });
+      atualizarChkTodas_();
     }
+
+    /** Sincroniza "Selecionar todas" com o que está marcado dentre as opções filtradas agora - marcado, desmarcado ou "indeterminate" (só parte marcada). */
+    function atualizarChkTodas_() {
+      const marcadas = ultimasFiltradas.filter(o => selecionados.has(o.valor)).length;
+      chkTodas.disabled = ultimasFiltradas.length === 0;
+      chkTodas.checked = ultimasFiltradas.length > 0 && marcadas === ultimasFiltradas.length;
+      chkTodas.indeterminate = marcadas > 0 && marcadas < ultimasFiltradas.length;
+    }
+
+    chkTodas.addEventListener('change', () => {
+      ultimasFiltradas.forEach(o => { if (chkTodas.checked) selecionados.add(o.valor); else selecionados.delete(o.valor); });
+      atualizarTexto();
+      renderOpcoes(buscaInput.value);
+      if (aoMudar) aoMudar();
+    });
 
     function atualizarTexto() {
       if (selecionados.size === 0) {

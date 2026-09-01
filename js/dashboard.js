@@ -297,6 +297,9 @@ const Dashboard = (function () {
           <div class="campo campo-filtro-multiplo"><label style="width:100%">Objeto</label>
             <div id="dashMetasFiltroObjeto"></div><button type="button" class="filtro-multiplo-x" data-alvo="dashMetasFiltroObjeto" title="Limpar filtro de Objeto">&times;</button>
           </div>
+          <div class="campo campo-filtro-multiplo"><label style="width:100%">Tipo de Unidade</label>
+            <div id="dashMetasFiltroTipoUnidade"></div><button type="button" class="filtro-multiplo-x" data-alvo="dashMetasFiltroTipoUnidade" title="Limpar filtro de Tipo de Unidade">&times;</button>
+          </div>
           <div class="campo"><label>Estado</label>
             <select id="dashMetasFiltroEstado">
               <option value="">Todos</option>
@@ -305,6 +308,7 @@ const Dashboard = (function () {
             </select>
           </div>
           <span style="flex:1"></span>
+          <span id="dashMetasContagem" class="ajuda" style="align-self:center"></span>
           <a href="#" id="dashMetasVerTodas" style="font-size:12.5px;color:var(--azul);text-decoration:none;font-weight:600;align-self:center">Gerenciar metas →</a>
         </div>
         <div id="dashMetasTabela"></div>
@@ -335,12 +339,16 @@ const Dashboard = (function () {
     const unidadesVistas = new Set();
     const objetosOpcoes = [];
     const objetosVistos = new Set();
+    const tiposUnidadeOpcoes = [];
+    const tiposUnidadeVistos = new Set();
     metasItensAtuais_.forEach(item => {
       if (!unidadesVistas.has(item.unidade_id)) { unidadesVistas.add(item.unidade_id); unidadesOpcoes.push({ valor: item.unidade_id, rotulo: item.unidade_nome }); }
       if (!objetosVistos.has(item.objeto)) { objetosVistos.add(item.objeto); objetosOpcoes.push(item.objeto); }
+      if (item.tipo_unidade && !tiposUnidadeVistos.has(item.tipo_unidade)) { tiposUnidadeVistos.add(item.tipo_unidade); tiposUnidadeOpcoes.push(item.tipo_unidade); }
     });
     UI.criarFiltroMultiplo('dashMetasFiltroUnidade', unidadesOpcoes, renderTabelaMetas_);
     UI.criarFiltroMultiplo('dashMetasFiltroObjeto', objetosOpcoes, renderTabelaMetas_);
+    UI.criarFiltroMultiplo('dashMetasFiltroTipoUnidade', tiposUnidadeOpcoes, renderTabelaMetas_);
     UI.ligarLimpezaFiltros('#dashMetasDetalhe', null, renderTabelaMetas_);
     document.getElementById('dashMetasFiltroEstado').addEventListener('change', renderTabelaMetas_);
     document.getElementById('dashMetasVerTodas').addEventListener('click', e => { e.preventDefault(); App.navegarPara('metasProcessos'); });
@@ -355,14 +363,22 @@ const Dashboard = (function () {
     if (!alvo) return;
     const unidadeIds = UI.valoresFiltroMultiplo('dashMetasFiltroUnidade');
     const objetos = UI.valoresFiltroMultiplo('dashMetasFiltroObjeto');
+    const tiposUnidade = UI.valoresFiltroMultiplo('dashMetasFiltroTipoUnidade');
     const estado = document.getElementById('dashMetasFiltroEstado').value;
 
     const itens = metasItensAtuais_
       .filter(it => !unidadeIds.length || unidadeIds.indexOf(it.unidade_id) !== -1)
       .filter(it => !objetos.length || objetos.indexOf(it.objeto) !== -1)
+      .filter(it => !tiposUnidade.length || tiposUnidade.indexOf(it.tipo_unidade) !== -1)
       .filter(it => !estado || it.estado === estado)
       .slice()
       .sort((a, b) => b.falta - a.falta);
+
+    // Contagem no canto direito (sessão 2026-09-01, pedido do usuário) -
+    // quantos processos (linhas Unidade+Objeto) o filtro atual está
+    // mostrando, mesmo quando dá zero.
+    const contagemEl = document.getElementById('dashMetasContagem');
+    if (contagemEl) contagemEl.textContent = `${itens.length} processo${itens.length === 1 ? '' : 's'}`;
 
     if (!itens.length) {
       alvo.innerHTML = '<p class="estado-vazio">Nenhuma meta cadastrada para este filtro ainda.</p>';
