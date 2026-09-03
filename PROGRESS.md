@@ -3072,6 +3072,42 @@ Subação (Ação e G.D. continuam os da seção).
   botões de exceção - seletores agora mutuamente exclusivos, sem depender
   de ordem no CSS.
 
+## Fase — Importação real de Ação/Subação por Unidade (sessão 2026-09-03, pedido do usuário)
+O usuário mandou a tabela real de códigos (3 planilhas: "14 C.G UPA", "34
+C.G HOSPITAIS", "8 C.G UPAEs") pra popular de vez as Seções de Ação recém-
+criadas ([[Seções de Ação]] acima), em vez de depender só da migração
+automática do dado antigo (`migrarAcoesUnidadesExistentes`).
+- Nova função `importarSecoesAcaoReal2026_09()` (`backend/Unidades.gs`,
+  fim do arquivo, rodar 1x manualmente no editor do Apps Script) - tabela
+  hardcoded (`IMPORT_SECOES_ACAO_REAL_2026_09_`) com Custeio=seção
+  "Pagamentos Regulares" (Ação 4610), Investimento=seção "Investimento"
+  (Ação 4553), G.D. fixo `3.3.50` em ambas (não vinha na tabela recebida -
+  decisão do usuário). Casa unidade por nome com o mesmo normalizador
+  (acento/caixa/espaço-insensível) de `backfillContratoCeoUnidades`.
+- Exceções por Objeto: "Sazonalidade" (código `+3926/0000` ou `+4799/0000`
+  na coluna Investimento de várias UPAs/Hospitais) e "TEA"/"BERA"/"Ostomia"
+  (UPAEs, coluna Custeio) - `garantirOpcaoObjeto_` cria essas 4 opções na
+  lista OBJETO se ainda não existirem (senão o analista não conseguiria
+  nem selecionar esse Objeto na tela de SOF pra a exceção valer).
+- Só substitui as seções tituladas exatamente "Pagamentos Regulares"/
+  "Investimento" de cada unidade - preserva qualquer outra seção que já
+  exista (idempotente, seguro rodar de novo).
+- **Casos deixados de fora de propósito** (pedido do usuário: "pular por
+  enquanto" - célula ambígua/com nota na tabela original, não dava pra
+  importar sem adivinhar): UPA Imbiribeira, UPA São Lourenço, Hospital Dom
+  Malan, Hospital Silvio Magalhães, Hospital Mestre Vitalino (todos com 2
+  códigos ou nota de rodapé não fornecida na coluna Investimento),
+  Hospital Regional Emilia Câmara (célula ambígua), UPAE Grande Recife
+  (código de Investimento já cancelado, "Operação de Crédito, cancelada").
+  Ficam com a seção Investimento intocada - preencher à mão pelo card da
+  unidade quando o usuário decidir o valor certo.
+- Nomes de Hospital na tabela recebida vieram "informais" (ex. "Hospital
+  Fernando Bezerra") - usada a grafia real já cadastrada (conferida contra
+  `MAPA_CONTRATO_CEO_`, `backfillContratoCeoUnidades`), ex. "Hospital
+  Regional Fernando Bezerra". Nome que não bater com nenhuma unidade
+  cadastrada aparece em "NÃO encontradas" no log, sem travar o resto da
+  importação.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
