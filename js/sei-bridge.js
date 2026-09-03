@@ -152,9 +152,22 @@ const SeiBridge = (function () {
    */
   const PADRAO_DOCUMENTO_SOF_ = {
     // Rótulo exato do tipo na tela "Escolha o Tipo do Documento" do SEI.
+    //
+    // excluir (sessão 2026-09-03, pedido do usuário): o SEI tem um 2º tipo,
+    // "SES e-SOF - Sol Orçamentária e Financeira Eletrônica", que também
+    // contém a substring "SOF" - o rótulo genérico "SOF" acima (fallback pra
+    // unidade sem o tipo completo cadastrado) casava com os dois, e a
+    // extensão ficava com o ÚLTIMO item que bate (a e-SOF, que aparece
+    // depois na lista do SEI). A extensão (Extension/gaocg-sei-bridge/
+    // content-sei.js) já tem essa mesma exclusão embutida como fallback -
+    // repetida aqui de propósito, e não só lá, porque quem decide QUAL tipo
+    // de documento a GAOCG usa é essa configuração do app (comentário acima:
+    // "decisão de negócio, não detalhe técnico de automação"), que atualiza
+    // sem precisar reinstalar a extensão em cada máquina.
     tipoConfig: {
       filtro: 'SOF',
-      rotulos: ['SES - SOF - Solicitação Orçamentária e Financeira', 'SOF - Solicitação Orçamentária e Financeira', 'SOF']
+      rotulos: ['SES - SOF - Solicitação Orçamentária e Financeira', 'SOF - Solicitação Orçamentária e Financeira', 'SOF'],
+      excluir: ['e-SOF', 'eletrônica', 'eletronica']
     },
     // "Nenhum" faz o editor abrir VAZIO - o conteúdo da SOF entra sozinho, sem
     // a barra de confirmação (que só existe pra não sobrescrever o modelo do SEI).
