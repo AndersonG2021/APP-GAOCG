@@ -20,7 +20,9 @@
  *   }
  * }
  *
- * Segundo tipo de mensagem externa, só consulta (sessão 2026-08-14):
+ * Segundo tipo de mensagem externa, só consulta (sessão 2026-08-14, restaurado
+ * 2026-09-03 depois de a sincronização com a v0.46.0 ter derrubado esse trecho
+ * sem querer):
  * { type: "CONSULTAR_NUMERO_SOF", numeroProcesso: "00000.000000/2026-00" }
  * -> { ok: true, numero: "173/2026", capturadoEm: <epoch ms> } ou { ok: false }
  * se a extensão ainda não capturou o número gerado pelo SEI pra este processo
@@ -325,7 +327,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         documento: message.documento,
         // Repassado ao content script pra ele guardar o número gerado pelo
         // SEI sob esta mesma chave (ver guardarNumeroSofCapturado_/
-        // CONSULTAR_NUMERO_SOF abaixo, sessão 2026-08-14).
+        // CONSULTAR_NUMERO_SOF acima, sessão 2026-08-14).
         numeroProcesso: numero
       });
       sendResponse(resposta);
