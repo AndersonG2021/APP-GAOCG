@@ -31,6 +31,30 @@ const Api = (function () {
   }
 
   /**
+   * "Parâmetro \"action\" ausente." (achado 2026-09-03, pedido do usuário:
+   * "vez ou outra o app fica bem lento pra carregar e dá esse erro") -
+   * mensagem do PRIMEIRÍSSIMO `if` de handleRequest_ (Code.gs, backend),
+   * antes de qualquer autenticação/leitura/escrita: só acontece quando o
+   * corpo do POST chega vazio no servidor, o que só pode ser perda de
+   * requisição em trânsito (rede instável) - nunca a lógica de negócio já
+   * tendo rodado. Por isso é seguro reenviar automaticamente, mesmo para
+   * ações de escrita: nada foi executado na tentativa que falhou.
+   */
+  const ERRO_ACTION_AUSENTE_ = 'Parâmetro "action" ausente.';
+
+  async function requisitar_(corpo) {
+    const resposta = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(corpo)
+    });
+    if (!resposta.ok) {
+      throw new Error('Falha de comunicação com o servidor (HTTP ' + resposta.status + ').');
+    }
+    return resposta.json();
+  }
+
+  /**
    * opcoes.silencioso: pra chamadas de limpeza/"fire and forget" que o
    * usuário não precisa esperar (ex.: liberar a trava de edição simultânea ao
    * fechar um modal que já sumiu da tela, marcar um card como visualizado).
@@ -49,17 +73,11 @@ const Api = (function () {
 
     if (!silencioso) UI.mostrarCarregando();
     try {
-      const resposta = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(corpo)
-      });
-
-      if (!resposta.ok) {
-        throw new Error('Falha de comunicação com o servidor (HTTP ' + resposta.status + ').');
+      let json = await requisitar_(corpo);
+      if (!json.ok && json.error === ERRO_ACTION_AUSENTE_) {
+        json = await requisitar_(corpo);
       }
 
-      const json = await resposta.json();
       if (!json.ok) {
         if (json.error && json.error.toLowerCase().indexOf('sessão') !== -1) {
           Auth.encerrarSessaoLocal();

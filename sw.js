@@ -27,6 +27,20 @@ self.addEventListener('activate', event => {
 
 // Passthrough puro - deixa o navegador cuidar do cache normal dele, sem
 // interceptar/guardar nada aqui.
+//
+// SÓ intercepta GET (achado 2026-09-03, pedido do usuário: "vez ou outra o
+// app fica bem lento pra carregar e dá esse erro... Parâmetro action
+// ausente"): repassar `event.request` pra um novo fetch() dentro do SW
+// funciona quase sempre, mas sob rede instável o navegador às vezes precisa
+// reenviar a requisição internamente - e o corpo (stream) de um POST já
+// consumido na 1ª tentativa sai VAZIO no reenvio. O backend (Code.gs) trata
+// corpo vazio como "sem action nenhum" e devolve exatamente esse erro. Como
+// este Service Worker não faz cache nenhum (só existe pra satisfazer o
+// requisito de instalabilidade, que basta um handler de fetch existir - não
+// que ele intercepte tudo), não há motivo pra tocar em POST/PUT/DELETE: só
+// GET passa por aqui, o resto segue direto pelo navegador, sem risco nenhum
+// de corpo perdido.
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
   event.respondWith(fetch(event.request));
 });
