@@ -262,6 +262,29 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .linha-ta-pagamento { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
 .linha-ta-campos .campo, .linha-ta-pagamento .campo { margin-bottom: 0; }
 .linha-ta .linha-fonte-remover { position: absolute; top: 8px; right: 8px; margin-top: 0; }
+
+/*
+ * Seções de Ação da Unidade (sessão 2026-09-01, pedido do usuário) - mesmo
+ * princípio de ".linha-ta" acima, com um 2º nível aninhado (as Exceções por
+ * Objeto de cada seção, ".linha-acao-excecao").
+ */
+.linhas-acao { display: flex; flex-direction: column; gap: 12px; }
+.linha-acao { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 40px 12px 12px; background: var(--cinza-100); border-radius: 8px; }
+/* Escopado a .linha-acao-cabecalho (não .linha-acao inteiro) DE PROPÓSITO -
+   .linha-acao-excecao (mais abaixo) também tem um .linha-fonte-remover
+   dentro de .linha-acao, e não pode herdar este posicionamento. */
+.linha-acao-cabecalho .linha-fonte-remover { position: absolute; top: 8px; right: 8px; margin-top: 0; }
+.linha-acao-cabecalho .campo { margin-bottom: 0; max-width: 320px; }
+.linha-acao-campos { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; align-items: start; }
+.linha-acao-campos .campo { margin-bottom: 0; }
+.linha-acao-excecoes { border-top: 1px solid var(--cinza-200); padding-top: 10px; }
+.linha-acao-excecoes-titulo { display: block; font-weight: 600; font-size: 12.5px; color: var(--cinza-700); margin-bottom: 6px; }
+.linha-acao-excecoes-titulo .ajuda { display: block; font-weight: 400; margin-top: 2px; }
+.linha-acao-excecoes-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.linha-acao-excecao { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; padding-right: 40px; align-items: center; background: var(--branco); border-radius: 8px; padding-top: 6px; padding-bottom: 6px; padding-left: 8px; }
+.linha-acao-excecao .linha-fonte-remover { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); margin-top: 0; width: 24px; height: 24px; font-size: 14px; }
+/* select/input soltos aqui (sem o wrapper .campo, que traria margem/label indesejados numa linha compacta) - reaplica a mesma aparência de .campo input/.campo select "na mão". */
+.linha-acao-excecao select, .linha-acao-excecao input { width: 100%; padding: 8px 10px; border: 1px solid var(--cinza-300); border-radius: 8px; font-size: 13.5px; font-family: inherit; margin: 0; }
 .cartao-unidade-ta-vencido { color: var(--vermelho); margin: 2px 0 6px; }
 
 .linhas-parcela-dividida { display: flex; flex-direction: column; gap: 8px; }

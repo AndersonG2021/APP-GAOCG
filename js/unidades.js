@@ -15,6 +15,13 @@ const TelaUnidades = (function () {
   let unidades = [];
   let todasUnidades = []; // sem filtro nenhum - só pra popular o dropdown do filtro "Unidade", separado da lista filtrada exibida nos cartões
   let linhasTas = [];
+  // Seções de Ação (sessão 2026-09-01, pedido do usuário) - mesmo padrão de
+  // linhasTas acima, só que em 2 níveis (cada seção tem sua própria lista de
+  // exceções por Objeto aninhada, ver lerLinhasAcoesDoDom_/renderAcoesFormulario_).
+  let linhasAcoes = [];
+  // Opções de Objeto (Listas Personalizadas) pro <select> de cada exceção -
+  // carregadas 1x em render(), junto com OSS.
+  let opcoesObjetoUnidades_ = [];
   let ultimoFiltroJson = null;
   let paginaAtual = 1;
   let totalRegistros = 0;
@@ -39,10 +46,12 @@ const TelaUnidades = (function () {
     // cards ao voltar pra esta tela).
     modoSelecaoLote = false;
     idsSelecionadosLote_.clear();
-    const [opcoesOss, todasUnidadesCarregadas] = await Promise.all([
+    const [opcoesOss, opcoesObjeto, todasUnidadesCarregadas] = await Promise.all([
       TelaListas.obterOpcoes('OSS'),
+      TelaListas.obterOpcoes('OBJETO'),
       Api.chamar('listarUnidades', { pageSize: 100000 }, { cache: true })
     ]);
+    opcoesObjetoUnidades_ = opcoesObjeto;
     todasUnidades = todasUnidadesCarregadas.items;
     const container = document.getElementById('conteudo');
     container.innerHTML = `
@@ -469,12 +478,108 @@ const TelaUnidades = (function () {
     });
   }
 
+  // ===== Seções de Ação (sessão 2026-09-01, pedido do usuário) =====
+  // Ação/Subação/G.D. eram 3 campos soltos; viraram uma lista de seções
+  // (título configurável - casa por título com "Tipo de SOF"/OPCOES_SOF_TIPO
+  // em js/sof.js, ex. "Pagamentos Regulares"/"Investimento"), cada uma com
+  // sua própria Ação/Subação/G.D., e dentro de cada seção uma lista de
+  // exceções (Objeto -> Subação alternativa). 2 níveis de "adicionar linha",
+  // mesmo padrão de lerLinhasTasDoDom_/renderTasFormulario acima, só
+  // aninhado.
+
+  /** Lê as Seções de Ação (com as exceções de cada uma) direto do DOM - fonte da verdade entre re-renders. */
+  function lerLinhasAcoesDoDom_() {
+    return Array.from(document.querySelectorAll('#acoesContainer .linha-acao')).map(linhaAcao => ({
+      titulo: linhaAcao.querySelector('.linha-acao-titulo').value,
+      acao: linhaAcao.querySelector('.linha-acao-acao').value,
+      subacao: linhaAcao.querySelector('.linha-acao-subacao').value,
+      gd: linhaAcao.querySelector('.linha-acao-gd').value,
+      excecoes: Array.from(linhaAcao.querySelectorAll('.linha-acao-excecao')).map(linhaExc => ({
+        objeto: linhaExc.querySelector('.linha-acao-excecao-objeto').value,
+        subacao: linhaExc.querySelector('.linha-acao-excecao-subacao').value
+      }))
+    }));
+  }
+
+  function linhaExcecaoHtml_(exc, indiceAcao, indiceExcecao) {
+    return `
+      <div class="linha-acao-excecao" data-indice-excecao="${indiceExcecao}">
+        <select class="linha-acao-excecao-objeto">
+          <option value="">Selecione o Objeto...</option>
+          ${opcoesObjetoUnidades_.map(o => `<option value="${UI.escaparHtml(o.valor)}" ${o.valor === exc.objeto ? 'selected' : ''}>${UI.escaparHtml(o.valor)}</option>`).join('')}
+        </select>
+        <input class="linha-acao-excecao-subacao" placeholder="Subação alternativa" value="${UI.escaparHtml(exc.subacao || '')}" />
+        <button type="button" class="linha-fonte-remover linha-acao-excecao-remover" data-indice-acao="${indiceAcao}" title="Remover exceção">&times;</button>
+      </div>`;
+  }
+
+  function linhaAcaoHtml_(item, indice) {
+    return `
+      <div class="linha-acao" data-indice="${indice}">
+        <div class="linha-acao-cabecalho">
+          <div class="campo"><label>Título da seção</label><input class="linha-acao-titulo" value="${UI.escaparHtml(item.titulo || '')}" placeholder="Ex.: Pagamentos Regulares" /></div>
+          <button type="button" class="linha-fonte-remover linha-acao-remover" title="Remover seção">&times;</button>
+        </div>
+        <div class="linha-acao-campos">
+          <div class="campo"><label>Ação</label><input class="linha-acao-acao" value="${UI.escaparHtml(item.acao || '')}" /></div>
+          <div class="campo"><label>Subação</label><input class="linha-acao-subacao" value="${UI.escaparHtml(item.subacao || '')}" /></div>
+          <div class="campo"><label>G.D.</label><input class="linha-acao-gd" value="${UI.escaparHtml(item.gd || '')}" /></div>
+        </div>
+        <div class="linha-acao-excecoes">
+          <label class="linha-acao-excecoes-titulo">Exceções por Objeto <span class="ajuda">(a Subação muda pra esses Objetos - Ação/G.D. continuam os desta seção)</span></label>
+          <div class="linha-acao-excecoes-lista">${(item.excecoes || []).map((exc, ei) => linhaExcecaoHtml_(exc, indice, ei)).join('')}</div>
+          <button type="button" class="botao linha-acao-add-excecao" data-indice-acao="${indice}">+ Adicionar Exceção</button>
+        </div>
+      </div>`;
+  }
+
+  function renderAcoesFormulario_() {
+    const alvo = document.getElementById('acoesContainer');
+    alvo.innerHTML = linhasAcoes.map((item, i) => linhaAcaoHtml_(item, i)).join('');
+
+    alvo.querySelectorAll('.linha-acao-remover').forEach(btn => {
+      btn.addEventListener('click', () => {
+        linhasAcoes = lerLinhasAcoesDoDom_();
+        const indice = Number(btn.closest('.linha-acao').dataset.indice);
+        linhasAcoes.splice(indice, 1);
+        renderAcoesFormulario_();
+      });
+    });
+    alvo.querySelectorAll('.linha-acao-add-excecao').forEach(btn => {
+      btn.addEventListener('click', () => {
+        linhasAcoes = lerLinhasAcoesDoDom_();
+        const indice = Number(btn.dataset.indiceAcao);
+        linhasAcoes[indice].excecoes.push({ objeto: '', subacao: '' });
+        renderAcoesFormulario_();
+      });
+    });
+    alvo.querySelectorAll('.linha-acao-excecao-remover').forEach(btn => {
+      btn.addEventListener('click', () => {
+        linhasAcoes = lerLinhasAcoesDoDom_();
+        const indiceAcao = Number(btn.dataset.indiceAcao);
+        const indiceExcecao = Number(btn.closest('.linha-acao-excecao').dataset.indiceExcecao);
+        linhasAcoes[indiceAcao].excecoes.splice(indiceExcecao, 1);
+        renderAcoesFormulario_();
+      });
+    });
+  }
+
   function abrirFormulario(unidade) {
     const editando = !!unidade;
     linhasTas = (unidade && unidade.tas) ? unidade.tas.map(t => ({
       objeto_ta: t.objeto_ta, numero_ta: t.numero_ta, valor_ta: t.valor_ta,
       tipo_pagamento: t.tipo_pagamento, data_vencimento: t.data_vencimento
     })) : [];
+    // Unidade nova (sessão 2026-09-01, pedido do usuário): já nasce com as 2
+    // seções padrão tituladas (vazias, só o título) - "por padrão temos Uma
+    // ação para Pagamentos Regulares, e outra Ação para Investimento".
+    linhasAcoes = (unidade && unidade.acoes && unidade.acoes.length) ? unidade.acoes.map(a => ({
+      titulo: a.titulo, acao: a.acao, subacao: a.subacao, gd: a.gd,
+      excecoes: (a.excecoes || []).map(e => ({ objeto: e.objeto, subacao: e.subacao }))
+    })) : (editando ? [] : [
+      { titulo: 'Pagamentos Regulares', acao: '', subacao: '', gd: '', excecoes: [] },
+      { titulo: 'Investimento', acao: '', subacao: '', gd: '', excecoes: [] }
+    ]);
 
     const corpo = `
       <form id="formUnidade">
@@ -491,9 +596,6 @@ const TelaUnidades = (function () {
           <div class="campo"><label>Contrato CEO</label><input id="uContratoCeo" value="${UI.escaparHtml(unidade ? unidade.contrato_ceo : '')}" placeholder="Ex.: 00871/2022" /></div>
           <div class="campo"><label>Valor do C.G. - Tesouro</label><input id="uValorContratoGestaoTesouro" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao ? unidade.valor_contrato_gestao : ''}" /></div>
           <div class="campo"><label>Valor do C.G. - SUS</label><input id="uValorContratoGestaoSus" type="text" inputmode="decimal" class="campo-moeda" value="${unidade && unidade.valor_contrato_gestao_sus ? unidade.valor_contrato_gestao_sus : ''}" /></div>
-          <div class="campo"><label>Ação</label><input id="uAcao" value="${UI.escaparHtml(unidade ? unidade.acao : '')}" /></div>
-          <div class="campo"><label>Subação</label><input id="uSubacao" value="${UI.escaparHtml(unidade ? unidade.subacao : '')}" /></div>
-          <div class="campo"><label>G.D.</label><input id="uGd" value="${UI.escaparHtml(unidade ? unidade.gd : '')}" /></div>
         </div>
         <div class="grade-2">
           <div class="campo"><label>Situação do Contrato</label>
@@ -517,6 +619,12 @@ const TelaUnidades = (function () {
           <div id="tasContainer" class="linhas-fonte"></div>
           <button type="button" class="botao" id="btnAdicionarTa">+ Adicionar parcela mensal</button>
         </div>
+        <div class="campo">
+          <label>Seções de Ação</label>
+          <p class="ajuda">Cada seção representa um Tipo de SOF (ex.: "Pagamentos Regulares", "Investimento") - o título precisa bater com o Tipo escolhido lá na SOF pra preencher Ação/Subação/G.D. automaticamente.</p>
+          <div id="acoesContainer" class="linhas-acao"></div>
+          <button type="button" class="botao" id="btnAdicionarAcao">+ Adicionar seção</button>
+        </div>
         <p id="uErro" class="erro-campo oculto"></p>
       </form>`;
     const rodape = `
@@ -539,6 +647,13 @@ const TelaUnidades = (function () {
       linhasTas = lerLinhasTasDoDom_();
       linhasTas.push({ objeto_ta: '', numero_ta: '', valor_ta: '', tipo_pagamento: 'regular', data_vencimento: '' });
       renderTasFormulario();
+    });
+
+    renderAcoesFormulario_();
+    document.getElementById('btnAdicionarAcao').addEventListener('click', () => {
+      linhasAcoes = lerLinhasAcoesDoDom_();
+      linhasAcoes.push({ titulo: '', acao: '', subacao: '', gd: '', excecoes: [] });
+      renderAcoesFormulario_();
     });
 
     document.getElementById('btnSalvarUnidade').addEventListener('click', async () => {
@@ -568,10 +683,8 @@ const TelaUnidades = (function () {
         data_final_instrumento: situacaoContratoEhTemporaria_(document.getElementById('uSituacaoContrato').value) ? document.getElementById('uDataFinalInstrumento').value : '',
         valor_contrato_gestao: UI.parseValorBr(document.getElementById('uValorContratoGestaoTesouro').value),
         valor_contrato_gestao_sus: UI.parseValorBr(document.getElementById('uValorContratoGestaoSus').value),
-        acao: document.getElementById('uAcao').value.trim(),
-        subacao: document.getElementById('uSubacao').value.trim(),
-        gd: document.getElementById('uGd').value.trim(),
-        tas: lerLinhasTasDoDom_()
+        tas: lerLinhasTasDoDom_(),
+        acoes: lerLinhasAcoesDoDom_()
       };
       try {
         if (editando) await Api.chamar('atualizarUnidade', { id: unidade.id, data: dados });

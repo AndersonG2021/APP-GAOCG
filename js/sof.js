@@ -556,17 +556,65 @@ const TelaSof = (function () {
     if (cartao) cartao.classList.toggle('carregando', carregando);
   }
 
+  /**
+   * Resolve Ação/Subação/G.D. pra uma Unidade dado um "Tipo de SOF" (casado
+   * por título de Seção, case-insensitive) e um Objeto (a Subação pode vir
+   * de uma exceção pra esse Objeto, se houver uma dentro da seção) - sessão
+   * 2026-09-01, pedido do usuário. Espelha EXATAMENTE
+   * resolverAcaoSubacaoGdDaUnidade_ (backend/Unidades.gs) pra o que aparece
+   * no formulário bater com o que é gravado de verdade ao salvar (a mesma
+   * lógica roda de novo lá, como autoridade final).
+   */
+  function resolverAcaoSubacaoGd_(unidade, tipo, objeto) {
+    const tipoNormalizado = String(tipo || '').trim().toLowerCase();
+    const secao = ((unidade && unidade.acoes) || []).find(a => String(a.titulo || '').trim().toLowerCase() === tipoNormalizado);
+    if (!secao) return { acao: '', subacao: '', gd: '' };
+    const excecao = (secao.excecoes || []).find(e => String(e.objeto || '') === String(objeto || ''));
+    return {
+      acao: secao.acao || '',
+      subacao: excecao ? (excecao.subacao || '') : (secao.subacao || ''),
+      gd: secao.gd || ''
+    };
+  }
+
   function camposAutopreenchimento(unidade, sof) {
     const mapa = {
       oss_snapshot: 'oss', cnpj_snapshot: 'cnpj', contrato_snapshot: 'contrato_gestao',
-      classificacao_orcamentaria_snapshot: 'classificacao_orcamentaria', acao_snapshot: 'acao',
-      subacao_snapshot: 'subacao', gd_snapshot: 'gd'
+      classificacao_orcamentaria_snapshot: 'classificacao_orcamentaria'
     };
     const resultado = {};
     Object.keys(mapa).forEach(campoSnapshot => {
       resultado[campoSnapshot] = sof ? (sof[campoSnapshot] || '') : (unidade ? unidade[mapa[campoSnapshot]] || '' : '');
     });
+    if (sof) {
+      resultado.acao_snapshot = sof.acao_snapshot || '';
+      resultado.subacao_snapshot = sof.subacao_snapshot || '';
+      resultado.gd_snapshot = sof.gd_snapshot || '';
+    } else {
+      // Ação/Subação/G.D. (sessão 2026-09-01) não vêm mais do campo solto da
+      // unidade (virou só histórico, nunca mais escrito) - vêm da Seção de
+      // Ação casada pelo Tipo de SOF já escolhido (ou não - sofTipoSof pode
+      // nem existir ainda, ver 3º parâmetro de abrirFormulario) + a exceção
+      // do Objeto já escolhido, se houver.
+      const tipoAtual = document.getElementById('sofTipoSof') ? document.getElementById('sofTipoSof').value : '';
+      const objetoAtual = document.getElementById('sofObjeto') ? document.getElementById('sofObjeto').value : '';
+      const resolvido = resolverAcaoSubacaoGd_(unidade, tipoAtual, objetoAtual);
+      resultado.acao_snapshot = resolvido.acao;
+      resultado.subacao_snapshot = resolvido.subacao;
+      resultado.gd_snapshot = resolvido.gd;
+    }
     return resultado;
+  }
+
+  /** Reaplica Ação/Subação/G.D. sugeridos (resolverAcaoSubacaoGd_) a partir da Unidade/Tipo/Objeto ATUALMENTE escolhidos no formulário - chamado sempre que qualquer um dos três muda (em qualquer ordem). */
+  function atualizarAcaoSubacaoGdPreenchidos_() {
+    const unidade = unidades.find(u => u.id === document.getElementById('sofUnidade').value);
+    const tipo = document.getElementById('sofTipoSof').value;
+    const objeto = document.getElementById('sofObjeto').value;
+    const resolvido = resolverAcaoSubacaoGd_(unidade, tipo, objeto);
+    document.getElementById('seiAcao').value = resolvido.acao;
+    document.getElementById('seiSubacao').value = resolvido.subacao;
+    document.getElementById('seiGrupoDespesa').value = resolvido.gd;
   }
 
   /**
@@ -910,6 +958,12 @@ const TelaSof = (function () {
       document.getElementById('sofCeo').value = unidade ? unidade.contrato_ceo || '' : '';
     });
 
+    // Ação/Subação/G.D. também reagem à troca de Tipo de SOF (sessão
+    // 2026-09-01, pedido do usuário: "se for pagamentos regulares, entra um
+    // tipo, se for Investimento entram os outros valores") - o listener de
+    // Objeto já existe mais abaixo (sofObjeto), só ganhou a chamada extra lá.
+    document.getElementById('sofTipoSof').addEventListener('change', atualizarAcaoSubacaoGdPreenchidos_);
+
     if (!editando) {
       // Autopreenchimento pelo último SOF do mesmo tipo NA MESMA unidade
       // escolhida (sessão 2026-08-13, pedido do usuário) - antes buscava o
@@ -943,6 +997,12 @@ const TelaSof = (function () {
     // nada aqui - só entra como opção local nova, selecionada. A gravação em Listas
     // Personalizadas (criarOpcao) só acontece em salvarSof, e só se o SOF for salvo de fato.
     document.getElementById('sofObjeto').addEventListener('change', function () {
+      // Ação/Subação/G.D. (sessão 2026-09-01) - a exceção da seção casada
+      // pode mudar a Subação sugerida pra este Objeto específico. Roda antes
+      // do "+ Adicionar novo objeto..." abaixo de propósito - não afeta em
+      // nada esse fluxo (só recomputa de novo quando ele disparar 'change'
+      // de novo com o valor definitivo).
+      atualizarAcaoSubacaoGdPreenchidos_();
       if (this.value !== NOVO_OBJETO_VALOR_) return;
       const novoValor = (prompt('Digite o novo objeto:') || '').trim();
       if (!novoValor) {

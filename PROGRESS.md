@@ -2996,6 +2996,82 @@ de instalação no Chrome/Android; `apple-touch-icon` do iOS Safari prefere
 PNG - fica como limitação conhecida até existir um PNG quadrado pra
 substituir).
 
+## Fase — Seções de Ação (Ação/Subação/G.D.) por Unidade + exceções por Objeto (sessão 2026-09-03, pedido do usuário)
+Trocou os 3 campos fixos "Ação"/"Subação"/"G.D." do card de Unidade (um
+único valor cada) por uma lista repetível de **seções de ação** com título
+configurável (ex.: "Pagamentos Regulares", "Investimento" - viram os 2
+padrões automáticos ao criar uma unidade nova, mas o usuário pode
+adicionar/renomear/remover seções livremente). Cada seção guarda seu
+próprio Ação/Subação/G.D., e pode ter **exceções de Subação por Objeto**
+(botão "Adicionar Exceção" ao lado do campo Subação, abre a lista de
+Objetos já cadastrados) - 1 objeto por exceção, exceção troca só a
+Subação (Ação e G.D. continuam os da seção).
+- **Decisões fechadas com o usuário** (2 rodadas de pergunta): manter 1
+  valor por SOF por vez (como hoje, não lista histórico); G.D. faz parte
+  de cada seção (não é fixo por unidade); ao criar unidade nova, as 2
+  seções padrão já entram prontas; unidade existente sem seção nenhuma
+  fica de fora (não migra sozinha); exceção liga 1 objeto por exceção;
+  exceção sobrescreve só a Subação.
+- **Estrutura nova (2 níveis, apaga-e-recria)** - primeira estrutura
+  aninhada em 2 níveis do app (Unidade → Seção de Ação → Exceção):
+  - Abas novas `UnidadesAcoes` (id, unidade_id, titulo, acao, subacao, gd,
+    criado_por, data_criacao) e `UnidadesAcaoExcecoes` (id,
+    unidade_acao_id, objeto, subacao, criado_por, data_criacao) -
+    nascem sozinhas (`getSheetAcoesUnidade_`/`getSheetExcecoesAcao_`).
+  - Prefixos `UAC`/`UAE` em `PREFIXOS_ID` (`backend/Contadores.gs`)
+    adicionados **antes** de escrever qualquer código que chamasse
+    `proximosIds_` nelas - already 2ª vez que esse bug (prefixo faltando)
+    tinha mordido nesta sessão (RecibosOrdensBancarias,
+    RecibosObservacoes), evitado de propósito desta vez.
+  - `substituirAcoesDaUnidade_` (`backend/Unidades.gs`) faz apaga-e-recria
+    em 2 níveis: deleta exceções antes das seções (ordem por causa de FK),
+    2 ciclos de lock no total (não 1 por item), e só regrava se mudou de
+    fato (`acoesIguaisAsSalvas_`, mesmo padrão já usado pra T.A./Fontes/
+    Ordens Bancárias) - compara JSON normalizado incluindo as exceções
+    aninhadas.
+  - Colunas antigas `acao`/`subacao`/`gd` da aba `Unidades` continuam
+    existindo (não apagadas), só nunca mais escritas por
+    `criarUnidade`/`atualizarUnidade` - dado velho fica só de arquivo.
+- **Resolução de Ação/Subação/G.D. efetivos** -
+  `resolverAcaoSubacaoGdDaUnidade_(unidade, tipo, objeto)`
+  (`backend/Unidades.gs`, espelhado no frontend em
+  `resolverAcaoSubacaoGd_`, `js/sof.js` - **manter os dois em sincronia
+  exata** se mexer num, mexer no outro): acha a seção cujo `titulo` bate
+  (case-insensitive) com o `tipo` recebido; se o `objeto` recebido bater
+  com alguma exceção daquela seção, usa a Subação da exceção; senão usa a
+  Subação da seção; sem seção correspondente, devolve tudo vazio.
+- **Integração com SOF** (pedido feito no meio da implementação, depois
+  de eu já ter perguntado sobre o resto): o campo "Tipo de SOF" existente
+  (`sofTipoSof`, valores fixos `Emenda Parlamentar Federal/Estadual` /
+  `Investimento` / `Pagamentos Regulares`) é o elo com o `titulo` da
+  seção. Trocar o Tipo ou o Objeto no formulário de SOF agora recalcula
+  Ação/Subação/G.D. na hora (`atualizarAcaoSubacaoGdPreenchidos_`,
+  `js/sof.js`, plugado nos listeners de `sofTipoSof` e `sofObjeto`) via
+  o resolver acima. Isso é só o preenchimento automático de baseline -
+  `buscarTemplateSof_`/`aplicarTemplateSof_` (SOF anterior igual
+  tipo+unidade) continua tendo prioridade quando existir template,
+  disparando depois de forma assíncrona, sem mudança de comportamento aí.
+  No backend, `aplicarSnapshotUnidadeSof_`/`recalcularDivergenciaSof_`
+  (`backend/Sof.gs`) também passaram a usar o resolver pra
+  acao/subacao/gd (os outros 4 campos diretos - oss/cnpj/contrato_gestao/
+  classificacao_orcamentaria - continuam via cópia direta, agora isolados
+  em `SOF_SNAPSHOT_FIELDS_DIRETOS_`).
+- **Passo manual obrigatório:** rodar `migrarAcoesUnidadesExistentes()`
+  uma vez pelo editor do Apps Script (selecionar a função e dar "Executar")
+  depois de implantado - cria uma seção "Pagamentos Regulares" pra cada
+  unidade que já tinha acao/subacao/gd antigos e ainda não tem seção
+  nenhuma. Idempotente (roda de novo sem duplicar), mesmo padrão de
+  `bootstrapPrimeiroAdministrador`/`backfillContratoCeoUnidades`. Loga no
+  editor a lista de unidades migradas/já tinha seção/sem dado antigo.
+- **Bug achado e corrigido na revisão própria (antes de qualquer teste):**
+  a regra CSS `.linha-acao .linha-fonte-remover` (posicionamento do botão
+  de remover seção) também batia sem querer no botão de remover exceção
+  (ambos descendem de `.linha-acao`, já que a exceção é aninhada dentro
+  da seção). Corrigido restringindo pra
+  `.linha-acao-cabecalho .linha-fonte-remover`, que não é ancestral dos
+  botões de exceção - seletores agora mutuamente exclusivos, sem depender
+  de ordem no CSS.
+
 ## Referências úteis
 - Repositório: `https://github.com/AndersonG2021/APP-GAOCG.git`, branch `main`, publicado via GitHub Pages.
 - Backend roda só no Apps Script; **sempre que um `.gs` mudar, colar manualmente, reimplantar (Implantar → Gerenciar implantações → editar → Nova versão) E atualizar a cópia correspondente em `/backend` neste repositório**, no mesmo commit.
