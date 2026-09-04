@@ -52,6 +52,11 @@ const TelaSof = (function () {
   let tamanhoPagina = 20;
   const TAMANHO_PAGINA_TODOS_ = 100000;
   let sofEmEdicaoId = null;
+  // IDs de SOF com uma busca automática do número SEI em andamento (sessão
+  // 2026-09-04, ver iniciarBuscaAutomaticaNumeroSof_) - evita 2 polls
+  // concorrentes pra mesma SOF (ex.: usuário clica "Salvar e enviar ao SEI"
+  // de novo antes do primeiro poll terminar).
+  const buscasAutomaticasNumeroSof_ = new Set();
   let abrindoLinha = false;
   let linhasFontes = [];
   let ultimoFiltroJson = null;
@@ -781,9 +786,9 @@ const TelaSof = (function () {
             <label>Nº SOF *</label>
             <div class="campo-linha-botao">
               <input id="sofNumero" value="${sof ? v('sof_numero') : '000/0000'}" placeholder="000/0000" />
-              ${editando ? '<button type="button" class="botao" id="btnBuscarNumeroSofSei" title="Busca, na extensão GAOCG SEI Bridge, o número que o SEI gerou pra esta SOF no último envio ao processo">🔄 SEI</button>' : ''}
+              ${editando ? '<button type="button" class="botao" id="btnBuscarNumeroSofSei" title="Traz na hora o número que o SEI gerou - normalmente nem precisa clicar, o app já busca sozinho depois de Salvar e enviar ao SEI">🔄 SEI</button>' : ''}
             </div>
-            <p class="ajuda">O número oficial (ex.: 173/2026) é gerado pelo SEI só quando o documento é criado lá - fica "000/0000" até então.${editando ? ' O botão "SEI" traz o número já gerado, se o envio já tiver acontecido.' : ''}</p>
+            <p class="ajuda">O número oficial (ex.: 173/2026) é gerado pelo SEI só quando o documento é criado lá - fica "000/0000" até então. Depois de "Salvar e enviar ao SEI", o app busca esse número sozinho e preenche automaticamente assim que o SEI gerar.${editando ? ' O botão "SEI" é só um atalho pra trazer na hora, sem esperar.' : ''}</p>
           </div>
           <div class="campo"><label>DEA *</label>
             <select id="sofDea">
@@ -1063,6 +1068,71 @@ const TelaSof = (function () {
           this.disabled = false;
         }
       });
+    }
+
+    /**
+     * Automatiza o que o botão "🔄 SEI" acima faz na mão (sessão 2026-09-04,
+     * pedido do usuário: "depois que salva a SOF com o novo número já
+     * atualizar o novo número da SOF no app"). Chamada logo depois de
+     * SeiBridge.enviarSof, roda em segundo plano - consulta a extensão de
+     * tempos em tempos até achar o número que o SEI gerou (ou desistir) e,
+     * assim que achar, GRAVA sozinha na SOF (Api.chamar('atualizarSof', ...)),
+     * mesmo que o formulário já tenha sido fechado nesse meio tempo (é o caso
+     * de reenviar uma SOF já existente - salvarSof fecha o modal na hora).
+     * Também atualiza o campo #sofNumero ao vivo, se esta MESMA SOF ainda
+     * estiver aberta pra edição (sofEmEdicaoId).
+     *
+     * Intervalo de 10s, desiste depois de ~16min - a extensão descarta o
+     * conteúdo "pendente" depois de 15min (VALIDADE_PENDENTE_MS_,
+     * Extension/gaocg-sei-bridge/content-sei.js), então não faz sentido
+     * insistir além disso. O botão manual continua ali como reforço/atalho,
+     * caso o usuário volte depois dessa janela.
+     */
+    function iniciarBuscaAutomaticaNumeroSof_(sofId, numeroProcesso) {
+      if (!sofId || !numeroProcesso || buscasAutomaticasNumeroSof_.has(sofId)) return;
+      buscasAutomaticasNumeroSof_.add(sofId);
+
+      const INTERVALO_MS = 10000;
+      const LIMITE_MS = 16 * 60 * 1000;
+      const inicio = Date.now();
+
+      (async function tentar() {
+        try {
+          while (Date.now() - inicio < LIMITE_MS) {
+            await new Promise(resolve => setTimeout(resolve, INTERVALO_MS));
+            let resposta;
+            try {
+              resposta = await SeiBridge.consultarNumeroSof(numeroProcesso);
+            } catch (e) {
+              return; // erro inesperado - desiste em silêncio, o botão manual continua disponível
+            }
+            if (resposta.motivo === 'extensao_ausente') return; // sem extensão, não adianta insistir
+
+            if (resposta.ok) {
+              try {
+                await Api.chamar('atualizarSof', { id: sofId, data: { sof_numero: resposta.numero } });
+                CacheAbas.invalidar('sof');
+                if (sofEmEdicaoId === sofId) {
+                  const campoNumero = document.getElementById('sofNumero');
+                  if (campoNumero) {
+                    campoNumero.value = resposta.numero;
+                    campoNumero.dispatchEvent(new Event('input', { bubbles: true }));
+                    campoNumero.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }
+                UI.toast('Número da SOF preenchido automaticamente: ' + resposta.numero + '.', 'sucesso');
+              } catch (e) {
+                // Não conseguiu gravar (ex.: sessão expirou nesse meio tempo) -
+                // não trava nada, o usuário ainda pode trazer na mão depois.
+              }
+              return;
+            }
+            // Ainda não encontrado - tenta de novo no próximo ciclo.
+          }
+        } finally {
+          buscasAutomaticasNumeroSof_.delete(sofId);
+        }
+      })();
     }
 
     // Barra do editor "Objeto da despesa" (negrito). mousedown preventDefault
@@ -1580,6 +1650,10 @@ const TelaSof = (function () {
         const sofCompleta = Object.assign({}, sofExistente, resposta, dados);
         const html = montarDocumentoSeiHtml_(sofCompleta);
         await SeiBridge.enviarSof(sofCompleta, html);
+        // Não espera terminar (fire-and-forget) - roda em segundo plano
+        // enquanto o resto do fluxo de salvarSof segue normal (fechar/reabrir
+        // modal). Ver iniciarBuscaAutomaticaNumeroSof_ acima.
+        iniciarBuscaAutomaticaNumeroSof_(resposta.id, sofCompleta.sei);
       }
 
       CacheAbas.invalidar('sof');
