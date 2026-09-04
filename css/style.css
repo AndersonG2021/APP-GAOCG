@@ -216,6 +216,36 @@ h2.titulo-tela { margin: 0 0 16px; font-size: 18px; color: var(--azul-escuro); }
 .campo .erro-campo { font-size: 11.5px; color: var(--vermelho); margin-top: 3px; }
 @keyframes piscarErro { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .erro-campo.piscar-erro { animation: piscarErro 0.25s ease-in-out 2; }
+/* #sofErro (modal de SOF) fica FORA de um .campo - a regra ".campo .erro-campo"
+   acima nunca chegava nele (achado 2026-09-04); base própria por id, pra
+   nunca ficar sem cor/tamanho de erro nenhum. */
+#sofErro.erro-campo { font-size: 11.5px; color: var(--vermelho); margin-top: 8px; }
+/* Campos obrigatórios faltando no modal de SOF (sessão 2026-09-04, pedido do
+   usuário: "a informação de quais campos faltam deve aparecer maior e com
+   mais destaque") - banner bem mais chamativo que o .erro-campo padrão
+   (pequeno, usado pra erros comuns de outros formulários/do próprio backend),
+   só quando marcado com esta classe extra (ver mostrarErroObrigatoriosSof_,
+   js/sof.js - some de novo em qualquer outro tipo de erro). */
+#sofErro.erro-campo-grande {
+  font-size: 15px;
+  font-weight: 700;
+  color: #7a1212;
+  background: var(--vermelho-claro);
+  border: 1px solid var(--vermelho);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 8px;
+}
+/* Pisca em vermelho os campos obrigatórios faltando, por alguns segundos,
+   assim que uma tentativa de salvar falha - reforça visualmente pra onde o
+   scrollIntoView (mostrarErroObrigatoriosSof_) acabou de levar o usuário. A
+   marcação vermelha ESTÁTICA (.campo-obrigatorio-vazio) continua depois que
+   a animação termina - só o piscar é temporário. */
+@keyframes piscarCampoObrigatorio {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(198, 40, 40, .35); }
+}
+.piscar-campo { animation: piscarCampoObrigatorio 0.5s ease-in-out 4; }
 .grade-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .grade-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
 

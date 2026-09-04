@@ -1576,18 +1576,23 @@ const TelaSof = (function () {
     }
     const erroEl = document.getElementById('sofErro');
     erroEl.classList.add('oculto');
+    erroEl.classList.remove('erro-campo-grande');
     // Portao unico dos campos monetarios (UI.validarCamposMoeda, js/app.js):
     // recusa texto que nao vira numero em vez de gravar R$ 0,00 sem avisar.
     if (!UI.validarCamposMoeda()) return;
     const dados = coletarDadosFormulario();
-    if (!dados.unidade_id && !sofExistente) { UI.mostrarErro(erroEl, 'Selecione a unidade.'); return; }
-    const mensagemObrigatorio = validarCamposObrigatorios();
-    if (mensagemObrigatorio) { UI.mostrarErro(erroEl, mensagemObrigatorio); return; }
+    if (!dados.unidade_id && !sofExistente) {
+      mostrarErroObrigatoriosSof_(erroEl, { mensagem: 'Selecione a unidade.', ids: ['sofUnidade'] });
+      return;
+    }
+    const resultadoObrigatorios = validarCamposObrigatorios();
+    if (resultadoObrigatorios) { mostrarErroObrigatoriosSof_(erroEl, resultadoObrigatorios); return; }
 
     let dadosNe;
     try {
       dadosNe = await lerMiniFormularioNe_();
     } catch (err) {
+      erroEl.classList.remove('erro-campo-grande');
       UI.mostrarErro(erroEl, err.message);
       return;
     }
@@ -1676,6 +1681,7 @@ const TelaSof = (function () {
         await abrirSofExistente(resposta.id);
       }
     } catch (err) {
+      erroEl.classList.remove('erro-campo-grande');
       UI.mostrarErro(erroEl, err.message);
     }
   }
@@ -2147,6 +2153,26 @@ const TelaSof = (function () {
    * na mão depois de aplicarTemplateSof_ (que preenche campos por atribuição
    * direta a .value, sem disparar input/change - o listener delegado não veria).
    */
+  /**
+   * O elemento que o usuário REALMENTE VÊ pra um campo obrigatório - pode ser
+   * o próprio <input>/<select>/<textarea>/editor, ou o <input> proxy que
+   * UI.tornarPesquisavel (sofUnidade/sofOss/sofObjeto) desenha por cima de um
+   * <select> escondido (display:none). Usado tanto pelo destaque estático
+   * (aplicarDestaqueObrigatorios_) quanto pelo piscar+scroll de
+   * destacarCamposFaltando_ - achado real (sessão 2026-08-14): aplicar a
+   * classe vermelha no <select> escondido nunca aparecia na tela, porque
+   * quem o usuário vê é o proxy.
+   */
+  function elementoVisivelCampo_(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    if (el.tagName === 'SELECT' && el.nextElementSibling && el.nextElementSibling.classList.contains('select-pesquisavel')) {
+      const proxy = el.nextElementSibling.querySelector('.select-pesquisavel-input');
+      if (proxy) return proxy;
+    }
+    return el;
+  }
+
   function aplicarDestaqueObrigatorios_() {
     CAMPOS_OBRIGATORIOS.forEach(campo => {
       const el = document.getElementById(campo.id);
@@ -2154,37 +2180,69 @@ const TelaSof = (function () {
       const valor = (el.value !== undefined ? el.value : (el.textContent || '')).trim();
       const vazio = !valor;
       el.classList.toggle('campo-obrigatorio-vazio', vazio);
-      // UI.tornarPesquisavel (sofUnidade/sofOss/sofObjeto) esconde o <select>
-      // de verdade (display:none) e mostra um <input> próprio por cima -
-      // achado real (sessão 2026-08-14): o vermelho ia pro <select> escondido
-      // e nunca aparecia na tela, porque quem o usuário vê é esse input
-      // separado. Espelha a mesma classe nele quando o wrapper já existir
-      // (tornarPesquisavel roda DEPOIS da 1ª chamada desta função - ver
-      // segunda chamada logo após o ['sofUnidade',...].forEach abaixo).
-      if (el.tagName === 'SELECT' && el.nextElementSibling && el.nextElementSibling.classList.contains('select-pesquisavel')) {
-        const proxy = el.nextElementSibling.querySelector('.select-pesquisavel-input');
-        if (proxy) proxy.classList.toggle('campo-obrigatorio-vazio', vazio);
-      }
+      const proxy = elementoVisivelCampo_(campo.id);
+      if (proxy && proxy !== el) proxy.classList.toggle('campo-obrigatorio-vazio', vazio);
     });
   }
 
+  /**
+   * Devolve TODOS os campos obrigatórios ainda vazios (não só o 1º - sessão
+   * 2026-09-04, pedido do usuário: "a informação de quais campos faltam"),
+   * junto com uma mensagem já pronta listando os rótulos. `ids` é usado por
+   * mostrarErroObrigatoriosSof_ pra rolar a tela até o 1º campo e piscar
+   * todos em vermelho.
+   */
   function validarCamposObrigatorios() {
-    for (const campo of CAMPOS_OBRIGATORIOS) {
+    const faltando = CAMPOS_OBRIGATORIOS.filter(campo => {
       const el = document.getElementById(campo.id);
       // Objeto da despesa é um editor contenteditable (não tem .value) - usa textContent.
       const valor = (el.value !== undefined ? el.value : (el.textContent || '')).trim();
-      if (!valor) return 'Preencha o campo obrigatório: ' + campo.rotulo + '.';
+      return !valor;
+    });
+    if (faltando.length) {
+      return {
+        mensagem: 'Preencha os campos obrigatórios: ' + faltando.map(c => c.rotulo).join(', ') + '.',
+        ids: faltando.map(c => c.id)
+      };
     }
     const fontes = lerLinhasFontesDoDom_();
-    if (!fontes.length) return 'Informe ao menos uma fonte.';
+    if (!fontes.length) return { mensagem: 'Informe ao menos uma fonte.', ids: [], seletorExtra: '#sofFontesContainer' };
     for (const linha of fontes) {
       if (!String(linha.fonte || '').trim() || !String(linha.parcela_mensal || '').trim()) {
-        return 'Preencha fonte e parcela mensal em todas as linhas de fonte.';
+        return { mensagem: 'Preencha fonte e parcela mensal em todas as linhas de fonte.', ids: [], seletorExtra: '#sofFontesContainer' };
       }
       const soma = linha.cronograma.reduce((s, c) => s + (Number(c.valor) || 0), 0);
-      if (soma <= 0) return 'Preencha ao menos um mês com valor maior que zero em cada linha de fonte.';
+      if (soma <= 0) return { mensagem: 'Preencha ao menos um mês com valor maior que zero em cada linha de fonte.', ids: [], seletorExtra: '#sofFontesContainer' };
     }
     return null;
+  }
+
+  /**
+   * Mostra a falta de campos obrigatórios com destaque de verdade (sessão
+   * 2026-09-04, pedido do usuário): mensagem MAIOR (.erro-campo-grande, CSS
+   * em style.css - maior/mais chamativa que o .erro-campo padrão dos outros
+   * formulários), rola o modal até o 1º campo faltando, e pisca em vermelho
+   * TODOS os campos faltando por alguns segundos (.piscar-campo) - a
+   * marcação vermelha ESTÁTICA (.campo-obrigatorio-vazio,
+   * aplicarDestaqueObrigatorios_) continua depois disso, só o piscar some.
+   */
+  function mostrarErroObrigatoriosSof_(erroEl, resultado) {
+    erroEl.classList.add('erro-campo-grande');
+    UI.mostrarErro(erroEl, resultado.mensagem);
+
+    const alvo = (resultado.ids || [])
+      .map(elementoVisivelCampo_)
+      .filter(Boolean)
+      .concat(resultado.seletorExtra ? [document.querySelector(resultado.seletorExtra)].filter(Boolean) : []);
+    if (!alvo.length) return;
+
+    alvo[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    alvo.forEach(el => {
+      el.classList.remove('piscar-campo');
+      void el.offsetWidth; // força reflow, pra reiniciar a animação mesmo se já tinha piscado antes
+      el.classList.add('piscar-campo');
+      setTimeout(() => el.classList.remove('piscar-campo'), 2200);
+    });
   }
 
   // ===================== Documento SEI =====================
