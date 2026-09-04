@@ -53,6 +53,12 @@
  * `excluir` filtra fora qualquer item cujo texto contenha um desses termos,
  * ANTES de aplicar `rotulos` - garante que a e-SOF nunca seja escolhida
  * quando o tipo pedido é a SOF padrão.
+ *
+ * Aquela 1ª correção não foi suficiente: o usuário relatou (2026-09-04) que a
+ * e-SOF ainda era escolhida "vez ou outra". Os dois furos que sobraram - a
+ * exclusão olhar só o texto do elemento (e não da linha inteira) e `rotulos`
+ * não ser tratada como lista de prioridade - estão explicados e corrigidos em
+ * `melhorItemDaLista_`.
  */
 const MAPA_TIPO_DOCUMENTO = {
   sof: {
@@ -258,6 +264,68 @@ function itemDaLista_(escopo, rotulos, excluir) {
   return itens.length ? itens[itens.length - 1] : null;
 }
 
+/**
+ * Texto da LINHA inteira da lista à qual um elemento pertence (o `<li>`/`<tr>`/
+ * `<a>` mais próximo). Quando não há linha identificável - o próprio container
+ * da lista, por exemplo - devolve o texto do elemento mesmo, que continua
+ * contendo o texto de todos os itens e portanto continua sendo barrado pela
+ * exclusão, como antes.
+ */
+function textoDaLinhaLista_(el) {
+  const linha = (el.closest && el.closest("li, tr, option, a")) || el;
+  return (linha.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Versão ESTRITA de `itemDaLista_`, usada só quando há termos em `excluir` -
+ * hoje, só o tipo "SOF" (ver MAPA_TIPO_DOCUMENTO). Sem `excluir` ela delega pro
+ * `itemDaLista_` original, de propósito: os fluxos que não têm ambiguidade
+ * (Nota de Empenho, Recibo e o envio em lote) continuam com o comportamento
+ * exato de antes, sem risco de regressão.
+ *
+ * Corrige DOIS furos que ainda deixavam a e-SOF ser escolhida de vez em quando
+ * (relato do usuário 2026-09-04, depois da 1ª correção de 2026-09-02):
+ *
+ * 1. A exclusão era avaliada só no texto do PRÓPRIO elemento. Quando o SEI
+ *    destaca o trecho buscado dentro do item (`SES e-<b>SOF</b> - ...`), esse
+ *    `<b>` tem texto "SOF" - não contém "e-SOF" nem "eletrônica", passava pelo
+ *    filtro, e como está DENTRO da linha da e-SOF, clicar nele escolhia a
+ *    e-SOF. Agora a exclusão olha o texto da LINHA inteira
+ *    (`textoDaLinhaLista_`), então qualquer pedaço de dentro da e-SOF é
+ *    barrado junto com ela.
+ *
+ * 2. `rotulos` é uma lista de PRIORIDADE (nome completo primeiro, "SOF" solto
+ *    por último, como fallback pras unidades sem o tipo completo), mas o código
+ *    tratava todos como equivalentes e ficava com o ÚLTIMO elemento na ordem do
+ *    documento. Ou seja: mesmo com o nome completo presente na tela, um
+ *    casamento frouxo de "SOF" que aparecesse depois ganhava. Agora percorre os
+ *    rótulos EM ORDEM e só desce pro próximo se o anterior não existir na tela.
+ *
+ * Dentro do rótulo vencedor, fica com o elemento de menor texto - o mais justo
+ * ao rótulo, isto é, o mais profundo que ainda o contém inteiro (mesma intenção
+ * do original, só que escolhido corretamente). Clicar num pedaço interno
+ * funciona porque `clicarComoUsuario_` dispara eventos que sobem (`bubbles`)
+ * até o handler da linha.
+ */
+function melhorItemDaLista_(escopo, rotulos, excluir) {
+  if (!excluir || !excluir.length) return itemDaLista_(escopo, rotulos, excluir);
+
+  const termosExcluir = excluir.map(t => t.toLowerCase());
+  const candidatos = Array.from(escopo.querySelectorAll("li, a, tr, td, div, span"))
+    .filter(el => el.offsetParent !== null)
+    .map(el => ({ el: el, texto: (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() }))
+    .filter(c => c.texto && !termosExcluir.some(t => textoDaLinhaLista_(c.el).indexOf(t) !== -1));
+
+  for (const rotulo of rotulos) {
+    const alvo = rotulo.toLowerCase();
+    const doRotulo = candidatos.filter(c => c.texto.indexOf(alvo) !== -1);
+    if (!doRotulo.length) continue;
+    doRotulo.sort((a, b) => a.texto.length - b.texto.length);
+    return doRotulo[0].el;
+  }
+  return null;
+}
+
 /* ===================== Etapa 1: cadastro (best-effort) ===================== */
 
 async function preencherDocumento(documento, numeroProcesso) {
@@ -416,7 +484,7 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
       // fluxo da SOF, então só os respiros FIXOS puderam ser cortados; o
       // resto do tempo aqui é o próprio SEI carregando a tela, que não dá
       // pra encurtar sem arriscar quebrar a seleção).
-      const apareceu = await aguardarCondicao_(() => itemDaLista_(escopo, rotulos, cfg.excluir), 6000, 80);
+      const apareceu = await aguardarCondicao_(() => melhorItemDaLista_(escopo, rotulos, cfg.excluir), 6000, 80);
       if (!cfg.excluir || !cfg.excluir.length) {
         await esperar_(apareceu ? 40 : 250);
         teclar_(filtro, "ArrowDown", 40);
@@ -436,19 +504,31 @@ async function escolherTipoDocumento_(tipoGaocg, override) {
         rotulos.some(r => (o.textContent || "").toLowerCase().indexOf(r.toLowerCase()) !== -1));
       if (opcao) return { tipo: "select", select: select, opcao: opcao };
     }
-    const item = itemDaLista_(escopo, rotulos, cfg.excluir);
+    const item = melhorItemDaLista_(escopo, rotulos, cfg.excluir);
     if (item) return { tipo: "item", item: item };
     return null;
   }, 8000, 120);
 
   if (!achado) return false;
   if (achado.tipo === "item") {
+    // Última conferência antes de clicar: o texto da LINHA não pode conter
+    // nenhum termo excluído. `melhorItemDaLista_` já garante isso, mas a lista
+    // do SEI pode ter sido re-renderizada entre achar e clicar (a busca é
+    // assíncrona) - e clicar no tipo errado é justamente o erro que estamos
+    // caçando, então vale a checagem de novo, agora, com o elemento em mãos.
+    const linha = textoDaLinhaLista_(achado.item);
+    if ((cfg.excluir || []).some(t => linha.indexOf(t.toLowerCase()) !== -1)) return false;
     clicarComoUsuario_(achado.item);
-    return await aguardarCondicao_(chegouTelaCadastro_, 5000, 250) ? true : true;
+    await aguardarCondicao_(chegouTelaCadastro_, 5000, 250);
+    // Devolve o RÓTULO escolhido em vez de um `true` seco: continua sendo
+    // verdadeiro pra quem só testa truthy (era o único uso), e passa a aparecer
+    // no resultado do envio - se algum dia a escolha errar de novo, o retorno
+    // já diz qual item foi clicado, em vez de virar adivinhação.
+    return linha || true;
   }
   achado.select.value = achado.opcao.value;
   dispararChange_(achado.select);
-  return true;
+  return (achado.opcao.textContent || "").trim() || true;
 }
 
 function preencherCampo_(doc, seletor, valor) {
